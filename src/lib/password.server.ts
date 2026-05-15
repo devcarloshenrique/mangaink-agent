@@ -4,6 +4,12 @@
 const ITERATIONS = 100_000;
 const KEY_LEN = 32;
 
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  const buf = new ArrayBuffer(view.byteLength);
+  new Uint8Array(buf).set(view);
+  return buf;
+}
+
 function bufToB64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let s = "";
@@ -19,15 +25,15 @@ function b64ToBuf(b64: string): Uint8Array {
 }
 
 async function derive(password: string, salt: Uint8Array): Promise<string> {
-  const pwBytes = new TextEncoder().encode(password);
+  const pwBuf = toArrayBuffer(new TextEncoder().encode(password));
+  const saltBuf = toArrayBuffer(salt);
   const key = await crypto.subtle.importKey(
     "raw",
-    pwBytes.buffer.slice(pwBytes.byteOffset, pwBytes.byteOffset + pwBytes.byteLength),
+    pwBuf,
     "PBKDF2",
     false,
     ["deriveBits"],
   );
-  const saltBuf = salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: saltBuf, iterations: ITERATIONS },
     key,
@@ -39,7 +45,7 @@ async function derive(password: string, salt: Uint8Array): Promise<string> {
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hash = await derive(password, salt);
-  return `pbkdf2$${ITERATIONS}$${bufToB64(salt.buffer)}$${hash}`;
+  return `pbkdf2$${ITERATIONS}$${bufToB64(toArrayBuffer(salt))}$${hash}`;
 }
 
 export async function verifyPassword(
