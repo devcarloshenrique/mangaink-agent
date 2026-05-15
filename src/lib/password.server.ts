@@ -19,15 +19,17 @@ function b64ToBuf(b64: string): Uint8Array {
 }
 
 async function derive(password: string, salt: Uint8Array): Promise<string> {
+  const pwBytes = new TextEncoder().encode(password);
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(password),
+    pwBytes.buffer.slice(pwBytes.byteOffset, pwBytes.byteOffset + pwBytes.byteLength),
     "PBKDF2",
     false,
     ["deriveBits"],
   );
+  const saltBuf = salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: ITERATIONS },
+    { name: "PBKDF2", hash: "SHA-256", salt: saltBuf, iterations: ITERATIONS },
     key,
     KEY_LEN * 8,
   );
