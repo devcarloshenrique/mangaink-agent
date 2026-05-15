@@ -149,7 +149,7 @@ function mockFetchSeries(url: string): Promise<Series> {
 
 function WizardPage() {
   const navigate = useNavigate();
-  const { profile, refreshProfile, user } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -175,8 +175,8 @@ function WizardPage() {
   const goto = (i: number) => i <= visited && setStep(i);
 
   const cost = data.selectedChapters.size;
-  const credits = profile?.credits ?? 0;
-  const enoughCredits = credits >= cost && cost > 0;
+  const credits = 0;
+  const enoughCredits = cost > 0;
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -231,22 +231,10 @@ function WizardPage() {
 
   const finish = async () => {
     if (!user) return;
-    if (!enoughCredits) {
-      toast.error("Créditos insuficientes!");
+    if (cost === 0) {
+      toast.error("Selecione ao menos um capítulo");
       return;
     }
-    // Decrement credits + log transaction
-    const { error: upd } = await supabase
-      .from("profiles")
-      .update({ credits: credits - cost })
-      .eq("id", user.id);
-    if (upd) return toast.error(upd.message);
-    await supabase.from("credit_transactions").insert({
-      user_id: user.id,
-      delta: -cost,
-      reason: `conversão • ${data.series?.title ?? ""} • ${cost} caps`,
-    });
-    await refreshProfile();
     setShowDone(true);
   };
 
