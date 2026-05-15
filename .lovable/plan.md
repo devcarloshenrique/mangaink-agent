@@ -1,107 +1,123 @@
-## Repositionamento: MangáForge (mangás → Kindle)
+# MangaForge → App self-hosted (CasaOS)
 
-Mudar todo o copy/branding do site de "comics/HQs" para **mangás com foco em envio para Kindle**. Manter o estilo pop art, mas com referências a mangás (painéis verticais, balões, "TOMO 01", etc.).
+Pivot do site de venda para um app pessoal que roda em container Docker (CasaOS), com biblioteca em volume local, auth local, preview de página convertida e agendamento de envio para o Kindle.
 
-### Arquivos afetados (copy)
-- `src/routes/index.tsx` — hero, "How it works", CTAs: trocar "ComicForge" → "MangaForge", "HQs" → "mangás", mencionar "envio direto pro seu Kindle".
-- `src/components/comic/Header.tsx` — logo/nome.
-- `src/routes/wizard.tsx` — labels, títulos das etapas, mocks ("Capítulo" segue, mas "Volume" também).
+## Aviso importante (mudança de stack)
 
----
+Hoje o projeto usa **Lovable Cloud (Supabase)** + deploy Cloudflare Workers. Para rodar 100% dentro de um container CasaOS sem depender de serviço gerenciado, vamos:
 
-## 1. Auth + Sistema de Créditos (somente UI/mock)
+- Remover Supabase (auth, profiles, créditos) e substituir por **SQLite local + sessão em cookie criptografado**.
+- Trocar o runtime de Cloudflare Workers para **Node.js** (preciso para acessar filesystem `/data`, rodar `node-cron`, ler/escrever SQLite).
+- Adicionar `Dockerfile` + `docker-compose.yml` prontos pra CasaOS.
 
-### Backend
-Habilitar **Lovable Cloud** com:
-- Auth: **email/senha + Google** (defaults).
-- Tabela `profiles` (id → auth.users, display_name, credits int default 10).
-- Trigger `handle_new_user` cria profile com 10 créditos grátis no signup.
-- Tabela `credit_transactions` (id, user_id, delta, reason, created_at) para histórico.
-- RLS: usuário só vê o próprio profile e transações.
-
-### Rotas novas
-- `src/routes/login.tsx` — tela de login pop art (email/senha + botão Google).
-- `src/routes/_authenticated.tsx` — layout route com `beforeLoad` que redireciona para `/login` se não autenticado.
-- Mover `wizard.tsx` para `src/routes/_authenticated/wizard.tsx`.
-- `src/routes/_authenticated/conta.tsx` — painel com créditos atuais, histórico, botão fictício "Comprar mais créditos".
-
-### UI
-- Header ganha:
-  - Badge "⚡ X créditos" sempre visível.
-  - Avatar com dropdown (Conta, Sair).
-- No wizard, etapa final mostra: **"Esta conversão vai gastar N créditos (1 crédito por capítulo)"**, botão Finalizar desabilitado se créditos insuficientes com CTA "Comprar créditos".
-- Server function `consumeCredits({ amount, reason })` chamada no Finalizar (decrementa profile.credits + insere transaction). Conversão em si segue mockada.
+Consequência: o **preview do Lovable** (que roda em Worker) deixa de mostrar a app rodando como antes — a partir daqui o ambiente “real” é o container. Você ainda consegue desenvolver, mas a validação fim-a-fim acontece via `docker compose up`. Sistema de créditos é removido (não faz sentido em self-hosted single-user).
 
 ---
 
-## 2. Wizard — etapa "Capas" (revisão completa)
+## O que fica
 
-Novo modo de seleção. Usuário escolhe granularidade:
+- Visual pop-art / quadrinhos atual (Header, ComicPanel, SpeechBubble, StepIndicator, fontes Bangers/Inter).
+- Wizard de 5 passos: Origem → Capítulos → Capas → Configurações → Envio.
+- Presets de Kindle (`src/lib/kindle-presets.ts`).
+
+## O que muda / é novo
+
+### 1. Auth local (substitui Supabase Auth)
+- Tela `/login` continua sendo a primeira. Usuário/senha único definidos por env (`APP_USER`, `APP_PASSWORD`) ou criados no primeiro boot.
+- Sessão via cookie criptografado (`useSession` do TanStack Start, segredo em `SESSION_SECRET`).
+- `RequireAuth` passa a checar a sessão server-side.
+
+### 2. Preview de página convertida (passo Conversão)
+- Dentro do passo de Configurações, o usuário escolhe **uma página** do capítulo (capa ou página N) numa tira de thumbnails.
+- Botão **“Gerar preview”** chama uma server function que aplica os filtros do device escolhido (resize ao tamanho exato do Kindle, grayscale, contraste/gama do preset, margens) usando **sharp**.
+- Resultado aparece num painel side-by-side: original ↔ como vai ficar no Kindle.
+- Conversão final continua mockada (gera um arquivo placeholder), o preview server-side é o que dá noção real do resultado.
+
+### 3. Envio por email Kindle (limite 25MB)
+- Nova página **Configurações** (`/configuracoes`) com campo “Email do Kindle” (`@kindle.com`) salvo em SQLite.
+- No passo Envio: badge mostrando tamanho estimado do arquivo, barra de progresso até 25MB, aviso quando passa do limite + sugestão de **dividir em partes** (split por capítulo).
+- Mock de envio que loga o que seria mandado e gera o `.epub` no diretório de saída.
+
+### 4. Biblioteca local (`/biblioteca`)
+- Cada conversão é salva em `/data/library/{slug-da-obra}/{volume-ou-cap}.epub`.
+- Metadados (obra, capa, capítulos convertidos, data, tamanho, status de envio) em SQLite.
+- UI lista obras como cards (capa + nome) → clicar abre detalhes com lista de arquivos, botões “Reenviar”, “Baixar”, “Apagar”.
+
+### 5. Sites homologados
+- Página **`/fontes`** lista as fontes suportadas: **MangaDex** e **MangaLivre**, com status (✅ ativo / 🚧 em breve), ícone, descrição curta e exemplo de URL aceita.
+- Link da página visível no header e na tela de Origem do wizard (“Ver fontes suportadas”).
+
+### 6. Agendamento de envio automático
+- Página **`/agendamentos`**: usuário marca obras como “assinadas” e escolhe frequência (diária / semanal / ao detectar novo capítulo).
+- Worker `node-cron` no servidor:
+  - Para cada assinatura, verifica se há capítulo novo na fonte.
+  - Se houver, baixa → converte (mock) → salva na biblioteca → envia pro email Kindle configurado (respeitando o limite de 25MB, dividindo se preciso).
+- Histórico de execuções visível na página.
+
+---
+
+## Estrutura de rotas (final)
 
 ```text
-[ Por capítulo ]   [ Por volume ]   [ Capa única para tudo ]
+/login                     → tela de entrada (pública)
+/                          → dashboard pós-login (atalhos: wizard, biblioteca, agendamentos)
+/wizard                    → wizard 5 passos (com preview no passo 4)
+/biblioteca                → grade de obras
+/biblioteca/$slug          → detalhes + arquivos
+/agendamentos              → assinaturas + histórico
+/fontes                    → sites homologados
+/configuracoes             → email Kindle, senha, paths
 ```
 
-- **Por capítulo**: lista de capítulos, cada um com seletor de capa (original / galeria / upload).
-- **Por volume**: capítulos são auto-agrupados por volume (mock: cada 8 capítulos = 1 volume); um seletor de capa por volume aplica a todos os capítulos do volume.
-- **Capa única**: um único seletor que vale para todos os capítulos selecionados.
-- Atalho dentro de "Por capítulo": multi-seleção de capítulos + botão **"Aplicar mesma capa"** abre galeria/upload e aplica a todos os marcados.
-
-Estado em `WizardData.covers`:
-```ts
-{ mode: 'per-chapter' | 'per-volume' | 'single',
-  assignments: Record<string /*chapterId|volumeId|'all'*/, CoverRef> }
-```
-
----
-
-## 3. Wizard — etapa "Configurações" (refeita)
-
-Substituir os campos atuais (formato/quality sliders/metadata) por:
-
-### Campos
-1. **Perfil do Dispositivo** (dropdown) — opções:
-   - Kindle Paperwhite (11ª/12ª gen)
-   - Kindle Paperwhite Signature
-   - Kindle Oasis
-   - Kindle Scribe
-   - Kindle Basic (2022/2024)
-   - Kindle Colorsoft
-   - Kindle Voyage (legado)
-   - Kindle Fire HD
-2. **Formato de Saída** (dropdown): `EPUB`, `MOBI`, `CBZ`, `KFX`.
-3. **Preset** (dropdown com descrição visível):
-   - `default` — Configuração padrão
-   - `manga` — Otimizado para mangá
-   - `webtoon` — Otimizado para webtoon
-   - `highQuality` — Qualidade máxima
-   - `noProcessing` — Sem processamento de imagem
-   - `comic` — Otimizado para comics ocidentais
-4. Manter título/autor (metadados) opcionais.
-
-Implementação: `Select` do shadcn estilizado com borda preta grossa + sombra offset (consistente com o tema). Constantes em `src/lib/kindle-presets.ts`.
-
----
-
-## 4. Wizard — etapa "Entrega" (ajuste leve)
-
-Trocar "download direto" e "email" por:
-- **Baixar arquivo**
-- **Enviar para meu Kindle** (campo `seu-email@kindle.com`, com nota "lembre de autorizar nosso remetente em Amazon → Manage Your Content and Devices") — apenas UI.
-
-Mostrar resumo final + custo em créditos antes do botão "Converter e enviar".
+A `/conta` atual e a landing de venda da `/` somem.
 
 ---
 
 ## Detalhes técnicos
 
-- **Stack**: TanStack Start + Lovable Cloud (Supabase). Cliente browser para auth UI; `requireSupabaseAuth` middleware para `consumeCredits` e leitura de profile.
-- **Rota protegida**: `_authenticated` layout com `beforeLoad` checando `supabase.auth.getUser()`; `/login` e `/` ficam públicas.
-- **Migration**: cria enum/tabelas `profiles`, `credit_transactions`, função `handle_new_user`, trigger em `auth.users`, RLS policies.
-- **Server functions** (`src/server/credits.functions.ts`): `getMyProfile`, `consumeCredits`.
-- **Sem alteração no design system**: continuamos com `ComicPanel`, `OnomatopoeiaBadge`, `SpeechBubble`, fontes Bangers/Inter.
+**Stack alvo**
+- Runtime: Node 20 (deploy alvo = container, não Worker). Remover `wrangler.jsonc`, ajustar `vite.config.ts` para target node.
+- DB: `better-sqlite3` em `/data/db/manga.db`.
+- Auth: `useSession` do `@tanstack/react-start/server`, `SESSION_SECRET` via env.
+- Imagens/preview: `sharp`.
+- Cron: `node-cron` iniciado no boot do server.
+- Filesystem: tudo persistido em `/data` (volume montado).
 
-## Fora do escopo
-- Conversão real de arquivos / scraping real de mangás (segue mockado).
-- Envio real por e-mail para Kindle.
-- Pagamento real de créditos (botão é placeholder).
+**Server functions novas (em `src/lib/*.functions.ts`)**
+- `auth.functions.ts`: `login`, `logout`, `me`.
+- `library.functions.ts`: `listSeries`, `getSeries`, `deleteFile`.
+- `preview.functions.ts`: `generatePreview({ pageUrl, deviceId, presetId })` → retorna PNG base64.
+- `convert.functions.ts`: `convertChapter(...)` (mock, escreve arquivo).
+- `kindle.functions.ts`: `sendToKindle({ filePath })` (mock SMTP, loga).
+- `sources.functions.ts`: `listSources`, `searchSource`, `fetchChapters`.
+- `schedules.functions.ts`: `listSubscriptions`, `subscribe`, `unsubscribe`, `runHistory`.
+
+**Schema SQLite (resumo)**
+- `users(id, username, password_hash, kindle_email, created_at)`
+- `series(id, slug, title, source, source_url, cover_path)`
+- `files(id, series_id, kind, label, path, bytes, sent_at)`
+- `subscriptions(id, series_id, frequency, last_check, last_chapter)`
+- `cron_runs(id, ran_at, ok, message)`
+
+**Docker**
+- `Dockerfile` multi-stage: build → `node` runtime, expõe `3000`, `VOLUME /data`.
+- `docker-compose.yml` com volume `./data:/data` e env `APP_USER`, `APP_PASSWORD`, `SESSION_SECRET`, `KINDLE_SMTP_*`.
+
+**Fontes (escopo desta entrega)**
+- Adapter `MangaDexAdapter` real (API pública, sem chave).
+- Adapter `MangaLivreAdapter` com scraping básico (selectors podem precisar ajuste futuro).
+- Interface comum `MangaSource` para adicionar mais depois.
+
+---
+
+## Ordem de execução
+
+1. Trocar runtime para Node, remover Supabase do código + dependências, criar SQLite + sessão.
+2. Refazer `/login` e `RequireAuth` server-side; nova `/` (dashboard).
+3. Página `/configuracoes` (email Kindle, troca de senha).
+4. Página `/fontes` + adapters MangaDex/MangaLivre.
+5. Wizard: integrar adapters reais nos passos 1–3; adicionar preview server-side com `sharp` no passo 4; barra de 25MB no passo 5.
+6. Conversão mock + escrita em `/data/library/...` + página `/biblioteca`.
+7. Agendamentos + cron + envio mock.
+8. `Dockerfile` + `docker-compose.yml` + README de instalação no CasaOS.
+
