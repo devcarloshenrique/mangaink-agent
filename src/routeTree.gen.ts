@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WizardRouteImport } from './routes/wizard'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as ContaRouteImport } from './routes/conta'
 import { Route as IndexRouteImport } from './routes/index'
 
 const WizardRoute = WizardRouteImport.update({
@@ -24,11 +23,6 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ContaRoute = ContaRouteImport.update({
-  id: '/conta',
-  path: '/conta',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -37,34 +31,30 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/conta': typeof ContaRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/conta': typeof ContaRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/conta': typeof ContaRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/conta' | '/login' | '/wizard'
+  fullPaths: '/' | '/login' | '/wizard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/conta' | '/login' | '/wizard'
-  id: '__root__' | '/' | '/conta' | '/login' | '/wizard'
+  to: '/' | '/login' | '/wizard'
+  id: '__root__' | '/' | '/login' | '/wizard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ContaRoute: typeof ContaRoute
   LoginRoute: typeof LoginRoute
   WizardRoute: typeof WizardRoute
 }
@@ -85,13 +75,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/conta': {
-      id: '/conta'
-      path: '/conta'
-      fullPath: '/conta'
-      preLoaderRoute: typeof ContaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -104,7 +87,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ContaRoute: ContaRoute,
   LoginRoute: LoginRoute,
   WizardRoute: WizardRoute,
 }
