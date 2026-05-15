@@ -344,7 +344,7 @@ function WizardPage() {
                 : "Clique abaixo para baixar (simulado)."}
             </p>
             <p className="text-sm font-medium opacity-80">
-              {cost} crédito(s) gasto(s) • restam {profile?.credits ?? 0}
+              {cost} capítulo(s) processado(s)
             </p>
             <div className="flex justify-center gap-3 pt-2">
               <Button
