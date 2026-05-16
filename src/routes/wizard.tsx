@@ -768,23 +768,35 @@ function StepDelivery({
         </ComicPanel>
       </div>
 
-      <ComicPanel bg={enough ? "yellow" : "red"} padding="md" tilt="left">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Zap className="h-6 w-6 fill-current" />
-          <p className="font-display text-lg flex-1">
-            Esta conversão vai gastar <strong>{cost}</strong> crédito(s).
-          </p>
-          <span className="font-display">Saldo: {credits}</span>
-          {!enough && (
-            <Link
-              to="/conta"
-              className="border-[3px] border-ink bg-card text-foreground shadow-comic-sm font-display px-3 py-1 rounded-md"
-            >
-              Comprar créditos
-            </Link>
-          )}
-        </div>
-      </ComicPanel>
+      <SizeBudget chapters={cost} />
+    </div>
+  );
+}
+
+function SizeBudget({ chapters }: { chapters: number }) {
+  // Mock: ~1.2MB por capítulo
+  const estMB = Math.max(0.1, chapters * 1.2);
+  const pct = Math.min(100, (estMB / 25) * 100);
+  const over = estMB > 25;
+  return (
+    <ComicPanel bg={over ? "red" : "yellow"} padding="md" tilt="left">
+      <div className="flex items-center gap-3 flex-wrap mb-2">
+        <Mail className="h-5 w-5" />
+        <p className="font-display text-lg flex-1">
+          Tamanho estimado: <strong>{estMB.toFixed(1)} MB</strong> / 25 MB
+        </p>
+        {over && (
+          <span className="font-display text-sm bg-card text-foreground border-[3px] border-ink shadow-comic-sm px-2 py-0.5 rounded-md">
+            Vou dividir em partes
+          </span>
+        )}
+      </div>
+      <div className="h-3 w-full border-[2.5px] border-ink rounded-full bg-card overflow-hidden">
+        <div
+          className={cn("h-full", over ? "bg-comic-red" : "bg-comic-blue")}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
