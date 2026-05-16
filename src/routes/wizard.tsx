@@ -20,7 +20,6 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import {
   KINDLE_DEVICES,
   OUTPUT_FORMATS,
@@ -357,11 +356,11 @@ function WizardPage() {
                 variant="outline"
                 onClick={() => {
                   setShowDone(false);
-                  navigate({ to: "/conta" });
+                  navigate({ to: "/biblioteca" });
                 }}
                 className="border-[3px] border-ink shadow-comic-sm font-display"
               >
-                Minha conta
+                Ver na biblioteca
               </Button>
             </div>
           </div>
