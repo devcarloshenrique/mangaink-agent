@@ -627,9 +627,32 @@ function StepConvert({
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
 }) {
+  const [previewPage, setPreviewPage] = useState(0);
+  const presetFilter: Record<string, string> = {
+    default: "contrast(1) brightness(1)",
+    manga: "grayscale(100%) contrast(1.2) brightness(1)",
+    webtoon: "contrast(1.05) brightness(1.05)",
+    highQuality: "grayscale(100%) contrast(1.1)",
+    noProcessing: "none",
+    comic: "contrast(1.15) brightness(1.05)",
+  };
+  const deviceFrame: Record<string, { w: number; h: number }> = {
+    kpw_11: { w: 180, h: 240 },
+    kpw_signature: { w: 180, h: 240 },
+    k_oasis: { w: 184, h: 245 },
+    k_scribe: { w: 200, h: 267 },
+    k_basic: { w: 170, h: 230 },
+    k_colorsoft: { w: 184, h: 245 },
+    k_voyage: { w: 175, h: 233 },
+    k_fire_hd: { w: 240, h: 150 },
+  };
+  const frame = deviceFrame[data.device] ?? deviceFrame.kpw_11;
+  const filter = presetFilter[data.preset] ?? "none";
+  const pages = Array.from({ length: 6 }, (_, i) => i);
+
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<Settings2 />} title="Configurações" subtitle="Ajuste pro seu Kindle." />
+      <SectionHeader icon={<Settings2 />} title="Configurações" subtitle="Ajuste pro seu Kindle e veja o preview ao vivo." />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
@@ -697,6 +720,74 @@ function StepConvert({
             onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
             className="border-[3px] border-ink h-11 shadow-comic-sm"
           />
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="border-t-[3px] border-dashed border-ink pt-5 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="font-display text-2xl flex-1">Preview da página</h3>
+          <span className="font-display text-xs bg-comic-blue text-accent-foreground border-[2.5px] border-ink shadow-comic-sm px-2 py-0.5 rounded">
+            simulação
+          </span>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {pages.map((i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setPreviewPage(i)}
+              className={cn(
+                "shrink-0 h-16 w-12 border-[2.5px] border-ink rounded shadow-comic-sm font-display text-xs flex items-center justify-center",
+                previewPage === i
+                  ? "bg-comic-red text-primary-foreground -translate-y-0.5"
+                  : "bg-card",
+              )}
+            >
+              p{i + 1}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 items-start">
+          <div className="space-y-2">
+            <p className="font-display text-sm opacity-80">Original</p>
+            <MockPage seed={previewPage} width={frame.w} height={frame.h} />
+          </div>
+          <div className="space-y-2">
+            <p className="font-display text-sm opacity-80">
+              No {KINDLE_DEVICES.find((d) => d.id === data.device)?.label}
+            </p>
+            <div
+              className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
+              style={{ width: frame.w + 14 }}
+            >
+              <div style={{ filter }}>
+                <MockPage seed={previewPage} width={frame.w} height={frame.h} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MockPage({ seed, width, height }: { seed: number; width: number; height: number }) {
+  const hue = (seed * 57) % 360;
+  return (
+    <div
+      className="border-[3px] border-ink rounded shadow-comic-sm overflow-hidden relative"
+      style={{ width, height, background: `hsl(${hue} 70% 88%)` }}
+    >
+      <div className="absolute inset-2 grid grid-rows-3 gap-1.5">
+        <div className="border-[2px] border-ink bg-card flex items-center justify-center font-display text-comic-red" style={{ fontSize: 14 }}>
+          BAM!
+        </div>
+        <div className="border-[2px] border-ink bg-comic-yellow" />
+        <div className="border-[2px] border-ink bg-card flex items-end p-1">
+          <span className="text-[8px] font-bold leading-tight">— Não posso perder!</span>
         </div>
       </div>
     </div>
