@@ -1,198 +1,152 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
-import {
-  BookOpen,
-  Download,
-  ImageIcon,
-  Mail,
-  Send,
-  Settings2,
-  Sparkles,
-  Tablet,
-  Wand2,
-  Zap,
-} from "lucide-react";
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
+import { Calendar, Library, Sparkles, Wand2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MangaForge — Mangás direto pro seu Kindle" },
-      {
-        name: "description",
-        content:
-          "Cole a URL do mangá, escolha capítulos, capas e o perfil do seu Kindle. Receba EPUB, MOBI, KFX ou CBZ direto no seu leitor.",
-      },
-      { property: "og:title", content: "MangaForge — Mangás no seu Kindle" },
-      {
-        property: "og:description",
-        content: "Wizard pop art em 5 passos. Otimizado pra Kindle Paperwhite, Oasis, Scribe e mais.",
-      },
+      { title: "MangaForge — Painel" },
+      { name: "description", content: "Painel da sua instância MangaForge self-hosted." },
     ],
   }),
-  component: Index,
+  component: () => (
+    <RequireAuth>
+      <Dashboard />
+    </RequireAuth>
+  ),
 });
 
-const steps = [
-  { icon: Download, title: "Origem", text: "Cole a URL do mangá e busque os capítulos." },
-  { icon: BookOpen, title: "Capítulos", text: "Selecione tudo ou um a um. Junto ou separado." },
-  { icon: ImageIcon, title: "Capas", text: "Por capítulo, por volume ou uma única pra tudo." },
-  { icon: Settings2, title: "Conversão", text: "Perfil do Kindle, formato e preset (mangá, webtoon…)." },
-  { icon: Send, title: "Envio", text: "Baixe ou mande direto pro seu e-mail Kindle." },
+const TILES = [
+  {
+    to: "/wizard" as const,
+    icon: Wand2,
+    title: "Converter",
+    text: "Cole uma URL e mande pro Kindle em 5 passos.",
+    bg: "bg-comic-red text-primary-foreground",
+    badge: "GO!",
+    badgeVariant: "yellow" as const,
+  },
+  {
+    to: "/biblioteca" as const,
+    icon: Library,
+    title: "Biblioteca",
+    text: "Tudo o que você já converteu, organizado por obra.",
+    bg: "bg-comic-yellow",
+    badge: "POW!",
+    badgeVariant: "red" as const,
+  },
+  {
+    to: "/agendamentos" as const,
+    icon: Calendar,
+    title: "Agendamentos",
+    text: "Assine obras e receba capítulos novos automaticamente.",
+    bg: "bg-comic-blue text-accent-foreground",
+    badge: "TIC!",
+    badgeVariant: "yellow" as const,
+  },
+  {
+    to: "/fontes" as const,
+    icon: Sparkles,
+    title: "Fontes",
+    text: "Veja os sites homologados pra baixar mangás.",
+    bg: "bg-card",
+    badge: "INFO",
+    badgeVariant: "blue" as const,
+  },
 ];
 
-const features = [
-  { icon: Tablet, title: "Perfis Kindle", text: "Paperwhite, Oasis, Scribe, Colorsoft, Fire HD e mais." },
-  { icon: ImageIcon, title: "Capas flexíveis", text: "Mesma capa pra vários capítulos ou uma por volume." },
-  { icon: Settings2, title: "Presets de mangá", text: "Otimizações pra mangá, webtoon, qualidade máxima." },
-  { icon: Sparkles, title: "Créditos justos", text: "1 crédito por capítulo. Comece com 10 grátis." },
+const RECENT = [
+  { title: "Berserk", chapter: "Cap. 374", when: "há 2h" },
+  { title: "Vagabond", chapter: "Cap. 327", when: "ontem" },
+  { title: "One Piece", chapter: "Cap. 1110", when: "3 dias" },
 ];
 
-function Index() {
+function Dashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Garante redirect (RequireAuth já cobre, mas evita flicker)
+  useEffect(() => {
+    if (!user) navigate({ to: "/login" });
+  }, [user, navigate]);
+
   return (
     <div className="min-h-screen bg-background">
       <ComicHeader />
 
-      {/* HERO */}
-      <section className="relative overflow-hidden border-b-[3px] border-ink bg-comic-yellow">
-        <div className="absolute inset-0 bg-halftone opacity-30 pointer-events-none" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 md:py-24 md:grid-cols-2">
-          <div className="space-y-6">
-            <SpeechBubble variant="white" tail="bottom" className="max-w-xs">
-              Otaku! Bora levar esse mangá pro Kindle?
-            </SpeechBubble>
-            <h1 className="font-display text-5xl md:text-7xl leading-[0.95] uppercase">
-              Mangás,
-              <br />
-              <span className="inline-block bg-comic-red text-primary-foreground px-3 -rotate-2 border-[3px] border-ink shadow-comic mt-2">
-                no seu Kindle!
-              </span>
-            </h1>
-            <p className="max-w-md text-lg font-medium">
-              Cole a URL, escolha os capítulos, ajuste pro modelo do seu Kindle e
-              receba o arquivo direto no seu leitor. Sem dor de cabeça.
-            </p>
-            <div className="flex flex-wrap items-center gap-4 pt-2">
-              <Link
-                to="/wizard"
-                className="inline-flex items-center gap-2 bg-comic-red text-primary-foreground border-[3px] border-ink shadow-comic px-6 py-3 rounded-md font-display text-2xl hover:-translate-y-1 transition-transform"
-              >
-                <Wand2 className="h-6 w-6" /> Começar agora
-              </Link>
-              <a
-                href="#how"
-                className="font-display text-xl underline decoration-[3px] underline-offset-4 hover:text-comic-red"
-              >
-                Como funciona ↓
-              </a>
-            </div>
-            <div className="inline-flex items-center gap-2 mt-2 border-[3px] border-ink bg-card px-3 py-1 rounded-md shadow-comic-sm font-display">
-              <Zap className="h-4 w-4 text-comic-red fill-current" />
-              <span>10 créditos grátis ao criar conta</span>
-            </div>
-          </div>
-
-          <div className="relative">
-            <ComicPanel tilt="right" bg="card" className="relative z-10">
-              <div className="bg-halftone-dense rounded-md aspect-[4/3] flex items-center justify-center">
-                <div className="text-center space-y-3 px-4">
-                  <div className="font-display text-5xl text-comic-red">DOKI!</div>
-                  <p className="font-bold">Capítulos voando direto pro seu Kindle.</p>
-                </div>
-              </div>
-            </ComicPanel>
-            <div className="absolute -top-6 -right-4 z-20">
-              <OnomatopoeiaBadge variant="red" size="lg">SUGOI!</OnomatopoeiaBadge>
-            </div>
-            <div className="absolute -bottom-6 -left-4 z-20">
-              <OnomatopoeiaBadge variant="blue" size="md">ZAP!</OnomatopoeiaBadge>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* HOW */}
-      <section id="how" className="border-b-[3px] border-ink py-16 md:py-24">
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="text-center mb-12">
-            <span className="inline-block bg-comic-blue text-accent-foreground border-[3px] border-ink px-4 py-1 font-display text-xl -rotate-2 shadow-comic-sm">
-              Como funciona
+      <section className="border-b-[3px] border-ink bg-comic-yellow relative overflow-hidden">
+        <div className="absolute inset-0 bg-halftone opacity-25 pointer-events-none" />
+        <div className="relative mx-auto max-w-6xl px-4 py-10 md:py-14">
+          <SpeechBubble variant="white" tail="bottom" className="max-w-md mb-4">
+            Olá, <strong>{user?.username ?? "leitor"}</strong>! O que vamos converter hoje?
+          </SpeechBubble>
+          <h1 className="font-display text-4xl md:text-6xl uppercase leading-[0.95]">
+            Painel
+            <span className="inline-block ml-3 bg-comic-red text-primary-foreground px-3 -rotate-2 border-[3px] border-ink shadow-comic">
+              MangaForge
             </span>
-            <h2 className="font-display text-4xl md:text-6xl mt-4 uppercase">
-              Cinco passos, mangá no Kindle
-            </h2>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-            {steps.map((s, i) => (
-              <ComicPanel
-                key={s.title}
-                tilt={i % 2 === 0 ? "left" : "right"}
-                bg={i === 2 ? "yellow" : "card"}
-                className="relative"
+          </h1>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-10">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {TILES.map((t, i) => {
+            const Icon = t.icon;
+            return (
+              <Link
+                key={t.to}
+                to={t.to}
+                className="group relative block focus:outline-none"
               >
-                <div className="absolute -top-4 -left-3 h-9 w-9 rounded-full border-[3px] border-ink bg-comic-red text-primary-foreground font-display text-lg flex items-center justify-center shadow-comic-sm">
-                  {i + 1}
+                <ComicPanel
+                  bg="card"
+                  padding="md"
+                  tilt={i % 2 === 0 ? "left" : "right"}
+                  className={`${t.bg} h-full transition-transform group-hover:-translate-y-1`}
+                >
+                  <Icon className="h-9 w-9 mb-3" strokeWidth={2.5} />
+                  <h3 className="font-display text-2xl">{t.title}</h3>
+                  <p className="text-sm font-medium mt-1 opacity-90">{t.text}</p>
+                </ComicPanel>
+                <div className="absolute -top-3 -right-2">
+                  <OnomatopoeiaBadge variant={t.badgeVariant} size="sm">
+                    {t.badge}
+                  </OnomatopoeiaBadge>
                 </div>
-                <s.icon className="h-8 w-8 mb-3" strokeWidth={2.5} />
-                <h3 className="font-display text-2xl mb-1">{s.title}</h3>
-                <p className="text-sm font-medium">{s.text}</p>
-              </ComicPanel>
-            ))}
-          </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
-      {/* FEATURES */}
-      <section
-        id="features"
-        className="border-b-[3px] border-ink py-16 md:py-24 bg-comic-cream relative"
-      >
-        <div className="absolute inset-0 bg-halftone opacity-20" />
-        <div className="relative mx-auto max-w-6xl px-4">
-          <div className="text-center mb-12">
-            <h2 className="font-display text-4xl md:text-6xl uppercase">
-              Recursos <span className="text-comic-red">heróicos</span>
-            </h2>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((f) => (
-              <ComicPanel key={f.title} bg="card">
-                <div className="h-12 w-12 mb-4 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
-                  <f.icon className="h-6 w-6" strokeWidth={2.5} />
+      <section className="mx-auto max-w-6xl px-4 pb-16">
+        <h2 className="font-display text-3xl mb-4 uppercase">Últimas conversões</h2>
+        <ComicPanel bg="card" padding="md">
+          <ul className="divide-y-2 divide-dashed divide-ink/30">
+            {RECENT.map((r) => (
+              <li key={r.title + r.chapter} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div>
+                  <p className="font-display text-xl leading-none">{r.title}</p>
+                  <p className="text-xs font-medium opacity-70 mt-1">{r.chapter} • {r.when}</p>
                 </div>
-                <h3 className="font-display text-2xl mb-1">{f.title}</h3>
-                <p className="text-sm font-medium">{f.text}</p>
-              </ComicPanel>
+                <Link
+                  to="/biblioteca"
+                  className="font-display text-sm border-[2.5px] border-ink shadow-comic-sm px-3 py-1 rounded-md bg-comic-yellow hover:-translate-y-0.5 transition-transform"
+                >
+                  Abrir
+                </Link>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </ComicPanel>
       </section>
-
-      {/* CTA */}
-      <section className="py-20 bg-comic-red text-primary-foreground border-b-[3px] border-ink relative overflow-hidden">
-        <div className="absolute inset-0 bg-halftone opacity-20" />
-        <div className="relative mx-auto max-w-3xl px-4 text-center space-y-6">
-          <OnomatopoeiaBadge variant="yellow" size="lg">BAM!</OnomatopoeiaBadge>
-          <h2 className="font-display text-4xl md:text-6xl uppercase">
-            Seu próximo mangá tá a um clique
-          </h2>
-          <p className="text-lg font-medium max-w-xl mx-auto">
-            Crie sua conta, ganhe 10 créditos grátis e mande pro Kindle agora.
-          </p>
-          <Link
-            to="/wizard"
-            className="inline-flex items-center gap-2 bg-comic-yellow text-secondary-foreground border-[3px] border-ink shadow-comic px-6 py-3 rounded-md font-display text-2xl hover:-translate-y-1 transition-transform"
-          >
-            <Mail className="h-6 w-6" /> Mandar pro meu Kindle
-          </Link>
-        </div>
-      </section>
-
-      <footer className="py-8 text-center text-sm font-medium">
-        Feito com tinta, papel e <span className="text-comic-red">muito KAPOW</span>.
-      </footer>
     </div>
   );
 }
