@@ -47,15 +47,6 @@ import {
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/wizard")({
-  head: () => ({
-    meta: [
-      { title: "Wizard MangaForge — Mangás pro seu Kindle" },
-      {
-        name: "description",
-        content: "Fluxo guiado em 5 etapas: origem, capítulos, capas, conversão Kindle e envio.",
-      },
-    ],
-  }),
   component: () => (
     <RequireAuth>
       <WizardPage />

@@ -1,7 +1,5 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/hooks/useAuth";
-
-import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
   return (
@@ -26,46 +24,9 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MangaForge — Mangás direto no seu Kindle" },
-      { name: "description", content: "Wizard pop art para baixar mangás, escolher capas e enviar pro seu Kindle em formato EPUB, MOBI, KFX ou CBZ." },
-      { name: "author", content: "MangaForge" },
-      { property: "og:title", content: "MangaForge — Mangás direto no seu Kindle" },
-      { property: "og:description", content: "Da URL ao seu Kindle em 5 passos. Otimizado para mangás e webtoons." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;500;600;700;800&display=swap",
-      },
-    ],
-  }),
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
 });
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="pt-BR">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
 
 function RootComponent() {
   return (

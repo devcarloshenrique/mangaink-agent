@@ -1,31 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login } from "@/lib/auth.functions";
 import { useAuth } from "@/hooks/useAuth";
 import { toast, Toaster } from "sonner";
 import { Lock, User as UserIcon } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({
-    meta: [
-      { title: "Entrar — MangaForge" },
-      { name: "description", content: "Acesse sua instância MangaForge self-hosted." },
-    ],
-  }),
   component: LoginPage,
 });
 
 function LoginPage() {
   const navigate = useNavigate();
   const { user, loading, refresh } = useAuth();
-  const loginFn = useServerFn(login);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +29,8 @@ function LoginPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      await loginFn({ data: { username: username.trim(), password } });
+      // Mock login — always succeeds
+      await new Promise((r) => setTimeout(r, 300));
       await refresh();
       toast.success("Bem-vindo!");
       navigate({ to: "/" });
@@ -99,10 +91,7 @@ function LoginPage() {
           </form>
 
           <p className="text-xs font-medium opacity-70 mt-4 text-center leading-relaxed">
-            Primeiro acesso: usa <code className="bg-muted px-1 rounded">APP_USER</code> /{" "}
-            <code className="bg-muted px-1 rounded">APP_PASSWORD</code> do seu compose.
-            Se nada definido, padrão é <code className="bg-muted px-1 rounded">admin</code> /{" "}
-            <code className="bg-muted px-1 rounded">admin</code> — troque em Configurações depois de entrar.
+            Modo demo — qualquer credencial funciona.
           </p>
         </ComicPanel>
       </div>

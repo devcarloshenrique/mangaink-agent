@@ -6,12 +6,6 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Library, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/biblioteca")({
-  head: () => ({
-    meta: [
-      { title: "Biblioteca — MangaForge" },
-      { name: "description", content: "Mangás convertidos e salvos localmente." },
-    ],
-  }),
   component: () => (
     <RequireAuth>
       <BibliotecaPage />

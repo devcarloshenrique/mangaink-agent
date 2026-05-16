@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -9,12 +8,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { Calendar, Library, Sparkles, Wand2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "MangaForge — Painel" },
-      { name: "description", content: "Painel da sua instância MangaForge self-hosted." },
-    ],
-  }),
   component: () => (
     <RequireAuth>
       <Dashboard />
@@ -69,12 +62,6 @@ const RECENT = [
 
 function Dashboard() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-
-  // Garante redirect (RequireAuth já cobre, mas evita flicker)
-  useEffect(() => {
-    if (!user) navigate({ to: "/login" });
-  }, [user, navigate]);
 
   return (
     <div className="min-h-screen bg-background">

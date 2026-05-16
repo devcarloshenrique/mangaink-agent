@@ -15,9 +15,6 @@ import { Calendar, Play, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/agendamentos")({
-  head: () => ({
-    meta: [{ title: "Agendamentos — MangaForge" }],
-  }),
   component: () => (
     <RequireAuth>
       <AgendamentosPage />

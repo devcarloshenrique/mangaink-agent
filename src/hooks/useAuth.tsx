@@ -1,6 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { logout as logoutFn, me } from "@/lib/auth.functions";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 interface SessionUser {
   username: string;
@@ -14,28 +12,20 @@ interface AuthCtx {
   signOut: () => Promise<void>;
 }
 
+const MOCK_USER: SessionUser = {
+  username: "admin",
+  kindleEmail: "admin@kindle.com",
+};
+
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const meFn = useServerFn(me);
-  const logoutSrv = useServerFn(logoutFn);
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<SessionUser | null>(MOCK_USER);
+  const [loading] = useState(false);
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await meFn();
-      setUser(res.user);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [meFn]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    setUser(MOCK_USER);
+  }, []);
 
   return (
     <Ctx.Provider
@@ -44,8 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         refresh,
         signOut: async () => {
-          await logoutSrv();
-          setUser(null);
+          // No-op in mock mode — user stays "logged in"
+          setUser(MOCK_USER);
         },
       }}
     >

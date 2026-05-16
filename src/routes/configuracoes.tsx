@@ -11,9 +11,6 @@ import { Cog, Mail, Lock, HardDrive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/configuracoes")({
-  head: () => ({
-    meta: [{ title: "Configurações — MangaForge" }],
-  }),
   component: () => (
     <RequireAuth>
       <ConfigPage />

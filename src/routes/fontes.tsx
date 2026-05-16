@@ -7,12 +7,6 @@ import { Sparkles, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/fontes")({
-  head: () => ({
-    meta: [
-      { title: "Fontes homologadas — MangaForge" },
-      { name: "description", content: "Sites suportados pelo MangaForge." },
-    ],
-  }),
   component: () => (
     <RequireAuth>
       <FontesPage />
