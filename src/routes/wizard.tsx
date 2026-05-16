@@ -797,7 +797,7 @@ function SizeBudget({ chapters }: { chapters: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
+    </ComicPanel>
   );
 }
 
