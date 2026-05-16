@@ -44,6 +44,7 @@ import {
   Upload,
   Zap,
 } from "lucide-react";
+import { MockPage } from "@/components/comic/MockPage";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/wizard")({
@@ -61,8 +62,6 @@ const STEPS = [
   { label: "Configurações", short: "Config" },
   { label: "Envio", short: "Envio" },
 ];
-
-const VOLUME_SIZE = 8;
 
 interface Chapter {
   id: string;
@@ -92,6 +91,7 @@ type CoverRef =
   | { kind: "upload"; name: string };
 
 type Delivery = "download" | "kindle";
+type VolumeMode = "fixed" | "custom";
 
 interface WizardData {
   url: string;
@@ -106,9 +106,13 @@ interface WizardData {
   meta: { title: string; author: string };
   delivery: Delivery;
   kindleEmail: string;
+  volumeSize: number;
+  volumeMode: VolumeMode;
+  volumeSizes: number[];
 }
 
-function mockFetchSeries(url: string): Promise<Series> {
+function mockFetchSeries(url: string, volumeSize?: number): Promise<Series> {
+  const size = volumeSize || 8;
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       try {
@@ -122,7 +126,7 @@ function mockFetchSeries(url: string): Promise<Series> {
           number: String(i + 1),
           title: i === 0 ? "O início" : `Capítulo ${i + 1}`,
           pages: 18 + ((i * 7) % 14),
-          volume: Math.floor(i / VOLUME_SIZE) + 1,
+          volume: Math.floor(i / size) + 1,
         }));
         const covers: Cover[] = Array.from({ length: 8 }, (_, i) => ({
           id: `cv-${i + 1}`,
@@ -157,6 +161,9 @@ function WizardPage() {
     meta: { title: "", author: "" },
     delivery: "kindle",
     kindleEmail: "",
+    volumeSize: 8,
+    volumeMode: "fixed",
+    volumeSizes: [],
   });
 
   const update = <K extends keyof WizardData>(k: K, v: WizardData[K]) =>
@@ -194,7 +201,7 @@ function WizardPage() {
     if (!data.url) return;
     setLoading(true);
     try {
-      const series = await mockFetchSeries(data.url);
+      const series = await mockFetchSeries(data.url, data.volumeSize);
       setData((d) => ({
         ...d,
         series,
@@ -253,6 +260,7 @@ function WizardPage() {
               url={data.url}
               series={data.series}
               loading={loading}
+              volumeSize={data.volumeSize}
               onUrlChange={(v) => update("url", v)}
               onFetch={handleFetch}
             />
@@ -262,12 +270,18 @@ function WizardPage() {
               series={data.series}
               selected={data.selectedChapters}
               grouping={data.grouping}
+              volumeSize={data.volumeSize}
+              volumeMode={data.volumeMode}
+              volumeSizes={data.volumeSizes}
               onToggle={toggleChapter}
               onSelectAll={() =>
                 update("selectedChapters", new Set(data.series!.chapters.map((c) => c.id)))
               }
               onClear={() => update("selectedChapters", new Set())}
               onGrouping={(g) => update("grouping", g)}
+              onVolumeSize={(v) => update("volumeSize", v)}
+              onVolumeMode={(m) => update("volumeMode", m)}
+              onVolumeSizes={(v) => update("volumeSizes", v)}
             />
           )}
           {step === 2 && data.series && (
@@ -364,10 +378,11 @@ function WizardPage() {
 /* ---------- Step components ---------- */
 
 function StepOrigin({
-  url, series, loading, onUrlChange, onFetch,
+  url, series, loading, onUrlChange, onFetch, volumeSize,
 }: {
   url: string; series: Series | null; loading: boolean;
   onUrlChange: (v: string) => void; onFetch: () => void;
+  volumeSize: number;
 }) {
   return (
     <div className="space-y-6">
@@ -404,7 +419,7 @@ function StepOrigin({
             <div>
               <p className="font-display text-2xl leading-none">{series.title}</p>
               <p className="text-sm font-medium mt-1">
-                {series.chapters.length} capítulos • {Math.ceil(series.chapters.length / VOLUME_SIZE)} volumes
+                {series.chapters.length} capítulos • {Math.ceil(series.chapters.length / volumeSize)} volumes
               </p>
             </div>
           </div>
@@ -415,15 +430,140 @@ function StepOrigin({
 }
 
 function StepChapters({
-  series, selected, grouping, onToggle, onSelectAll, onClear, onGrouping,
+  series, selected, grouping, volumeSize, volumeMode, volumeSizes,
+  onToggle, onSelectAll, onClear, onGrouping, onVolumeSize, onVolumeMode, onVolumeSizes,
 }: {
   series: Series; selected: Set<string>; grouping: "single" | "separate";
+  volumeSize: number; volumeMode: VolumeMode; volumeSizes: number[];
   onToggle: (id: string) => void; onSelectAll: () => void; onClear: () => void;
   onGrouping: (g: "single" | "separate") => void;
+  onVolumeSize: (v: number) => void;
+  onVolumeMode: (m: VolumeMode) => void;
+  onVolumeSizes: (v: number[]) => void;
 }) {
+  const totalChapters = series.chapters.length;
+
+  const calculateVolume = (chapterIndex: number): number => {
+    if (volumeMode === "fixed") {
+      return Math.floor(chapterIndex / volumeSize) + 1;
+    }
+    let idx = chapterIndex;
+    for (let v = 0; v < volumeSizes.length; v++) {
+      if (idx < volumeSizes[v]) return v + 1;
+      idx -= volumeSizes[v];
+    }
+    return volumeSizes.length + 1;
+  };
+
+  const customTotalAssigned = volumeSizes.reduce((a, b) => a + b, 0);
+  const customRemaining = totalChapters - customTotalAssigned;
+
+  const addCustomVolume = () => {
+    onVolumeSizes([...volumeSizes, Math.min(volumeSize, Math.max(1, customRemaining))]);
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader icon={<BookOpen />} title="Quais capítulos?" subtitle={`${selected.size} de ${series.chapters.length} selecionados • 1 crédito por capítulo`} />
+
+      {/* Volume config */}
+      <div className="border-[3px] border-dashed border-ink rounded-lg p-4 space-y-3">
+        <p className="font-display text-xl">Capítulos por volume</p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ChoiceCard
+            active={volumeMode === "fixed"}
+            onClick={() => onVolumeMode("fixed")}
+            title="Quantidade fixa"
+            text="Mesmo número de capítulos em cada volume."
+          />
+          <ChoiceCard
+            active={volumeMode === "custom"}
+            onClick={() => {
+              onVolumeMode("custom");
+              if (volumeSizes.length === 0) {
+                const volCount = Math.ceil(totalChapters / volumeSize);
+                const base = Math.floor(totalChapters / volCount);
+                const remainder = totalChapters - base * volCount;
+                const sizes: number[] = [];
+                for (let i = 0; i < volCount; i++) {
+                  sizes.push(base + (i < remainder ? 1 : 0));
+                }
+                onVolumeSizes(sizes);
+              }
+            }}
+            title="Quantidade por volume"
+            text="Defina quantos capítulos em cada volume."
+          />
+        </div>
+
+        {volumeMode === "fixed" ? (
+          <div className="flex items-center gap-3">
+            <Label className="font-display text-sm">Capítulos por volume:</Label>
+            <Input
+              type="number"
+              min={1}
+              max={totalChapters}
+              value={volumeSize}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(totalChapters, Number(e.target.value) || 1));
+                onVolumeSize(v);
+              }}
+              className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
+            />
+            <span className="text-sm font-medium opacity-70">
+              = {Math.ceil(totalChapters / volumeSize)} volume(s)
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {volumeSizes.map((size, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <span className="font-display text-xs">Vol.{i + 1}:</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={size}
+                    onChange={(e) => {
+                      const next = [...volumeSizes];
+                      next[i] = Math.max(1, Number(e.target.value) || 1);
+                      onVolumeSizes(next);
+                    }}
+                    className="border-[2.5px] border-ink h-9 w-16 shadow-comic-sm text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onVolumeSizes(volumeSizes.filter((_, j) => j !== i))}
+                    className="border-[2px] border-ink shadow-comic-sm font-display h-7 w-7 p-0"
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={addCustomVolume}
+                disabled={customRemaining <= 0}
+                className="border-[2.5px] border-ink shadow-comic-sm font-display"
+              >
+                + Adicionar volume
+              </Button>
+              <span className="text-xs font-medium opacity-70">
+                {customRemaining > 0
+                  ? `${customRemaining} capítulo(s) restantes`
+                  : customRemaining < 0
+                  ? `${Math.abs(customRemaining)} capítulo(s) excedentes`
+                  : "Todos os capítulos distribuídos"}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={onSelectAll} variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display">
@@ -435,8 +575,9 @@ function StepChapters({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-auto pr-1">
-        {series.chapters.map((c) => {
+        {series.chapters.map((c, i) => {
           const checked = selected.has(c.id);
+          const vol = calculateVolume(i);
           return (
             <label
               key={c.id}
@@ -452,7 +593,7 @@ function StepChapters({
               />
               <div className="flex-1">
                 <p className="font-display text-lg leading-none">Cap. {c.number}</p>
-                <p className="text-xs font-medium opacity-80">Vol. {c.volume} • {c.title} • {c.pages}p</p>
+                <p className="text-xs font-medium opacity-80">Vol. {vol} • {c.title} • {c.pages}p</p>
               </div>
             </label>
           );
@@ -618,7 +759,12 @@ function StepConvert({
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
 }) {
-  const [previewPage, setPreviewPage] = useState(0);
+  const [previewChapterId, setPreviewChapterId] = useState("");
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewSeed, setPreviewSeed] = useState(0);
+
   const presetFilter: Record<string, string> = {
     default: "contrast(1) brightness(1)",
     manga: "grayscale(100%) contrast(1.2) brightness(1)",
@@ -639,11 +785,31 @@ function StepConvert({
   };
   const frame = deviceFrame[data.device] ?? deviceFrame.kpw_11;
   const filter = presetFilter[data.preset] ?? "none";
-  const pages = Array.from({ length: 6 }, (_, i) => i);
+
+  const selectedChapters = data.series?.chapters.filter((c) =>
+    data.selectedChapters.has(c.id),
+  ) ?? [];
+  const currentChapter = selectedChapters.find((c) => c.id === previewChapterId);
+  const maxPage = currentChapter?.pages ?? 1;
+
+  const handleGeneratePreview = async () => {
+    if (!previewChapterId) {
+      toast.error("Selecione um capítulo primeiro");
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewReady(false);
+    // Simula chamada ao servidor
+    await new Promise((r) => setTimeout(r, 1500));
+    setPreviewSeed(Number(previewChapterId.replace(/\D/g, "")) * previewPage);
+    setPreviewReady(true);
+    setPreviewLoading(false);
+    toast.success("Preview gerado com sucesso!");
+  };
 
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<Settings2 />} title="Configurações" subtitle="Ajuste pro seu Kindle e veja o preview ao vivo." />
+      <SectionHeader icon={<Settings2 />} title="Configurações" subtitle="Ajuste pro seu Kindle e veja o preview." />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
@@ -719,67 +885,87 @@ function StepConvert({
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="font-display text-2xl flex-1">Preview da página</h3>
           <span className="font-display text-xs bg-comic-blue text-accent-foreground border-[2.5px] border-ink shadow-comic-sm px-2 py-0.5 rounded">
-            simulação
+            servidor
           </span>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {pages.map((i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setPreviewPage(i)}
-              className={cn(
-                "shrink-0 h-16 w-12 border-[2.5px] border-ink rounded shadow-comic-sm font-display text-xs flex items-center justify-center",
-                previewPage === i
-                  ? "bg-comic-red text-primary-foreground -translate-y-0.5"
-                  : "bg-card",
-              )}
-            >
-              p{i + 1}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 items-start">
-          <div className="space-y-2">
-            <p className="font-display text-sm opacity-80">Original</p>
-            <MockPage seed={previewPage} width={frame.w} height={frame.h} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="font-display text-sm">Capítulo</Label>
+            <Select value={previewChapterId} onValueChange={(v) => { setPreviewChapterId(v); setPreviewReady(false); }}>
+              <SelectTrigger className="border-[2.5px] border-ink h-10 shadow-comic-sm">
+                <SelectValue placeholder="Selecione um capítulo" />
+              </SelectTrigger>
+              <SelectContent className="border-[2.5px] border-ink">
+                {selectedChapters.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    Cap. {c.number} — {c.title} ({c.pages}p)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="space-y-2">
-            <p className="font-display text-sm opacity-80">
-              No {KINDLE_DEVICES.find((d) => d.id === data.device)?.label}
-            </p>
-            <div
-              className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
-              style={{ width: frame.w + 14 }}
-            >
-              <div style={{ filter }}>
-                <MockPage seed={previewPage} width={frame.w} height={frame.h} />
-              </div>
+
+          <div className="space-y-1.5">
+            <Label className="font-display text-sm">Página</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={maxPage}
+                value={previewPage}
+                onChange={(e) => { setPreviewPage(Number(e.target.value)); setPreviewReady(false); }}
+                className="border-[2.5px] border-ink h-10 shadow-comic-sm w-24"
+                disabled={!previewChapterId}
+              />
+              <span className="text-xs font-medium opacity-70">
+                de {currentChapter ? maxPage : "—"}
+              </span>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function MockPage({ seed, width, height }: { seed: number; width: number; height: number }) {
-  const hue = (seed * 57) % 360;
-  return (
-    <div
-      className="border-[3px] border-ink rounded shadow-comic-sm overflow-hidden relative"
-      style={{ width, height, background: `hsl(${hue} 70% 88%)` }}
-    >
-      <div className="absolute inset-2 grid grid-rows-3 gap-1.5">
-        <div className="border-[2px] border-ink bg-card flex items-center justify-center font-display text-comic-red" style={{ fontSize: 14 }}>
-          BAM!
-        </div>
-        <div className="border-[2px] border-ink bg-comic-yellow" />
-        <div className="border-[2px] border-ink bg-card flex items-end p-1">
-          <span className="text-[8px] font-bold leading-tight">— Não posso perder!</span>
-        </div>
+        <Button
+          onClick={handleGeneratePreview}
+          disabled={!previewChapterId || previewLoading}
+          className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
+        >
+          {previewLoading ? (
+            <><span className="animate-spin mr-2">⏳</span> Gerando no servidor…</>
+          ) : (
+            <><Zap className="h-4 w-4 mr-1" /> Gerar Preview</>
+          )}
+        </Button>
+
+        {previewReady ? (
+          <div className="grid gap-4 sm:grid-cols-2 items-start">
+            <div className="space-y-2">
+              <p className="font-display text-sm opacity-80">Original</p>
+              <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+            </div>
+            <div className="space-y-2">
+              <p className="font-display text-sm opacity-80">
+                No {KINDLE_DEVICES.find((d) => d.id === data.device)?.label}
+              </p>
+              <div
+                className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
+                style={{ width: frame.w + 14 }}
+              >
+                <div style={{ filter }}>
+                  <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="border-[3px] border-dashed border-ink rounded-lg p-8 text-center">
+            <p className="font-display text-sm opacity-60">
+              {previewChapterId
+                ? "Clique em \"Gerar Preview\" para ver a conversão no servidor."
+                : "Selecione um capítulo e uma página, depois clique em \"Gerar Preview\"."}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -850,22 +1036,23 @@ function StepDelivery({
         </ComicPanel>
       </div>
 
-      <SizeBudget chapters={cost} />
+      <SizeBudget chapters={cost} delivery={data.delivery} />
     </div>
   );
 }
 
-function SizeBudget({ chapters }: { chapters: number }) {
-  // Mock: ~1.2MB por capítulo
+function SizeBudget({ chapters, delivery }: { chapters: number; delivery: Delivery }) {
   const estMB = Math.max(0.1, chapters * 1.2);
-  const pct = Math.min(100, (estMB / 25) * 100);
-  const over = estMB > 25;
+  const isKindle = delivery === "kindle";
+  const pct = isKindle ? Math.min(100, (estMB / 25) * 100) : 100;
+  const over = isKindle && estMB > 25;
   return (
     <ComicPanel bg={over ? "red" : "yellow"} padding="md" tilt="left">
       <div className="flex items-center gap-3 flex-wrap mb-2">
-        <Mail className="h-5 w-5" />
+        {isKindle ? <Mail className="h-5 w-5" /> : <Download className="h-5 w-5" />}
         <p className="font-display text-lg flex-1">
-          Tamanho estimado: <strong>{estMB.toFixed(1)} MB</strong> / 25 MB
+          Tamanho estimado: <strong>{estMB.toFixed(1)} MB</strong>
+          {isKindle ? " / 25 MB (limite do Kindle)" : " — Download sem restrições"}
         </p>
         {over && (
           <span className="font-display text-sm bg-card text-foreground border-[3px] border-ink shadow-comic-sm px-2 py-0.5 rounded-md">
@@ -873,12 +1060,18 @@ function SizeBudget({ chapters }: { chapters: number }) {
           </span>
         )}
       </div>
-      <div className="h-3 w-full border-[2.5px] border-ink rounded-full bg-card overflow-hidden">
-        <div
-          className={cn("h-full", over ? "bg-comic-red" : "bg-comic-blue")}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      {isKindle ? (
+        <div className="h-3 w-full border-[2.5px] border-ink rounded-full bg-card overflow-hidden">
+          <div
+            className={cn("h-full", over ? "bg-comic-red" : "bg-comic-blue")}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      ) : (
+        <p className="text-sm font-medium opacity-80">
+          Arquivos baixados diretamente não têm limite de tamanho. Só o envio por email (Kindle) tem o limite de 25 MB.
+        </p>
+      )}
     </ComicPanel>
   );
 }

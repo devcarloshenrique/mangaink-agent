@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
+import { MockPage } from "@/components/comic/MockPage";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { toast, Toaster } from "sonner";
-import { ArrowLeft, Download, Mail, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Download, Mail, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/biblioteca/$slug")({
   component: () => (
@@ -24,6 +27,17 @@ function SeriesPage() {
     format: "EPUB",
     sent: i < 3,
   }));
+
+  const [readerOpen, setReaderOpen] = useState(false);
+  const [readerFile, setReaderFile] = useState("");
+  const [readerPage, setReaderPage] = useState(0);
+  const totalPages = 18;
+
+  const openReader = (fileName: string) => {
+    setReaderFile(fileName);
+    setReaderPage(0);
+    setReaderOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,6 +79,14 @@ function SeriesPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => openReader(f.name)}
+                    className="border-[2.5px] border-ink shadow-comic-sm font-display"
+                  >
+                    <BookOpen className="h-4 w-4 mr-1" /> Ler
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => toast.success(`Reenviando ${f.name} (mock)`)}
                     className="border-[2.5px] border-ink shadow-comic-sm font-display"
                   >
@@ -91,6 +113,48 @@ function SeriesPage() {
             ))}
           </ul>
         </ComicPanel>
+
+        <Dialog open={readerOpen} onOpenChange={setReaderOpen}>
+          <DialogContent className="border-[3px] border-ink shadow-comic-lg max-w-3xl p-0">
+            <DialogTitle className="sr-only">Leitor: {readerFile}</DialogTitle>
+            <div className="bg-background rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-comic-yellow">
+                <p className="font-display text-lg truncate">{readerFile}</p>
+                <p className="font-display text-sm">
+                  Página {readerPage + 1} de {totalPages}
+                </p>
+              </div>
+
+              <div className="flex justify-center p-6 bg-zinc-200">
+                <MockPage seed={readerPage} width={200} height={280} />
+              </div>
+
+              <div className="flex items-center justify-center gap-4 px-4 py-3 border-t-[3px] border-ink bg-card">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReaderPage((p) => Math.max(0, p - 1))}
+                  disabled={readerPage === 0}
+                  className="border-[2.5px] border-ink shadow-comic-sm font-display"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                </Button>
+                <span className="font-display text-sm min-w-[4rem] text-center">
+                  {readerPage + 1} / {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReaderPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={readerPage === totalPages - 1}
+                  className="border-[2.5px] border-ink shadow-comic-sm font-display"
+                >
+                  Próximo <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
