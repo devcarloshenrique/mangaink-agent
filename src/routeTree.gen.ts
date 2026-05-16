@@ -11,7 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WizardRouteImport } from './routes/wizard'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as FontesRouteImport } from './routes/fontes'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as BibliotecaRouteImport } from './routes/biblioteca'
+import { Route as AgendamentosRouteImport } from './routes/agendamentos'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BibliotecaSlugRouteImport } from './routes/biblioteca.$slug'
 
 const WizardRoute = WizardRouteImport.update({
   id: '/wizard',
@@ -23,38 +28,107 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FontesRoute = FontesRouteImport.update({
+  id: '/fontes',
+  path: '/fontes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BibliotecaRoute = BibliotecaRouteImport.update({
+  id: '/biblioteca',
+  path: '/biblioteca',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendamentosRoute = AgendamentosRouteImport.update({
+  id: '/agendamentos',
+  path: '/agendamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BibliotecaSlugRoute = BibliotecaSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => BibliotecaRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agendamentos': typeof AgendamentosRoute
+  '/biblioteca': typeof BibliotecaRouteWithChildren
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
+  '/biblioteca/$slug': typeof BibliotecaSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agendamentos': typeof AgendamentosRoute
+  '/biblioteca': typeof BibliotecaRouteWithChildren
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
+  '/biblioteca/$slug': typeof BibliotecaSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agendamentos': typeof AgendamentosRoute
+  '/biblioteca': typeof BibliotecaRouteWithChildren
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
+  '/biblioteca/$slug': typeof BibliotecaSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/wizard'
+  fullPaths:
+    | '/'
+    | '/agendamentos'
+    | '/biblioteca'
+    | '/configuracoes'
+    | '/fontes'
+    | '/login'
+    | '/wizard'
+    | '/biblioteca/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/wizard'
-  id: '__root__' | '/' | '/login' | '/wizard'
+  to:
+    | '/'
+    | '/agendamentos'
+    | '/biblioteca'
+    | '/configuracoes'
+    | '/fontes'
+    | '/login'
+    | '/wizard'
+    | '/biblioteca/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/agendamentos'
+    | '/biblioteca'
+    | '/configuracoes'
+    | '/fontes'
+    | '/login'
+    | '/wizard'
+    | '/biblioteca/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgendamentosRoute: typeof AgendamentosRoute
+  BibliotecaRoute: typeof BibliotecaRouteWithChildren
+  ConfiguracoesRoute: typeof ConfiguracoesRoute
+  FontesRoute: typeof FontesRoute
   LoginRoute: typeof LoginRoute
   WizardRoute: typeof WizardRoute
 }
@@ -75,6 +149,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fontes': {
+      id: '/fontes'
+      path: '/fontes'
+      fullPath: '/fontes'
+      preLoaderRoute: typeof FontesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/biblioteca': {
+      id: '/biblioteca'
+      path: '/biblioteca'
+      fullPath: '/biblioteca'
+      preLoaderRoute: typeof BibliotecaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agendamentos': {
+      id: '/agendamentos'
+      path: '/agendamentos'
+      fullPath: '/agendamentos'
+      preLoaderRoute: typeof AgendamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -82,11 +184,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/biblioteca/$slug': {
+      id: '/biblioteca/$slug'
+      path: '/$slug'
+      fullPath: '/biblioteca/$slug'
+      preLoaderRoute: typeof BibliotecaSlugRouteImport
+      parentRoute: typeof BibliotecaRoute
+    }
   }
 }
 
+interface BibliotecaRouteChildren {
+  BibliotecaSlugRoute: typeof BibliotecaSlugRoute
+}
+
+const BibliotecaRouteChildren: BibliotecaRouteChildren = {
+  BibliotecaSlugRoute: BibliotecaSlugRoute,
+}
+
+const BibliotecaRouteWithChildren = BibliotecaRoute._addFileChildren(
+  BibliotecaRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgendamentosRoute: AgendamentosRoute,
+  BibliotecaRoute: BibliotecaRouteWithChildren,
+  ConfiguracoesRoute: ConfiguracoesRoute,
+  FontesRoute: FontesRoute,
   LoginRoute: LoginRoute,
   WizardRoute: WizardRoute,
 }

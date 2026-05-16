@@ -16,7 +16,7 @@ export const Route = createFileRoute("/biblioteca/$slug")({
 
 function SeriesPage() {
   const { slug } = Route.useParams();
-  const title = slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const title = slug.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
   const files = Array.from({ length: 8 }, (_, i) => ({
     name: `${slug}-vol-${String(i + 1).padStart(2, "0")}.epub`,
     bytes: 8 * 1024 * 1024 + i * 1024 * 1024,
