@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/hooks/useAuth";
 import { BibliotecaProvider } from "@/hooks/useBiblioteca";
+import { ConversionProvider } from "@/hooks/useConversion";
 
 function NotFoundComponent() {
   return (
@@ -33,7 +34,9 @@ function RootComponent() {
   return (
     <AuthProvider>
       <BibliotecaProvider>
-        <Outlet />
+        <ConversionProvider>
+          <Outlet />
+        </ConversionProvider>
       </BibliotecaProvider>
     </AuthProvider>
   );

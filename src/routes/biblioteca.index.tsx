@@ -4,21 +4,39 @@ import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { useBiblioteca } from "@/hooks/useBiblioteca";
+import { useConversion } from "@/hooks/useConversion";
 import { SeriesActionsMenu } from "@/components/biblioteca/SeriesActionsMenu";
 import { DeleteConfirmDialog } from "@/components/biblioteca/DeleteConfirmDialog";
 import { RenameSeriesDialog } from "@/components/biblioteca/RenameSeriesDialog";
+import { STAGE_LABELS } from "@/lib/conversion-job";
+import type { JobStage } from "@/lib/conversion-job";
 import { toast, Toaster } from "sonner";
-import { Library, FileText, LayoutGrid, List, Star, Wand2, Plus } from "lucide-react";
+import {
+  Library,
+  FileText,
+  LayoutGrid,
+  List,
+  Star,
+  Wand2,
+  Plus,
+  Loader2,
+  Clock,
+} from "lucide-react";
 import type { MangaSeries } from "@/lib/biblioteca-data";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/biblioteca/")({
   component: BibliotecaPage,
 });
 
+type TabId = "all" | "converting" | "completed";
+
 function BibliotecaPage() {
   const { series, renameSeries, deleteSeries, toggleFavorite } = useBiblioteca();
+  const { jobs } = useConversion();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [activeTab, setActiveTab] = useState<TabId>("all");
 
   // Dialog state
   const [renamingSeries, setRenamingSeries] = useState<MangaSeries | null>(null);
@@ -47,11 +65,21 @@ function BibliotecaPage() {
     setDeletingSeries(null);
   };
 
+  // Active conversion jobs
+  const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const completedJobs = jobs.filter((j) => j.status === "completed" || j.status === "error");
+
   // Sort: favorites first, then by title
   const sorted = [...series].sort((a, b) => {
     if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
     return a.title.localeCompare(b.title);
   });
+
+  const showLibrary = activeTab === "all" || activeTab === "completed";
+  const showConverting = activeTab === "all" || activeTab === "converting";
+
+  const totalCount = sorted.length;
+  const convertingCount = activeJobs.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -94,118 +122,296 @@ function BibliotecaPage() {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={cn(
+              "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all",
+              activeTab === "all"
+                ? "bg-comic-red text-primary-foreground border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+            )}
+          >
+            Todas ({totalCount + convertingCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("converting")}
+            className={cn(
+              "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all flex items-center gap-1.5",
+              activeTab === "converting"
+                ? "bg-comic-yellow text-comic-ink border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+            )}
+          >
+            {convertingCount > 0 && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            )}
+            Em Andamento ({convertingCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("completed")}
+            className={cn(
+              "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all",
+              activeTab === "completed"
+                ? "bg-comic-blue text-accent-foreground border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+            )}
+          >
+            Concluídas ({totalCount})
+          </button>
+        </div>
+
+        {/* Status message */}
         <SpeechBubble variant="yellow" tail="left" className="mb-6 max-w-md">
-          {series.length === 0
-            ? "Sua estante está vazia. Que tal converter seu primeiro mangá?"
-            : `${series.length} obras na sua estante. Bem servido, hein?`}
+          {activeTab === "converting"
+            ? convertingCount === 0
+              ? "Nenhuma conversão em andamento no momento."
+              : `${convertingCount} conversão(ões) em andamento. Acompanhe o progresso abaixo!`
+            : totalCount === 0 && convertingCount === 0
+              ? "Sua estante está vazia. Que tal converter seu primeiro mangá?"
+              : `${totalCount} obras na sua estante. Bem servido, hein?`}
         </SpeechBubble>
 
-        {sorted.length === 0 ? (
+        {/* Converting section */}
+        {showConverting && activeJobs.length > 0 && (
+          <div className="mb-8">
+            <h2 className="font-display text-2xl mb-4 flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-comic-blue" />
+              Convertendo agora
+            </h2>
+            {viewMode === "grid" ? (
+              <div className="grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                {activeJobs.map((job) => {
+                  const activeStage = job.stages.find((s) => s.status === "active");
+                  return (
+                    <Link
+                      key={job.id}
+                      to="/biblioteca/converter/$jobId"
+                      params={{ jobId: job.id }}
+                      className="block focus:outline-none cursor-pointer group transition-transform group-hover:-translate-y-1"
+                    >
+                      <ComicPanel bg="yellow" padding="sm" tilt="left" className="h-full">
+                        <div
+                          className="aspect-[2/3] border-[3px] border-ink rounded mb-2 flex items-end p-2 shadow-comic-sm relative overflow-hidden"
+                          style={{ background: `hsl(${job.seriesHue} 70% 55%)` }}
+                        >
+                          <div className="bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs truncate">
+                            {job.seriesTitle}
+                          </div>
+                          {/* Spinning overlay */}
+                          <div className="absolute top-2 right-2">
+                            <Loader2 className="h-5 w-5 animate-spin text-comic-ink" />
+                          </div>
+                        </div>
+                        <p className="font-display text-base truncate">{job.seriesTitle}</p>
+                        <p className="text-xs font-medium opacity-70">
+                          {job.format} • {job.totalChapters} caps
+                        </p>
+                        {/* Progress bar */}
+                        <div className="mt-2 h-2 w-full border-2 border-ink rounded-full bg-card overflow-hidden">
+                          <div
+                            className="h-full bg-comic-blue transition-all duration-300"
+                            style={{ width: `${job.overallProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] font-medium opacity-60 mt-1 truncate">
+                          {activeStage
+                            ? `${STAGE_LABELS[activeStage.id as JobStage]} • ${job.overallProgress}%`
+                            : "Iniciando..."}
+                        </p>
+                      </ComicPanel>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <ComicPanel bg="card" padding="md">
+                <div className="space-y-0">
+                  {activeJobs.map((job, i) => {
+                    const activeStage = job.stages.find((s) => s.status === "active");
+                    return (
+                      <Link
+                        key={job.id}
+                        to="/biblioteca/converter/$jobId"
+                        params={{ jobId: job.id }}
+                        className={cn(
+                          "flex items-center gap-4 py-3 border-b-2 border-dashed border-ink/30 last:border-0 last:pb-0 hover:bg-muted/50 rounded transition-colors -mx-2 px-2",
+                          i === 0 && "pt-0",
+                        )}
+                      >
+                        <div
+                          className="h-16 w-12 shrink-0 border-[3px] border-ink rounded shadow-comic-sm relative"
+                          style={{ background: `hsl(${job.seriesHue} 70% 55%)` }}
+                        >
+                          <Loader2 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-comic-ink" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-display text-xl leading-none truncate">{job.seriesTitle}</p>
+                          <p className="text-xs font-medium opacity-70 mt-1">
+                            <FileText className="h-3 w-3 inline mr-1" />
+                            {job.format} • {job.totalChapters} capítulos • {job.totalPages} páginas
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <div className="h-2 flex-1 border-2 border-ink rounded-full bg-card overflow-hidden">
+                              <div
+                                className="h-full bg-comic-blue transition-all duration-300"
+                                style={{ width: `${job.overallProgress}%` }}
+                              />
+                            </div>
+                            <span className="font-display text-xs shrink-0">{job.overallProgress}%</span>
+                          </div>
+                          <p className="text-[11px] font-medium opacity-60 mt-0.5">
+                            {activeStage
+                              ? STAGE_LABELS[activeStage.id as JobStage]
+                              : "Iniciando..."}
+                          </p>
+                        </div>
+                        <Clock className="h-4 w-4 opacity-40 shrink-0 hidden sm:block" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </ComicPanel>
+            )}
+          </div>
+        )}
+
+        {/* Empty state for converting tab */}
+        {showConverting && activeJobs.length === 0 && activeTab === "converting" && (
           <div className="text-center py-16">
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border-[3px] border-ink bg-comic-yellow shadow-comic-sm">
-              <Library className="h-10 w-10" />
+              <Clock className="h-10 w-10" />
             </div>
-            <h2 className="font-display text-3xl uppercase mb-3">Nada por aqui ainda</h2>
+            <h2 className="font-display text-3xl uppercase mb-3">Nada convertendo</h2>
             <p className="text-sm font-medium opacity-70 mb-6 max-w-md mx-auto">
-              Use o wizard para converter mangás de sites online e enviar pro seu Kindle.
+              Inicie uma conversão no wizard e acompanhe o progresso aqui em tempo real.
             </p>
             <Link
               to="/wizard"
               className="inline-flex items-center gap-2 bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-lg px-6 py-3 rounded-md hover:-translate-y-0.5 transition-transform"
             >
-              <Wand2 className="h-5 w-5" /> Converter meu primeiro mangá
+              <Wand2 className="h-5 w-5" /> Converter um mangá
             </Link>
           </div>
-        ) : viewMode === "grid" ? (
-          <div className="grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-            {sorted.map((s, i) => (
-              <div key={s.slug} className="relative group transition-transform group-hover:-translate-y-1">
-                <Link
-                  to="/biblioteca/$slug"
-                  params={{ slug: s.slug }}
-                  className="block focus:outline-none cursor-pointer"
-                >
-                  <ComicPanel
-                    bg="card"
-                    padding="sm"
-                    tilt={i % 2 === 0 ? "left" : "right"}
-                    className="h-full"
-                  >
-                    <div
-                      className="aspect-[2/3] border-[3px] border-ink rounded mb-2 flex items-end p-2 shadow-comic-sm relative"
-                      style={{ background: `hsl(${s.hue} 70% 55%)` }}
-                    >
-                      <div className="bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs">
-                        {s.title}
-                      </div>
-                      {s.favorite && (
-                        <Star className="absolute bottom-1 right-1 h-4 w-4 text-comic-yellow fill-comic-yellow drop-shadow-[1px_1px_0_#000]" />
-                      )}
-                    </div>
-                    <p className="font-display text-base truncate">{s.title}</p>
-                    <p className="text-xs font-medium opacity-70 flex items-center gap-1">
-                      <FileText className="h-3 w-3" /> {s.files.length} arquivos
-                    </p>
-                  </ComicPanel>
-                </Link>
-                <div className="absolute top-2 right-2 z-10">
-                  <SeriesActionsMenu
-                    title={s.title}
-                    isFavorite={s.favorite}
-                    onRename={() => handleRename(s)}
-                    onToggleFavorite={() => toggleFavorite(s.slug)}
-                    onDelete={() => handleDelete(s)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <ComicPanel bg="card" padding="md">
-            <div className="space-y-0">
-              {sorted.map((s, i) => (
-                <div
-                  key={s.slug}
-                  className={`flex items-center gap-4 py-3 border-b-2 border-dashed border-ink/30 last:border-0 last:pb-0 ${i === 0 ? "pt-0" : ""}`}
-                >
-                  <Link
-                    to="/biblioteca/$slug"
-                    params={{ slug: s.slug }}
-                    className="flex items-center gap-4 flex-1 min-w-0 hover:bg-muted/50 rounded transition-colors -mx-2 px-2"
-                  >
-                    <div
-                      className="h-16 w-12 shrink-0 border-[3px] border-ink rounded shadow-comic-sm relative"
-                      style={{ background: `hsl(${s.hue} 70% 55%)` }}
-                    >
-                      {s.favorite && (
-                        <Star className="absolute -top-1 -right-1 h-3.5 w-3.5 text-comic-yellow fill-comic-yellow drop-shadow-[1px_1px_0_#000]" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-display text-xl leading-none truncate">{s.title}</p>
-                      <p className="text-xs font-medium opacity-70 mt-1">
-                        <FileText className="h-3 w-3 inline mr-1" />
-                        {s.files.length} arquivos
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0 hidden sm:block">
-                      <p className="text-xs font-medium opacity-70">Última conversão</p>
-                      <p className="font-display text-sm">{s.lastConverted}</p>
-                    </div>
-                  </Link>
-                  <div className="shrink-0">
-                    <SeriesActionsMenu
-                      title={s.title}
-                      isFavorite={s.favorite}
-                      onRename={() => handleRename(s)}
-                      onToggleFavorite={() => toggleFavorite(s.slug)}
-                      onDelete={() => handleDelete(s)}
-                    />
+        )}
+
+        {/* Library section */}
+        {showLibrary && (
+          <>
+            {sorted.length === 0 ? (
+              activeTab === "completed" && activeJobs.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border-[3px] border-ink bg-comic-yellow shadow-comic-sm">
+                    <Library className="h-10 w-10" />
                   </div>
+                  <h2 className="font-display text-3xl uppercase mb-3">Nada por aqui ainda</h2>
+                  <p className="text-sm font-medium opacity-70 mb-6 max-w-md mx-auto">
+                    Use o wizard para converter mangás de sites online e enviar pro seu Kindle.
+                  </p>
+                  <Link
+                    to="/wizard"
+                    className="inline-flex items-center gap-2 bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-lg px-6 py-3 rounded-md hover:-translate-y-0.5 transition-transform"
+                  >
+                    <Wand2 className="h-5 w-5" /> Converter meu primeiro mangá
+                  </Link>
                 </div>
-              ))}
-            </div>
-          </ComicPanel>
+              ) : null
+            ) : viewMode === "grid" ? (
+              <div className="grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                {sorted.map((s, i) => (
+                  <div key={s.slug} className="relative group transition-transform group-hover:-translate-y-1">
+                    <Link
+                      to="/biblioteca/$slug"
+                      params={{ slug: s.slug }}
+                      className="block focus:outline-none cursor-pointer"
+                    >
+                      <ComicPanel
+                        bg="card"
+                        padding="sm"
+                        tilt={i % 2 === 0 ? "left" : "right"}
+                        className="h-full"
+                      >
+                        <div
+                          className="aspect-[2/3] border-[3px] border-ink rounded mb-2 flex items-end p-2 shadow-comic-sm relative"
+                          style={{ background: `hsl(${s.hue} 70% 55%)` }}
+                        >
+                          <div className="bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs">
+                            {s.title}
+                          </div>
+                          {s.favorite && (
+                            <Star className="absolute bottom-1 right-1 h-4 w-4 text-comic-yellow fill-comic-yellow drop-shadow-[1px_1px_0_#000]" />
+                          )}
+                        </div>
+                        <p className="font-display text-base truncate">{s.title}</p>
+                        <p className="text-xs font-medium opacity-70 flex items-center gap-1">
+                          <FileText className="h-3 w-3" /> {s.files.length} arquivos
+                        </p>
+                      </ComicPanel>
+                    </Link>
+                    <div className="absolute top-2 right-2 z-10">
+                      <SeriesActionsMenu
+                        title={s.title}
+                        isFavorite={s.favorite}
+                        onRename={() => handleRename(s)}
+                        onToggleFavorite={() => toggleFavorite(s.slug)}
+                        onDelete={() => handleDelete(s)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ComicPanel bg="card" padding="md">
+                <div className="space-y-0">
+                  {sorted.map((s, i) => (
+                    <div
+                      key={s.slug}
+                      className={`flex items-center gap-4 py-3 border-b-2 border-dashed border-ink/30 last:border-0 last:pb-0 ${i === 0 ? "pt-0" : ""}`}
+                    >
+                      <Link
+                        to="/biblioteca/$slug"
+                        params={{ slug: s.slug }}
+                        className="flex items-center gap-4 flex-1 min-w-0 hover:bg-muted/50 rounded transition-colors -mx-2 px-2"
+                      >
+                        <div
+                          className="h-16 w-12 shrink-0 border-[3px] border-ink rounded shadow-comic-sm relative"
+                          style={{ background: `hsl(${s.hue} 70% 55%)` }}
+                        >
+                          {s.favorite && (
+                            <Star className="absolute -top-1 -right-1 h-3.5 w-3.5 text-comic-yellow fill-comic-yellow drop-shadow-[1px_1px_0_#000]" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-display text-xl leading-none truncate">{s.title}</p>
+                          <p className="text-xs font-medium opacity-70 mt-1">
+                            <FileText className="h-3 w-3 inline mr-1" />
+                            {s.files.length} arquivos
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0 hidden sm:block">
+                          <p className="text-xs font-medium opacity-70">Última conversão</p>
+                          <p className="font-display text-sm">{s.lastConverted}</p>
+                        </div>
+                      </Link>
+                      <div className="shrink-0">
+                        <SeriesActionsMenu
+                          title={s.title}
+                          isFavorite={s.favorite}
+                          onRename={() => handleRename(s)}
+                          onToggleFavorite={() => toggleFavorite(s.slug)}
+                          onDelete={() => handleDelete(s)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ComicPanel>
+            )}
+          </>
         )}
       </div>
 

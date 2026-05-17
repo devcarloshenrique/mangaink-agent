@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
-import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { StepIndicator } from "@/components/comic/StepIndicator";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Button } from "@/components/ui/button";
@@ -20,8 +19,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { useBiblioteca } from "@/hooks/useBiblioteca";
-import type { MangaSeries, MangaFile, Chapter } from "@/lib/biblioteca-data";
+import { useConversion } from "@/hooks/useConversion";
 import {
   KINDLE_DEVICES,
   OUTPUT_FORMATS,
@@ -141,23 +139,13 @@ function mockFetchSeries(url: string, volumeSize?: number): Promise<Series> {
   });
 }
 
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 function WizardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addSeries } = useBiblioteca();
+  const { startJob } = useConversion();
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [showDone, setShowDone] = useState(false);
   const [data, setData] = useState<WizardData>({
     url: "",
     series: null,
@@ -241,65 +229,39 @@ function WizardPage() {
     });
   };
 
-  const finish = async () => {
-    if (!user) return;
-    if (cost === 0) {
-      toast.error("Selecione ao menos um capítulo");
+  const finish = () => {
+    if (!user) {
+      toast.error("Você precisa estar logado para converter.");
       return;
     }
-    if (!data.series) return;
-
-    // Build MangaSeries from wizard data and save to biblioteca
-    const seriesSlug = slugify(data.meta.title || data.series.title);
-    const now = new Date();
-    const when = "agora";
-
-    // Group selected chapters into volumes based on volumeSize
-    const selectedChaptersList = data.series.chapters.filter((ch) =>
-      data.selectedChapters.has(ch.id),
-    );
-    const volSize = data.volumeSize;
-    const volumeCount = Math.ceil(selectedChaptersList.length / volSize);
-
-    const files: MangaFile[] = [];
-    for (let v = 0; v < volumeCount; v++) {
-      const volChapters = selectedChaptersList.slice(v * volSize, (v + 1) * volSize);
-      if (volChapters.length === 0) continue;
-      const chapters: Chapter[] = volChapters.map((ch) => ({
-        id: ch.id,
-        number: ch.number,
-        title: ch.title,
-        status: "completed" as const,
-      }));
-      const totalPages = chapters.length * 20;
-      const bytes = totalPages * 1024 * 128;
-      files.push({
-        id: `${seriesSlug}-vol-${String(v + 1).padStart(2, "0")}`,
-        name: `${seriesSlug}-vol-${String(v + 1).padStart(2, "0")}.${data.format.toLowerCase()}`,
-        bytes,
-        when,
-        format: data.format,
-        sent: false,
-        status: "completed",
-        chapters,
-      });
+    if (!data.series) {
+      toast.error("Nenhuma série carregada. Volte ao passo 1.");
+      return;
+    }
+    if (cost === 0) {
+      toast.error("Selecione ao menos um capítulo.");
+      return;
+    }
+    if (data.delivery === "kindle" && !data.kindleEmail) {
+      toast.error("Informe seu e-mail Kindle para envio.");
+      return;
+    }
+    if (data.delivery === "kindle" && !/^\S+@(kindle\.com|free\.kindle\.com)$/i.test(data.kindleEmail)) {
+      toast.error("E-mail Kindle inválido. Use um endereço @kindle.com ou @free.kindle.com.");
+      return;
     }
 
-    const hue = (seriesSlug.length * 37) % 360;
-    const newSeries: MangaSeries = {
-      slug: seriesSlug,
-      title: data.meta.title || data.series.title,
-      author: data.meta.author || data.series.author,
-      hue,
-      files,
-      lastConverted: when,
-      favorite: false,
-      tags: [],
-      addedAt: now.toISOString(),
-    };
+    const jobId = startJob({
+      series: data.series,
+      selectedChapters: data.selectedChapters,
+      meta: data.meta,
+      format: data.format,
+      delivery: data.delivery,
+      kindleEmail: data.kindleEmail,
+      volumeSize: data.volumeSize,
+    });
 
-    addSeries(newSeries);
-    setShowDone(true);
+    navigate({ to: "/biblioteca/converter/$jobId", params: { jobId } });
   };
 
   return (
@@ -393,7 +355,7 @@ function WizardPage() {
           <Button
             type="button"
             onClick={next}
-            disabled={!canNext || (step === 4 && !enoughCredits)}
+            disabled={step !== 4 && !canNext}
             className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-lg disabled:opacity-40 hover:-translate-y-0.5"
           >
             {step === 4 ? `Converter (${cost} créditos)` : "Próximo"}
@@ -402,46 +364,6 @@ function WizardPage() {
         </div>
       </div>
 
-      <Dialog open={showDone} onOpenChange={setShowDone}>
-        <DialogContent className="border-[3px] border-ink shadow-comic-lg bg-comic-yellow text-center">
-          <DialogTitle className="sr-only">Mangá pronto</DialogTitle>
-          <div className="space-y-4 py-4">
-            <div className="flex justify-center">
-              <OnomatopoeiaBadge variant="red" size="lg">
-                DONE!
-              </OnomatopoeiaBadge>
-            </div>
-            <h2 className="font-display text-3xl">Seu mangá tá pronto!</h2>
-            <p className="font-medium">
-              {data.delivery === "kindle"
-                ? `Mandamos pra ${data.kindleEmail} (simulado).`
-                : "Clique abaixo para baixar (simulado)."}
-            </p>
-            <p className="text-sm font-medium opacity-80">{cost} capítulo(s) processado(s)</p>
-            <div className="flex justify-center gap-3 pt-2">
-              <Button
-                onClick={() => toast.success("Download iniciado (demo)")}
-                className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display"
-              >
-                <Download className="mr-1" /> Baixar
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDone(false);
-                  const s = data.series;
-                  if (!s) return;
-                  const seriesSlug = slugify(data.meta.title || s.title);
-                  navigate({ to: "/biblioteca/$slug", params: { slug: seriesSlug } });
-                }}
-                className="border-[3px] border-ink shadow-comic-sm font-display"
-              >
-                Ver na biblioteca
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
