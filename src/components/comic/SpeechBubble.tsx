@@ -18,12 +18,7 @@ interface Props {
   className?: string;
 }
 
-export function SpeechBubble({
-  children,
-  variant = "white",
-  tail = "left",
-  className,
-}: Props) {
+export function SpeechBubble({ children, variant = "white", tail = "left", className }: Props) {
   return (
     <div
       className={cn(

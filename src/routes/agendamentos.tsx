@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { toast, Toaster } from "sonner";
 import { Calendar, Play, Trash2 } from "lucide-react";
@@ -37,8 +41,20 @@ const FREQ_LABEL: Record<Sub["frequency"], string> = {
 };
 
 const SEED: Sub[] = [
-  { id: "1", title: "One Piece", url: "https://mangadex.org/title/...", frequency: "on_release", lastCheck: "há 12h" },
-  { id: "2", title: "Berserk", url: "https://mangalivre.net/manga/berserk", frequency: "weekly", lastCheck: "ontem" },
+  {
+    id: "1",
+    title: "One Piece",
+    url: "https://mangadex.org/title/...",
+    frequency: "on_release",
+    lastCheck: "há 12h",
+  },
+  {
+    id: "2",
+    title: "Berserk",
+    url: "https://mangalivre.net/manga/berserk",
+    frequency: "weekly",
+    lastCheck: "ontem",
+  },
 ];
 
 const HISTORY = [
@@ -55,10 +71,7 @@ function AgendamentosPage() {
 
   const add = () => {
     if (!url || !title) return toast.error("Preencha título e URL");
-    setSubs((s) => [
-      ...s,
-      { id: crypto.randomUUID(), url, title, frequency, lastCheck: "—" },
-    ]);
+    setSubs((s) => [...s, { id: crypto.randomUUID(), url, title, frequency, lastCheck: "—" }]);
     setUrl("");
     setTitle("");
     toast.success("Assinatura criada (mock)");
@@ -132,7 +145,10 @@ function AgendamentosPage() {
             <ComicPanel bg="card" padding="md">
               <ul className="divide-y-2 divide-dashed divide-ink/30">
                 {subs.map((s) => (
-                  <li key={s.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 flex-wrap">
+                  <li
+                    key={s.id}
+                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 flex-wrap"
+                  >
                     <div className="flex-1 min-w-0">
                       <p className="font-display text-lg leading-none">{s.title}</p>
                       <p className="text-xs font-medium opacity-70 mt-1 truncate">

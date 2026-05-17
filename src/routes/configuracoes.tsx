@@ -105,11 +105,15 @@ function ConfigPage() {
           <dl className="text-sm font-medium space-y-1">
             <div className="flex justify-between border-b-2 border-dashed border-ink/30 py-1">
               <dt>Diretório da biblioteca</dt>
-              <dd><code>/data/library</code></dd>
+              <dd>
+                <code>/data/library</code>
+              </dd>
             </div>
             <div className="flex justify-between border-b-2 border-dashed border-ink/30 py-1">
               <dt>Banco</dt>
-              <dd><code>/data/db/manga.db</code></dd>
+              <dd>
+                <code>/data/db/manga.db</code>
+              </dd>
             </div>
             <div className="flex justify-between py-1">
               <dt>Espaço usado (mock)</dt>

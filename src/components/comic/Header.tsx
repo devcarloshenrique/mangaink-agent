@@ -1,5 +1,14 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Calendar, Cog, Library, LogOut, Sparkles, Wand2, User as UserIcon } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  Cog,
+  Library,
+  LogOut,
+  Sparkles,
+  Wand2,
+  User as UserIcon,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -73,7 +82,11 @@ export function ComicHeader() {
                 {NAV.map((n) => {
                   const Icon = n.icon;
                   return (
-                    <DropdownMenuItem key={n.to} onClick={() => navigate({ to: n.to })} className="lg:hidden">
+                    <DropdownMenuItem
+                      key={n.to}
+                      onClick={() => navigate({ to: n.to })}
+                      className="lg:hidden"
+                    >
                       <Icon className="mr-2 h-4 w-4" /> {n.label}
                     </DropdownMenuItem>
                   );

@@ -20,9 +20,7 @@ export function MockPage({ seed, width, height }: Props) {
         </div>
         <div className="border-[2px] border-ink bg-comic-yellow" />
         <div className="border-[2px] border-ink bg-card flex items-end p-1">
-          <span className="text-[8px] font-bold leading-tight">
-            — Não posso perder!
-          </span>
+          <span className="text-[8px] font-bold leading-tight">— Não posso perder!</span>
         </div>
       </div>
     </div>

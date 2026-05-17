@@ -1,5 +1,6 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/hooks/useAuth";
+import { BibliotecaProvider } from "@/hooks/useBiblioteca";
 
 function NotFoundComponent() {
   return (
@@ -31,7 +32,9 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <AuthProvider>
-      <Outlet />
+      <BibliotecaProvider>
+        <Outlet />
+      </BibliotecaProvider>
     </AuthProvider>
   );
 }

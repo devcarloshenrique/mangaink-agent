@@ -87,11 +87,7 @@ function Dashboard() {
           {TILES.map((t, i) => {
             const Icon = t.icon;
             return (
-              <Link
-                key={t.to}
-                to={t.to}
-                className="group relative block focus:outline-none"
-              >
+              <Link key={t.to} to={t.to} className="group relative block focus:outline-none">
                 <ComicPanel
                   bg="card"
                   padding="md"
@@ -118,10 +114,15 @@ function Dashboard() {
         <ComicPanel bg="card" padding="md">
           <ul className="divide-y-2 divide-dashed divide-ink/30">
             {RECENT.map((r) => (
-              <li key={r.title + r.chapter} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+              <li
+                key={r.title + r.chapter}
+                className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+              >
                 <div>
                   <p className="font-display text-xl leading-none">{r.title}</p>
-                  <p className="text-xs font-medium opacity-70 mt-1">{r.chapter} • {r.when}</p>
+                  <p className="text-xs font-medium opacity-70 mt-1">
+                    {r.chapter} • {r.when}
+                  </p>
                 </div>
                 <Link
                   to="/biblioteca"

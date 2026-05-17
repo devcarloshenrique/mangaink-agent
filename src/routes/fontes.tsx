@@ -57,7 +57,9 @@ function FontesPage() {
           </div>
           <div>
             <h1 className="font-display text-4xl uppercase leading-none">Fontes homologadas</h1>
-            <p className="text-sm font-medium opacity-80 mt-1">Os sites que o MangaForge sabe ler.</p>
+            <p className="text-sm font-medium opacity-80 mt-1">
+              Os sites que o MangaForge sabe ler.
+            </p>
           </div>
         </div>
 
@@ -67,12 +69,7 @@ function FontesPage() {
 
         <div className="grid gap-5 md:grid-cols-2">
           {SOURCES.map((s, i) => (
-            <ComicPanel
-              key={s.id}
-              bg="card"
-              padding="md"
-              tilt={i % 2 === 0 ? "left" : "right"}
-            >
+            <ComicPanel key={s.id} bg="card" padding="md" tilt={i % 2 === 0 ? "left" : "right"}>
               <div className="flex items-start gap-3 mb-3">
                 <div
                   className="h-12 w-12 rounded-lg border-[3px] border-ink shrink-0 shadow-comic-sm"

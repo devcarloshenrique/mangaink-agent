@@ -16,6 +16,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as BibliotecaRouteImport } from './routes/biblioteca'
 import { Route as AgendamentosRouteImport } from './routes/agendamentos'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BibliotecaIndexRouteImport } from './routes/biblioteca.index'
 import { Route as BibliotecaSlugRouteImport } from './routes/biblioteca.$slug'
 
 const WizardRoute = WizardRouteImport.update({
@@ -53,6 +54,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BibliotecaIndexRoute = BibliotecaIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BibliotecaRoute,
+} as any)
 const BibliotecaSlugRoute = BibliotecaSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -68,16 +74,17 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca/': typeof BibliotecaIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agendamentos': typeof AgendamentosRoute
-  '/biblioteca': typeof BibliotecaRouteWithChildren
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca': typeof BibliotecaIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +96,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca/': typeof BibliotecaIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,16 +109,17 @@ export interface FileRouteTypes {
     | '/login'
     | '/wizard'
     | '/biblioteca/$slug'
+    | '/biblioteca/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/agendamentos'
-    | '/biblioteca'
     | '/configuracoes'
     | '/fontes'
     | '/login'
     | '/wizard'
     | '/biblioteca/$slug'
+    | '/biblioteca'
   id:
     | '__root__'
     | '/'
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/wizard'
     | '/biblioteca/$slug'
+    | '/biblioteca/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +194,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/biblioteca/': {
+      id: '/biblioteca/'
+      path: '/'
+      fullPath: '/biblioteca/'
+      preLoaderRoute: typeof BibliotecaIndexRouteImport
+      parentRoute: typeof BibliotecaRoute
+    }
     '/biblioteca/$slug': {
       id: '/biblioteca/$slug'
       path: '/$slug'
@@ -196,10 +213,12 @@ declare module '@tanstack/react-router' {
 
 interface BibliotecaRouteChildren {
   BibliotecaSlugRoute: typeof BibliotecaSlugRoute
+  BibliotecaIndexRoute: typeof BibliotecaIndexRoute
 }
 
 const BibliotecaRouteChildren: BibliotecaRouteChildren = {
   BibliotecaSlugRoute: BibliotecaSlugRoute,
+  BibliotecaIndexRoute: BibliotecaIndexRoute,
 }
 
 const BibliotecaRouteWithChildren = BibliotecaRoute._addFileChildren(

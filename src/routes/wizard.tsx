@@ -20,6 +20,8 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useBiblioteca } from "@/hooks/useBiblioteca";
+import type { MangaSeries, MangaFile, Chapter } from "@/lib/biblioteca-data";
 import {
   KINDLE_DEVICES,
   OUTPUT_FORMATS,
@@ -118,9 +120,7 @@ function mockFetchSeries(url: string, volumeSize?: number): Promise<Series> {
       try {
         const u = new URL(url);
         const slug = u.pathname.split("/").filter(Boolean).pop() || "manga-misterioso";
-        const pretty = slug
-          .replace(/[-_]/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase());
+        const pretty = slug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
         const chapters: Chapter[] = Array.from({ length: 24 }, (_, i) => ({
           id: `ch-${i + 1}`,
           number: String(i + 1),
@@ -141,9 +141,19 @@ function mockFetchSeries(url: string, volumeSize?: number): Promise<Series> {
   });
 }
 
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 function WizardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { addSeries } = useBiblioteca();
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -177,15 +187,20 @@ function WizardPage() {
 
   const canNext = useMemo(() => {
     switch (step) {
-      case 0: return !!data.series;
-      case 1: return data.selectedChapters.size > 0;
-      case 2: return true;
-      case 3: return true;
+      case 0:
+        return !!data.series;
+      case 1:
+        return data.selectedChapters.size > 0;
+      case 2:
+        return true;
+      case 3:
+        return true;
       case 4:
         if (data.delivery === "kindle")
           return /^\S+@(kindle\.com|free\.kindle\.com)$/i.test(data.kindleEmail);
         return true;
-      default: return true;
+      default:
+        return true;
     }
   }, [step, data]);
 
@@ -232,6 +247,58 @@ function WizardPage() {
       toast.error("Selecione ao menos um capítulo");
       return;
     }
+    if (!data.series) return;
+
+    // Build MangaSeries from wizard data and save to biblioteca
+    const seriesSlug = slugify(data.meta.title || data.series.title);
+    const now = new Date();
+    const when = "agora";
+
+    // Group selected chapters into volumes based on volumeSize
+    const selectedChaptersList = data.series.chapters.filter((ch) =>
+      data.selectedChapters.has(ch.id),
+    );
+    const volSize = data.volumeSize;
+    const volumeCount = Math.ceil(selectedChaptersList.length / volSize);
+
+    const files: MangaFile[] = [];
+    for (let v = 0; v < volumeCount; v++) {
+      const volChapters = selectedChaptersList.slice(v * volSize, (v + 1) * volSize);
+      if (volChapters.length === 0) continue;
+      const chapters: Chapter[] = volChapters.map((ch) => ({
+        id: ch.id,
+        number: ch.number,
+        title: ch.title,
+        status: "completed" as const,
+      }));
+      const totalPages = chapters.length * 20;
+      const bytes = totalPages * 1024 * 128;
+      files.push({
+        id: `${seriesSlug}-vol-${String(v + 1).padStart(2, "0")}`,
+        name: `${seriesSlug}-vol-${String(v + 1).padStart(2, "0")}.${data.format.toLowerCase()}`,
+        bytes,
+        when,
+        format: data.format,
+        sent: false,
+        status: "completed",
+        chapters,
+      });
+    }
+
+    const hue = (seriesSlug.length * 37) % 360;
+    const newSeries: MangaSeries = {
+      slug: seriesSlug,
+      title: data.meta.title || data.series.title,
+      author: data.meta.author || data.series.author,
+      hue,
+      files,
+      lastConverted: when,
+      favorite: false,
+      tags: [],
+      addedAt: now.toISOString(),
+    };
+
+    addSeries(newSeries);
     setShowDone(true);
   };
 
@@ -245,9 +312,7 @@ function WizardPage() {
           <SpeechBubble variant="yellow" tail="bottom" className="mb-4">
             Passo {step + 1} de {STEPS.length}: {STEPS[step].label}
           </SpeechBubble>
-          <h1 className="font-display text-4xl md:text-5xl uppercase">
-            Mangá pro Kindle
-          </h1>
+          <h1 className="font-display text-4xl md:text-5xl uppercase">Mangá pro Kindle</h1>
         </div>
 
         <div className="mb-8">
@@ -319,7 +384,10 @@ function WizardPage() {
           >
             <ArrowLeft className="mr-1" /> Voltar
           </Button>
-          <Link to="/" className="font-display text-sm underline underline-offset-4 hover:text-comic-red">
+          <Link
+            to="/"
+            className="font-display text-sm underline underline-offset-4 hover:text-comic-red"
+          >
             Cancelar
           </Link>
           <Button
@@ -339,7 +407,9 @@ function WizardPage() {
           <DialogTitle className="sr-only">Mangá pronto</DialogTitle>
           <div className="space-y-4 py-4">
             <div className="flex justify-center">
-              <OnomatopoeiaBadge variant="red" size="lg">DONE!</OnomatopoeiaBadge>
+              <OnomatopoeiaBadge variant="red" size="lg">
+                DONE!
+              </OnomatopoeiaBadge>
             </div>
             <h2 className="font-display text-3xl">Seu mangá tá pronto!</h2>
             <p className="font-medium">
@@ -347,9 +417,7 @@ function WizardPage() {
                 ? `Mandamos pra ${data.kindleEmail} (simulado).`
                 : "Clique abaixo para baixar (simulado)."}
             </p>
-            <p className="text-sm font-medium opacity-80">
-              {cost} capítulo(s) processado(s)
-            </p>
+            <p className="text-sm font-medium opacity-80">{cost} capítulo(s) processado(s)</p>
             <div className="flex justify-center gap-3 pt-2">
               <Button
                 onClick={() => toast.success("Download iniciado (demo)")}
@@ -361,7 +429,10 @@ function WizardPage() {
                 variant="outline"
                 onClick={() => {
                   setShowDone(false);
-                  navigate({ to: "/biblioteca" });
+                  const s = data.series;
+                  if (!s) return;
+                  const seriesSlug = slugify(data.meta.title || s.title);
+                  navigate({ to: "/biblioteca/$slug", params: { slug: seriesSlug } });
                 }}
                 className="border-[3px] border-ink shadow-comic-sm font-display"
               >
@@ -378,15 +449,27 @@ function WizardPage() {
 /* ---------- Step components ---------- */
 
 function StepOrigin({
-  url, series, loading, onUrlChange, onFetch, volumeSize,
+  url,
+  series,
+  loading,
+  onUrlChange,
+  onFetch,
+  volumeSize,
 }: {
-  url: string; series: Series | null; loading: boolean;
-  onUrlChange: (v: string) => void; onFetch: () => void;
+  url: string;
+  series: Series | null;
+  loading: boolean;
+  onUrlChange: (v: string) => void;
+  onFetch: () => void;
   volumeSize: number;
 }) {
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<Download />} title="De onde vem o mangá?" subtitle="Cole o link da obra que você quer levar pro Kindle." />
+      <SectionHeader
+        icon={<Download />}
+        title="De onde vem o mangá?"
+        subtitle="Cole o link da obra que você quer levar pro Kindle."
+      />
       <div className="flex flex-col sm:flex-row gap-3">
         <Input
           placeholder="https://exemplo.com/manga/meu-mangá"
@@ -400,7 +483,13 @@ function StepOrigin({
           disabled={loading || !url}
           className="bg-comic-blue text-accent-foreground hover:bg-comic-blue h-12 border-[3px] border-ink shadow-comic font-display text-lg disabled:opacity-50"
         >
-          {loading ? "Buscando…" : (<><Search className="mr-1" /> Buscar</>)}
+          {loading ? (
+            "Buscando…"
+          ) : (
+            <>
+              <Search className="mr-1" /> Buscar
+            </>
+          )}
         </Button>
       </div>
 
@@ -419,7 +508,8 @@ function StepOrigin({
             <div>
               <p className="font-display text-2xl leading-none">{series.title}</p>
               <p className="text-sm font-medium mt-1">
-                {series.chapters.length} capítulos • {Math.ceil(series.chapters.length / volumeSize)} volumes
+                {series.chapters.length} capítulos •{" "}
+                {Math.ceil(series.chapters.length / volumeSize)} volumes
               </p>
             </div>
           </div>
@@ -430,12 +520,29 @@ function StepOrigin({
 }
 
 function StepChapters({
-  series, selected, grouping, volumeSize, volumeMode, volumeSizes,
-  onToggle, onSelectAll, onClear, onGrouping, onVolumeSize, onVolumeMode, onVolumeSizes,
+  series,
+  selected,
+  grouping,
+  volumeSize,
+  volumeMode,
+  volumeSizes,
+  onToggle,
+  onSelectAll,
+  onClear,
+  onGrouping,
+  onVolumeSize,
+  onVolumeMode,
+  onVolumeSizes,
 }: {
-  series: Series; selected: Set<string>; grouping: "single" | "separate";
-  volumeSize: number; volumeMode: VolumeMode; volumeSizes: number[];
-  onToggle: (id: string) => void; onSelectAll: () => void; onClear: () => void;
+  series: Series;
+  selected: Set<string>;
+  grouping: "single" | "separate";
+  volumeSize: number;
+  volumeMode: VolumeMode;
+  volumeSizes: number[];
+  onToggle: (id: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
   onGrouping: (g: "single" | "separate") => void;
   onVolumeSize: (v: number) => void;
   onVolumeMode: (m: VolumeMode) => void;
@@ -464,7 +571,11 @@ function StepChapters({
 
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<BookOpen />} title="Quais capítulos?" subtitle={`${selected.size} de ${series.chapters.length} selecionados • 1 crédito por capítulo`} />
+      <SectionHeader
+        icon={<BookOpen />}
+        title="Quais capítulos?"
+        subtitle={`${selected.size} de ${series.chapters.length} selecionados • 1 crédito por capítulo`}
+      />
 
       {/* Volume config */}
       <div className="border-[3px] border-dashed border-ink rounded-lg p-4 space-y-3">
@@ -557,8 +668,8 @@ function StepChapters({
                 {customRemaining > 0
                   ? `${customRemaining} capítulo(s) restantes`
                   : customRemaining < 0
-                  ? `${Math.abs(customRemaining)} capítulo(s) excedentes`
-                  : "Todos os capítulos distribuídos"}
+                    ? `${Math.abs(customRemaining)} capítulo(s) excedentes`
+                    : "Todos os capítulos distribuídos"}
               </span>
             </div>
           </div>
@@ -566,10 +677,18 @@ function StepChapters({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button onClick={onSelectAll} variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display">
+        <Button
+          onClick={onSelectAll}
+          variant="outline"
+          className="border-[3px] border-ink shadow-comic-sm font-display"
+        >
           Selecionar todos
         </Button>
-        <Button onClick={onClear} variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display">
+        <Button
+          onClick={onClear}
+          variant="outline"
+          className="border-[3px] border-ink shadow-comic-sm font-display"
+        >
           Limpar
         </Button>
       </div>
@@ -593,7 +712,9 @@ function StepChapters({
               />
               <div className="flex-1">
                 <p className="font-display text-lg leading-none">Cap. {c.number}</p>
-                <p className="text-xs font-medium opacity-80">Vol. {vol} • {c.title} • {c.pages}p</p>
+                <p className="text-xs font-medium opacity-80">
+                  Vol. {vol} • {c.title} • {c.pages}p
+                </p>
               </div>
             </label>
           );
@@ -624,7 +745,12 @@ function StepChapters({
 }
 
 function StepCovers({
-  series, selectedChapters, mode, assignments, onMode, onAssign,
+  series,
+  selectedChapters,
+  mode,
+  assignments,
+  onMode,
+  onAssign,
 }: {
   series: Series;
   selectedChapters: Set<string>;
@@ -641,17 +767,42 @@ function StepCovers({
     mode === "single"
       ? [{ key: "all", label: "Todos os capítulos" }]
       : mode === "per-volume"
-      ? volumes.map((v) => ({ key: `vol-${v}`, label: `Volume ${v} (${usedChapters.filter((c) => c.volume === v).length} caps)` }))
-      : usedChapters.map((c) => ({ key: c.id, label: `Cap. ${c.number} • ${c.title}` }));
+        ? volumes.map((v) => ({
+            key: `vol-${v}`,
+            label: `Volume ${v} (${usedChapters.filter((c) => c.volume === v).length} caps)`,
+          }))
+        : usedChapters.map((c) => ({ key: c.id, label: `Cap. ${c.number} • ${c.title}` }));
 
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<ImageIcon />} title="Capas" subtitle="Mesma capa pra tudo, uma por volume ou uma por capítulo." />
+      <SectionHeader
+        icon={<ImageIcon />}
+        title="Capas"
+        subtitle="Mesma capa pra tudo, uma por volume ou uma por capítulo."
+      />
 
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-        <ChoiceCard active={mode === "single"} onClick={() => onMode("single")} icon={<Layers />} title="Uma só capa" text="Aplica a mesma em todos." />
-        <ChoiceCard active={mode === "per-volume"} onClick={() => onMode("per-volume")} icon={<BookOpen />} title="Por volume" text="Uma capa por volume." />
-        <ChoiceCard active={mode === "per-chapter"} onClick={() => onMode("per-chapter")} icon={<FileStack />} title="Por capítulo" text="Capa diferente em cada um." />
+        <ChoiceCard
+          active={mode === "single"}
+          onClick={() => onMode("single")}
+          icon={<Layers />}
+          title="Uma só capa"
+          text="Aplica a mesma em todos."
+        />
+        <ChoiceCard
+          active={mode === "per-volume"}
+          onClick={() => onMode("per-volume")}
+          icon={<BookOpen />}
+          title="Por volume"
+          text="Uma capa por volume."
+        />
+        <ChoiceCard
+          active={mode === "per-chapter"}
+          onClick={() => onMode("per-chapter")}
+          icon={<FileStack />}
+          title="Por capítulo"
+          text="Capa diferente em cada um."
+        />
       </div>
 
       {usedChapters.length === 0 ? (
@@ -689,7 +840,10 @@ function StepCovers({
           <DialogTitle className="font-display text-2xl">Escolher capa</DialogTitle>
           <div className="space-y-4">
             <Button
-              onClick={() => { onAssign(pickerFor!, { kind: "original" }); setPickerFor(null); }}
+              onClick={() => {
+                onAssign(pickerFor!, { kind: "original" });
+                setPickerFor(null);
+              }}
               variant="outline"
               className="w-full border-[3px] border-ink shadow-comic-sm font-display justify-start"
             >
@@ -702,7 +856,10 @@ function StepCovers({
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => { onAssign(pickerFor!, { kind: "gallery", coverId: c.id }); setPickerFor(null); }}
+                    onClick={() => {
+                      onAssign(pickerFor!, { kind: "gallery", coverId: c.id });
+                      setPickerFor(null);
+                    }}
                     className="border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm hover:-translate-y-0.5 transition-transform"
                   >
                     <div
@@ -726,7 +883,10 @@ function StepCovers({
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) { onAssign(pickerFor!, { kind: "upload", name: f.name }); setPickerFor(null); }
+                  if (f) {
+                    onAssign(pickerFor!, { kind: "upload", name: f.name });
+                    setPickerFor(null);
+                  }
                 }}
               />
             </label>
@@ -740,9 +900,27 @@ function StepCovers({
 function CoverPreview({ ref, covers }: { ref: CoverRef | undefined; covers: Cover[] }) {
   const cls = "h-12 w-9 border-[2.5px] border-ink rounded shrink-0";
   if (!ref || ref.kind === "original")
-    return <div className={cn(cls, "bg-comic-yellow flex items-center justify-center text-[9px] font-display")}>ORIG</div>;
+    return (
+      <div
+        className={cn(
+          cls,
+          "bg-comic-yellow flex items-center justify-center text-[9px] font-display",
+        )}
+      >
+        ORIG
+      </div>
+    );
   if (ref.kind === "upload")
-    return <div className={cn(cls, "bg-comic-blue flex items-center justify-center text-[9px] font-display text-accent-foreground")}>UP</div>;
+    return (
+      <div
+        className={cn(
+          cls,
+          "bg-comic-blue flex items-center justify-center text-[9px] font-display text-accent-foreground",
+        )}
+      >
+        UP
+      </div>
+    );
   const c = covers.find((c) => c.id === ref.coverId);
   return <div className={cls} style={{ background: c ? `hsl(${c.hue} 80% 60%)` : undefined }} />;
 }
@@ -754,7 +932,8 @@ function describeRef(ref: CoverRef | undefined): string {
 }
 
 function StepConvert({
-  data, update,
+  data,
+  update,
 }: {
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
@@ -786,9 +965,8 @@ function StepConvert({
   const frame = deviceFrame[data.device] ?? deviceFrame.kpw_11;
   const filter = presetFilter[data.preset] ?? "none";
 
-  const selectedChapters = data.series?.chapters.filter((c) =>
-    data.selectedChapters.has(c.id),
-  ) ?? [];
+  const selectedChapters =
+    data.series?.chapters.filter((c) => data.selectedChapters.has(c.id)) ?? [];
   const currentChapter = selectedChapters.find((c) => c.id === previewChapterId);
   const maxPage = currentChapter?.pages ?? 1;
 
@@ -809,7 +987,11 @@ function StepConvert({
 
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<Settings2 />} title="Configurações" subtitle="Ajuste pro seu Kindle e veja o preview." />
+      <SectionHeader
+        icon={<Settings2 />}
+        title="Configurações"
+        subtitle="Ajuste pro seu Kindle e veja o preview."
+      />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
@@ -822,7 +1004,9 @@ function StepConvert({
             </SelectTrigger>
             <SelectContent className="border-[3px] border-ink">
               {KINDLE_DEVICES.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                <SelectItem key={d.id} value={d.id}>
+                  {d.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -836,7 +1020,9 @@ function StepConvert({
             </SelectTrigger>
             <SelectContent className="border-[3px] border-ink">
               {OUTPUT_FORMATS.map((f) => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
+                <SelectItem key={f} value={f}>
+                  {f}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -892,7 +1078,13 @@ function StepConvert({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="font-display text-sm">Capítulo</Label>
-            <Select value={previewChapterId} onValueChange={(v) => { setPreviewChapterId(v); setPreviewReady(false); }}>
+            <Select
+              value={previewChapterId}
+              onValueChange={(v) => {
+                setPreviewChapterId(v);
+                setPreviewReady(false);
+              }}
+            >
               <SelectTrigger className="border-[2.5px] border-ink h-10 shadow-comic-sm">
                 <SelectValue placeholder="Selecione um capítulo" />
               </SelectTrigger>
@@ -914,7 +1106,10 @@ function StepConvert({
                 min={1}
                 max={maxPage}
                 value={previewPage}
-                onChange={(e) => { setPreviewPage(Number(e.target.value)); setPreviewReady(false); }}
+                onChange={(e) => {
+                  setPreviewPage(Number(e.target.value));
+                  setPreviewReady(false);
+                }}
                 className="border-[2.5px] border-ink h-10 shadow-comic-sm w-24"
                 disabled={!previewChapterId}
               />
@@ -931,9 +1126,13 @@ function StepConvert({
           className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
         >
           {previewLoading ? (
-            <><span className="animate-spin mr-2">⏳</span> Gerando no servidor…</>
+            <>
+              <span className="animate-spin mr-2">⏳</span> Gerando no servidor…
+            </>
           ) : (
-            <><Zap className="h-4 w-4 mr-1" /> Gerar Preview</>
+            <>
+              <Zap className="h-4 w-4 mr-1" /> Gerar Preview
+            </>
           )}
         </Button>
 
@@ -961,8 +1160,8 @@ function StepConvert({
           <div className="border-[3px] border-dashed border-ink rounded-lg p-8 text-center">
             <p className="font-display text-sm opacity-60">
               {previewChapterId
-                ? "Clique em \"Gerar Preview\" para ver a conversão no servidor."
-                : "Selecione um capítulo e uma página, depois clique em \"Gerar Preview\"."}
+                ? 'Clique em "Gerar Preview" para ver a conversão no servidor.'
+                : 'Selecione um capítulo e uma página, depois clique em "Gerar Preview".'}
             </p>
           </div>
         )}
@@ -972,16 +1171,27 @@ function StepConvert({
 }
 
 function StepDelivery({
-  data, update, onEdit, cost, credits, enough,
+  data,
+  update,
+  onEdit,
+  cost,
+  credits,
+  enough,
 }: {
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
   onEdit: (i: number) => void;
-  cost: number; credits: number; enough: boolean;
+  cost: number;
+  credits: number;
+  enough: boolean;
 }) {
   return (
     <div className="space-y-6">
-      <SectionHeader icon={<Send />} title="Como receber?" subtitle="Baixe ou envie direto pro seu Kindle." />
+      <SectionHeader
+        icon={<Send />}
+        title="Como receber?"
+        subtitle="Baixe ou envie direto pro seu Kindle."
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <ChoiceCard
@@ -1011,8 +1221,8 @@ function StepDelivery({
             className="border-[3px] border-ink h-11 shadow-comic-sm"
           />
           <p className="text-xs font-medium opacity-70">
-            Lembre de autorizar <strong>noreply@mangaforge.app</strong> em
-            Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings.
+            Lembre de autorizar <strong>noreply@mangaforge.app</strong> em Amazon → Manage Your
+            Content and Devices → Preferences → Personal Document Settings.
           </p>
         </div>
       )}
@@ -1021,7 +1231,11 @@ function StepDelivery({
         <p className="font-display text-xl mb-3">Resumo</p>
         <ComicPanel bg="halftone" padding="md" className="space-y-2 text-sm font-medium">
           <SummaryRow label="Origem" value={data.series?.title ?? "—"} onEdit={() => onEdit(0)} />
-          <SummaryRow label="Capítulos" value={`${data.selectedChapters.size} • ${data.grouping === "single" ? "junto" : "separado"}`} onEdit={() => onEdit(1)} />
+          <SummaryRow
+            label="Capítulos"
+            value={`${data.selectedChapters.size} • ${data.grouping === "single" ? "junto" : "separado"}`}
+            onEdit={() => onEdit(1)}
+          />
           <SummaryRow label="Capas" value={describeMode(data.coverMode)} onEdit={() => onEdit(2)} />
           <SummaryRow
             label="Kindle"
@@ -1030,7 +1244,9 @@ function StepDelivery({
           />
           <SummaryRow
             label="Envio"
-            value={data.delivery === "kindle" ? `Kindle: ${data.kindleEmail || "—"}` : "Download direto"}
+            value={
+              data.delivery === "kindle" ? `Kindle: ${data.kindleEmail || "—"}` : "Download direto"
+            }
             onEdit={() => onEdit(4)}
           />
         </ComicPanel>
@@ -1069,7 +1285,8 @@ function SizeBudget({ chapters, delivery }: { chapters: number; delivery: Delive
         </div>
       ) : (
         <p className="text-sm font-medium opacity-80">
-          Arquivos baixados diretamente não têm limite de tamanho. Só o envio por email (Kindle) tem o limite de 25 MB.
+          Arquivos baixados diretamente não têm limite de tamanho. Só o envio por email (Kindle) tem
+          o limite de 25 MB.
         </p>
       )}
     </ComicPanel>
@@ -1082,7 +1299,15 @@ function describeMode(m: CoverMode) {
 
 /* ---------- Shared bits ---------- */
 
-function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+}) {
   return (
     <div className="flex items-center gap-3">
       <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
@@ -1097,9 +1322,17 @@ function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title
 }
 
 function ChoiceCard({
-  active, onClick, icon, title, text,
+  active,
+  onClick,
+  icon,
+  title,
+  text,
 }: {
-  active: boolean; onClick: () => void; icon?: React.ReactNode; title: string; text: string;
+  active: boolean;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  title: string;
+  text: string;
 }) {
   return (
     <button
@@ -1107,7 +1340,9 @@ function ChoiceCard({
       onClick={onClick}
       className={cn(
         "text-left border-[3px] border-ink rounded-lg p-4 transition-all shadow-comic-sm",
-        active ? "bg-comic-red text-primary-foreground -translate-y-1 shadow-comic" : "bg-card hover:-translate-y-0.5",
+        active
+          ? "bg-comic-red text-primary-foreground -translate-y-1 shadow-comic"
+          : "bg-card hover:-translate-y-0.5",
       )}
     >
       <div className="flex items-center gap-2 mb-1">
@@ -1119,7 +1354,15 @@ function ChoiceCard({
   );
 }
 
-function SummaryRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
+function SummaryRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  onEdit: () => void;
+}) {
   return (
     <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-ink/30 pb-2 last:border-0 last:pb-0">
       <div>

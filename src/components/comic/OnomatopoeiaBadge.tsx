@@ -14,12 +14,7 @@ interface Props {
   size?: "sm" | "md" | "lg";
 }
 
-export function OnomatopoeiaBadge({
-  children,
-  variant = "yellow",
-  className,
-  size = "md",
-}: Props) {
+export function OnomatopoeiaBadge({ children, variant = "yellow", className, size = "md" }: Props) {
   const sizeMap = {
     sm: "text-2xl px-4 py-1",
     md: "text-4xl px-5 py-2",
