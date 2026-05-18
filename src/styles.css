@@ -47,9 +47,9 @@
   --font-display: "Bangers", "Impact", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
 
-  --shadow-comic-sm: 3px 3px 0 0 var(--comic-ink);
-  --shadow-comic: 6px 6px 0 0 var(--comic-ink);
-  --shadow-comic-lg: 10px 10px 0 0 var(--comic-ink);
+  --shadow-comic-sm: var(--_sc-sm, 3px 3px 0 0 var(--comic-ink));
+  --shadow-comic: var(--_sc-md, 6px 6px 0 0 var(--comic-ink));
+  --shadow-comic-lg: var(--_sc-lg, 10px 10px 0 0 var(--comic-ink));
 }
 
 :root {
