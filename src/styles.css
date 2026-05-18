@@ -209,3 +209,20 @@
     animation: comic-shake 0.4s ease-in-out;
   }
 }
+
+/* Comic intensity overrides */
+.comic-soft {
+  --_sc-sm: 2px 2px 0 0 var(--comic-ink);
+  --_sc-md: 3px 3px 0 0 var(--comic-ink);
+  --_sc-lg: 5px 5px 0 0 var(--comic-ink);
+}
+.comic-normal {
+  --_sc-sm: 3px 3px 0 0 var(--comic-ink);
+  --_sc-md: 6px 6px 0 0 var(--comic-ink);
+  --_sc-lg: 10px 10px 0 0 var(--comic-ink);
+}
+.comic-loud {
+  --_sc-sm: 5px 5px 0 0 var(--comic-ink);
+  --_sc-md: 9px 9px 0 0 var(--comic-ink);
+  --_sc-lg: 14px 14px 0 0 var(--comic-ink);
+}

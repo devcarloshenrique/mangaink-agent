@@ -25,6 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/comic/ThemeToggle";
+import { IntensityControl } from "@/components/comic/IntensityControl";
 import { STAGE_LABELS, formatTimeAgo } from "@/lib/conversion-job";
 import type { JobStage } from "@/lib/conversion-job";
 
