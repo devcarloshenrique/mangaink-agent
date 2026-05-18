@@ -47,9 +47,9 @@
   --font-display: "Bangers", "Impact", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
 
-  --shadow-comic-sm: 3px 3px 0 0 var(--comic-ink);
-  --shadow-comic: 6px 6px 0 0 var(--comic-ink);
-  --shadow-comic-lg: 10px 10px 0 0 var(--comic-ink);
+  --shadow-comic-sm: var(--_sc-sm, 3px 3px 0 0 var(--comic-ink));
+  --shadow-comic: var(--_sc-md, 6px 6px 0 0 var(--comic-ink));
+  --shadow-comic-lg: var(--_sc-lg, 10px 10px 0 0 var(--comic-ink));
 }
 
 :root {
@@ -208,4 +208,21 @@
   .animate-comic-shake {
     animation: comic-shake 0.4s ease-in-out;
   }
+}
+
+/* Comic intensity overrides */
+.comic-soft {
+  --_sc-sm: 2px 2px 0 0 var(--comic-ink);
+  --_sc-md: 3px 3px 0 0 var(--comic-ink);
+  --_sc-lg: 5px 5px 0 0 var(--comic-ink);
+}
+.comic-normal {
+  --_sc-sm: 3px 3px 0 0 var(--comic-ink);
+  --_sc-md: 6px 6px 0 0 var(--comic-ink);
+  --_sc-lg: 10px 10px 0 0 var(--comic-ink);
+}
+.comic-loud {
+  --_sc-sm: 5px 5px 0 0 var(--comic-ink);
+  --_sc-md: 9px 9px 0 0 var(--comic-ink);
+  --_sc-lg: 14px 14px 0 0 var(--comic-ink);
 }
