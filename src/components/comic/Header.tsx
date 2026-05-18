@@ -85,6 +85,8 @@ export function ComicHeader() {
         )}
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <IntensityControl />
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
