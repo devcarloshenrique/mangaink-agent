@@ -76,7 +76,7 @@ function Dashboard() {
           <h1 className="font-display text-4xl md:text-6xl uppercase leading-[0.95]">
             Painel
             <span className="inline-block ml-3 bg-comic-red text-primary-foreground px-3 -rotate-2 border-[3px] border-ink shadow-comic">
-              MangaForge
+              Mangaink
             </span>
           </h1>
         </div>

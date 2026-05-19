@@ -43,8 +43,12 @@ import {
   Tablet,
   Upload,
   Zap,
+  Moon,
+  Clock,
+  Split,
 } from "lucide-react";
 import { MockPage } from "@/components/comic/MockPage";
+import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/wizard")({
@@ -246,7 +250,10 @@ function WizardPage() {
       toast.error("Informe seu e-mail Kindle para envio.");
       return;
     }
-    if (data.delivery === "kindle" && !/^\S+@(kindle\.com|free\.kindle\.com)$/i.test(data.kindleEmail)) {
+    if (
+      data.delivery === "kindle" &&
+      !/^\S+@(kindle\.com|free\.kindle\.com)$/i.test(data.kindleEmail)
+    ) {
       toast.error("E-mail Kindle inválido. Use um endereço @kindle.com ou @free.kindle.com.");
       return;
     }
@@ -260,6 +267,8 @@ function WizardPage() {
       kindleEmail: data.kindleEmail,
       volumeSize: data.volumeSize,
     });
+
+    toast.success(`Conversão de "${data.series.title}" iniciada!`);
 
     navigate({ to: "/biblioteca/converter/$jobId", params: { jobId } });
   };
@@ -363,7 +372,6 @@ function WizardPage() {
           </Button>
         </div>
       </div>
-
     </div>
   );
 }
@@ -865,6 +873,8 @@ function StepConvert({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [previewSeed, setPreviewSeed] = useState(0);
+  const [previewDarkMode, setPreviewDarkMode] = useState(false);
+  const [doublePageSplit, setDoublePageSplit] = useState(false);
 
   const presetFilter: Record<string, string> = {
     default: "contrast(1) brightness(1)",
@@ -892,6 +902,13 @@ function StepConvert({
   const currentChapter = selectedChapters.find((c) => c.id === previewChapterId);
   const maxPage = currentChapter?.pages ?? 1;
 
+  // Estimate time: ~0.5s per page total
+  const totalPages = selectedChapters.reduce((s, c) => s + c.pages, 0);
+  const estSeconds = Math.max(5, Math.round(totalPages * 0.5));
+  const estMin = Math.floor(estSeconds / 60);
+  const estSec = estSeconds % 60;
+  const estLabel = estMin > 0 ? `~${estMin}min ${estSec}s` : `~${estSec}s`;
+
   const handleGeneratePreview = async () => {
     if (!previewChapterId) {
       toast.error("Selecione um capítulo primeiro");
@@ -899,13 +916,14 @@ function StepConvert({
     }
     setPreviewLoading(true);
     setPreviewReady(false);
-    // Simula chamada ao servidor
     await new Promise((r) => setTimeout(r, 1500));
     setPreviewSeed(Number(previewChapterId.replace(/\D/g, "")) * previewPage);
     setPreviewReady(true);
     setPreviewLoading(false);
     toast.success("Preview gerado com sucesso!");
   };
+
+  const kindleLabel = KINDLE_DEVICES.find((d) => d.id === data.device)?.label ?? "";
 
   return (
     <div className="space-y-6">
@@ -988,6 +1006,19 @@ function StepConvert({
         </div>
       </div>
 
+      {/* Time estimate */}
+      <ComicPanel bg="blue" padding="md" tilt="left">
+        <div className="flex items-center gap-3">
+          <Clock className="h-6 w-6 shrink-0" />
+          <div>
+            <p className="font-display text-lg">Tempo estimado: {estLabel}</p>
+            <p className="text-xs font-medium opacity-80">
+              {selectedChapters.length} capítulos • {totalPages} páginas • preset "{data.preset}"
+            </p>
+          </div>
+        </div>
+      </ComicPanel>
+
       {/* Preview */}
       <div className="border-t-[3px] border-dashed border-ink pt-5 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1059,24 +1090,88 @@ function StepConvert({
         </Button>
 
         {previewReady ? (
-          <div className="grid gap-4 sm:grid-cols-2 items-start">
-            <div className="space-y-2">
-              <p className="font-display text-sm opacity-80">Original</p>
-              <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
-            </div>
-            <div className="space-y-2">
-              <p className="font-display text-sm opacity-80">
-                No {KINDLE_DEVICES.find((d) => d.id === data.device)?.label}
-              </p>
-              <div
-                className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
-                style={{ width: frame.w + 14 }}
+          <div className="space-y-4">
+            {/* Controls row */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={previewDarkMode ? "default" : "outline"}
+                onClick={() => setPreviewDarkMode((v) => !v)}
+                className={cn(
+                  "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
+                  previewDarkMode && "bg-comic-ink text-comic-cream",
+                )}
               >
-                <div style={{ filter }}>
-                  <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                <Moon className="h-3.5 w-3.5 mr-1" /> Modo escuro Kindle
+              </Button>
+              <Button
+                size="sm"
+                variant={doublePageSplit ? "default" : "outline"}
+                onClick={() => setDoublePageSplit((v) => !v)}
+                className={cn(
+                  "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
+                  doublePageSplit && "bg-comic-red text-primary-foreground",
+                )}
+              >
+                <Split className="h-3.5 w-3.5 mr-1" /> Split página dupla
+              </Button>
+            </div>
+
+            {/* Double page split detection mock */}
+            {doublePageSplit && (
+              <ComicPanel bg="red" padding="sm" tilt="left" className="animate-comic-pop">
+                <div className="flex items-center gap-2">
+                  <Split className="h-4 w-4" />
+                  <p className="font-display text-sm">
+                    Página dupla detectada! Será dividida automaticamente.
+                  </p>
+                </div>
+              </ComicPanel>
+            )}
+
+            {/* Preview display */}
+            {previewDarkMode ? (
+              <div className="space-y-2">
+                <p className="font-display text-sm opacity-80">No {kindleLabel} (modo escuro)</p>
+                <div
+                  className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-800 shadow-comic-sm inline-block"
+                  style={{ width: frame.w + 14 }}
+                >
+                  <div style={{ filter: `${filter} invert(1) hue-rotate(180deg)` }}>
+                    <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 items-start">
+                <div className="space-y-2">
+                  <p className="font-display text-sm opacity-80">Original</p>
+                  <div className="inline-block">
+                    <ComparisonSlider
+                      left={<MockPage seed={previewSeed} width={frame.w} height={frame.h} />}
+                      right={
+                        <div style={{ filter }}>
+                          <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                        </div>
+                      }
+                      leftLabel="Original"
+                      rightLabel="Convertido"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="font-display text-sm opacity-80">No {kindleLabel}</p>
+                  <div
+                    className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
+                    style={{ width: frame.w + 14 }}
+                  >
+                    <div style={{ filter }}>
+                      <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="border-[3px] border-dashed border-ink rounded-lg p-8 text-center">

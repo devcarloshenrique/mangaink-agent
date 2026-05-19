@@ -13,6 +13,7 @@ import {
   Wand2,
   AlertTriangle,
   User as UserIcon,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useConversion } from "@/hooks/useConversion";
@@ -54,7 +55,7 @@ export function ComicHeader() {
             <BookOpen className="h-5 w-5" strokeWidth={3} />
           </span>
           <span className="font-display text-2xl md:text-3xl tracking-wide">
-            Manga<span className="text-comic-red">Forge</span>
+            Mangaink
           </span>
         </Link>
 
@@ -228,6 +229,9 @@ export function ComicHeader() {
                     </DropdownMenuItem>
                   );
                 })}
+                <DropdownMenuItem onClick={() => navigate({ to: "/perfil" })}>
+                  <BarChart3 className="mr-2 h-4 w-4" /> Perfil & Estatísticas
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate({ to: "/configuracoes" })}>
                   <Cog className="mr-2 h-4 w-4" /> Configurações
                 </DropdownMenuItem>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
@@ -9,6 +9,7 @@ import { useBiblioteca } from "@/hooks/useBiblioteca";
 import { RenameSeriesDialog } from "@/components/biblioteca/RenameSeriesDialog";
 import { DeleteConfirmDialog } from "@/components/biblioteca/DeleteConfirmDialog";
 import { ReconvertDialog } from "@/components/biblioteca/ReconvertDialog";
+import { ReaderToolbar } from "@/components/reader/ReaderToolbar";
 import { toast, Toaster } from "sonner";
 import {
   ArrowLeft,
@@ -21,6 +22,9 @@ import {
   RefreshCw,
   Star,
   Trash2,
+  ZoomIn,
+  ZoomOut,
+  Columns2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConversionStatus } from "@/lib/biblioteca-data";
@@ -73,13 +77,37 @@ function SeriesPage() {
   const [readerOpen, setReaderOpen] = useState(false);
   const [readerFile, setReaderFile] = useState("");
   const [readerPage, setReaderPage] = useState(0);
+  const [doublePage, setDoublePage] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const totalPages = 18;
 
   const openReader = (fileName: string) => {
     setReaderFile(fileName);
     setReaderPage(0);
+    setDoublePage(false);
+    setZoom(1);
     setReaderOpen(true);
   };
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!readerOpen) return;
+      if (e.key === "ArrowLeft") {
+        setReaderPage((p) => Math.max(0, p - 1));
+      } else if (e.key === "ArrowRight") {
+        setReaderPage((p) => Math.min(totalPages - 1, p + 1));
+      } else if (e.key === "Escape") {
+        setReaderOpen(false);
+      }
+    },
+    [readerOpen, totalPages],
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   // Rename
   const handleRename = (newTitle: string) => {
@@ -323,18 +351,68 @@ function SeriesPage() {
 
         {/* Reader dialog */}
         <Dialog open={readerOpen} onOpenChange={setReaderOpen}>
-          <DialogContent className="border-[3px] border-ink shadow-comic-lg max-w-3xl p-0">
+          <DialogContent className="border-[3px] border-ink shadow-comic-lg max-w-4xl p-0">
             <DialogTitle className="sr-only">Leitor: {readerFile}</DialogTitle>
             <div className="bg-background rounded-lg overflow-hidden">
+              {/* Top bar */}
               <div className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-comic-yellow">
                 <p className="font-display text-lg truncate">{readerFile}</p>
-                <p className="font-display text-sm">
-                  Página {readerPage + 1} de {totalPages}
-                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDoublePage((v) => !v)}
+                    className={cn(
+                      "border-[2.5px] border-ink shadow-comic-sm font-display h-7 px-2",
+                      doublePage && "bg-comic-red text-primary-foreground",
+                    )}
+                    title="Modo dupla página"
+                  >
+                    <Columns2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+                    disabled={zoom <= 0.5}
+                    className="border-[2.5px] border-ink shadow-comic-sm font-display h-7 w-7 p-0"
+                    title="Diminuir zoom"
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </Button>
+                  <span className="font-display text-xs w-10 text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setZoom((z) => Math.min(2, z + 0.25))}
+                    disabled={zoom >= 2}
+                    className="border-[2.5px] border-ink shadow-comic-sm font-display h-7 w-7 p-0"
+                    title="Aumentar zoom"
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </Button>
+                  <p className="font-display text-sm ml-2">
+                    Pág. {readerPage + 1} / {totalPages}
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-center p-6 bg-zinc-200">
-                <MockPage seed={readerPage} width={200} height={280} />
+
+              {/* Page display */}
+              <div className="flex justify-center p-6 bg-zinc-200 min-h-[340px] items-center">
+                <div
+                  className="flex gap-2 transition-transform duration-200"
+                  style={{ transform: `scale(${zoom})` }}
+                >
+                  <MockPage seed={readerPage} width={200} height={280} />
+                  {doublePage && readerPage < totalPages - 1 && (
+                    <MockPage seed={readerPage + 1} width={200} height={280} />
+                  )}
+                </div>
               </div>
+
+              {/* Bottom nav */}
               <div className="flex items-center justify-center gap-4 px-4 py-3 border-t-[3px] border-ink bg-card">
                 <Button
                   size="sm"
@@ -358,9 +436,19 @@ function SeriesPage() {
                   Próximo <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
+
+              {/* Keyboard hint */}
+              <div className="text-center py-1 bg-muted/50">
+                <p className="text-[10px] font-medium opacity-40">
+                  ← → para navegar • ESC para fechar
+                </p>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Fixed progress bar when reader is open */}
+        {readerOpen && <ReaderToolbar currentPage={readerPage} totalPages={totalPages} />}
       </div>
 
       {/* Rename dialog */}

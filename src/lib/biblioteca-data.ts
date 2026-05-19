@@ -12,7 +12,7 @@ export interface MangaFile {
   name: string;
   bytes: number;
   when: string;
-  format: "EPUB" | "MOBI" | "PDF";
+  format: "EPUB" | "MOBI" | "PDF" | "CBZ" | "KFX";
   sent: boolean;
   status: ConversionStatus;
   chapters: Chapter[];

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useBiblioteca } from "@/hooks/useBiblioteca";
@@ -21,7 +14,7 @@ interface WizardStartData {
   };
   selectedChapters: Set<string>;
   meta: { title: string; author: string };
-  format: string;
+  format: "EPUB" | "MOBI" | "PDF" | "CBZ" | "KFX";
   delivery: "download" | "kindle";
   kindleEmail?: string;
   volumeSize: number;
@@ -64,13 +57,16 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
   jobsRef.current = jobs;
 
   const updateJob = useCallback((jobId: string, patch: Partial<ConversionJob>) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === jobId ? { ...j, ...patch } : j)),
-    );
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...patch } : j)));
   }, []);
 
   const updateStage = useCallback(
-    (jobId: string, stageId: JobStage, status: "pending" | "active" | "completed" | "error", progress?: number) => {
+    (
+      jobId: string,
+      stageId: JobStage,
+      status: "pending" | "active" | "completed" | "error",
+      progress?: number,
+    ) => {
       setJobs((prev) =>
         prev.map((j) => {
           if (j.id !== jobId) return j;
@@ -124,7 +120,9 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
                   if (job) {
                     const total = job.stages.reduce((sum, s) => sum + s.progress, 0);
                     const overall = Math.round(total / job.stages.length);
-                    return prev.map((j) => (j.id === jobId ? { ...j, overallProgress: overall } : j));
+                    return prev.map((j) =>
+                      j.id === jobId ? { ...j, overallProgress: overall } : j,
+                    );
                   }
                   return prev;
                 });
@@ -143,7 +141,9 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
                   if (job) {
                     const total = job.stages.reduce((sum, s) => sum + s.progress, 0);
                     const overall = Math.round(total / job.stages.length);
-                    return prev.map((j) => (j.id === jobId ? { ...j, overallProgress: overall } : j));
+                    return prev.map((j) =>
+                      j.id === jobId ? { ...j, overallProgress: overall } : j,
+                    );
                   }
                   return prev;
                 });
@@ -162,7 +162,9 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
                   if (job) {
                     const total = job.stages.reduce((sum, s) => sum + s.progress, 0);
                     const overall = Math.round(total / job.stages.length);
-                    return prev.map((j) => (j.id === jobId ? { ...j, overallProgress: overall } : j));
+                    return prev.map((j) =>
+                      j.id === jobId ? { ...j, overallProgress: overall } : j,
+                    );
                   }
                   return prev;
                 });
@@ -181,7 +183,9 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
                   if (job) {
                     const total = job.stages.reduce((sum, s) => sum + s.progress, 0);
                     const overall = Math.round(total / job.stages.length);
-                    return prev.map((j) => (j.id === jobId ? { ...j, overallProgress: overall } : j));
+                    return prev.map((j) =>
+                      j.id === jobId ? { ...j, overallProgress: overall } : j,
+                    );
                   }
                   return prev;
                 });
@@ -295,10 +299,7 @@ export function ConversionProvider({ children }: { children: ReactNode }) {
     [simulateJob],
   );
 
-  const getJob = useCallback(
-    (jobId: string) => jobs.find((j) => j.id === jobId),
-    [jobs],
-  );
+  const getJob = useCallback((jobId: string) => jobs.find((j) => j.id === jobId), [jobs]);
 
   const cancelJob = useCallback(
     (jobId: string) => {

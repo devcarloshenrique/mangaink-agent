@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WizardRouteImport } from './routes/wizard'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FontesRouteImport } from './routes/fontes'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
@@ -23,6 +24,11 @@ import { Route as BibliotecaConverterJobIdRouteImport } from './routes/bibliotec
 const WizardRoute = WizardRouteImport.update({
   id: '/wizard',
   path: '/wizard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
   '/biblioteca/': typeof BibliotecaIndexRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
   '/biblioteca': typeof BibliotecaIndexRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
   '/biblioteca/$slug': typeof BibliotecaSlugRoute
   '/biblioteca/': typeof BibliotecaIndexRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/fontes'
     | '/login'
+    | '/perfil'
     | '/wizard'
     | '/biblioteca/$slug'
     | '/biblioteca/'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/fontes'
     | '/login'
+    | '/perfil'
     | '/wizard'
     | '/biblioteca/$slug'
     | '/biblioteca'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/fontes'
     | '/login'
+    | '/perfil'
     | '/wizard'
     | '/biblioteca/$slug'
     | '/biblioteca/'
@@ -153,6 +165,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   FontesRoute: typeof FontesRoute
   LoginRoute: typeof LoginRoute
+  PerfilRoute: typeof PerfilRoute
   WizardRoute: typeof WizardRoute
 }
 
@@ -163,6 +176,13 @@ declare module '@tanstack/react-router' {
       path: '/wizard'
       fullPath: '/wizard'
       preLoaderRoute: typeof WizardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -254,6 +274,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   FontesRoute: FontesRoute,
   LoginRoute: LoginRoute,
+  PerfilRoute: PerfilRoute,
   WizardRoute: WizardRoute,
 }
 export const routeTree = rootRouteImport
