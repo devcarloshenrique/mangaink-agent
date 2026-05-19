@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast, Toaster } from "sonner";
-import { Cog, Mail, Lock, HardDrive } from "lucide-react";
+import { Cog, Mail, Lock, HardDrive, Palette } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { ThemeSelector } from "@/components/theme/ThemeSelector";
 
 export const Route = createFileRoute("/configuracoes")({
   component: () => (
@@ -35,6 +36,13 @@ function ConfigPage() {
           </div>
           <h1 className="font-display text-4xl uppercase leading-none">Configurações</h1>
         </div>
+
+        <ComicPanel bg="card" padding="md">
+          <h2 className="font-display text-2xl mb-4 flex items-center gap-2">
+            <Palette className="h-5 w-5" /> Aparência
+          </h2>
+          <ThemeSelector />
+        </ComicPanel>
 
         <ComicPanel bg="card" padding="md">
           <h2 className="font-display text-2xl mb-3 flex items-center gap-2">

@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/hooks/useAuth";
 import { BibliotecaProvider } from "@/hooks/useBiblioteca";
 import { ConversionProvider } from "@/hooks/useConversion";
+import { initTheme } from "@/hooks/useTheme";
 
 function NotFoundComponent() {
   return (
@@ -31,6 +33,10 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  useEffect(() => {
+    initTheme();
+  }, []);
+
   return (
     <AuthProvider>
       <BibliotecaProvider>
