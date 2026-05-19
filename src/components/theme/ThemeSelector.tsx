@@ -1,26 +1,20 @@
-import { useState } from "react";
 import { THEME_PRESETS } from "@/lib/theme-presets";
-import { setTheme, getTheme } from "@/hooks/useTheme";
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import { Check, Moon, Sun } from "lucide-react";
 
 export function ThemeSelector() {
-  const [active, setActive] = useState(getTheme);
-
-  const handleSelect = (themeId: string) => {
-    setTheme(themeId);
-    setActive(themeId);
-  };
+  const { activeThemeId, setThemeById } = useTheme();
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {THEME_PRESETS.map((theme) => {
-        const selected = active === theme.id;
+        const selected = activeThemeId === theme.id;
         return (
           <button
             key={theme.id}
             type="button"
-            onClick={() => handleSelect(theme.id)}
+            onClick={() => setThemeById(theme.id)}
             className={cn(
               "relative flex flex-col items-center gap-2 p-4 rounded-lg border-[3px] transition-all",
               selected

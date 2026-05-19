@@ -1,10 +1,14 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { LastReadCard } from "@/components/dashboard/LastReadCard";
+import { StatsRow } from "@/components/dashboard/StatsRow";
+import { NextScheduleBanner } from "@/components/dashboard/NextScheduleBanner";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { Calendar, Library, Sparkles, Wand2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -54,12 +58,6 @@ const TILES = [
   },
 ];
 
-const RECENT = [
-  { title: "Berserk", chapter: "Cap. 374", when: "há 2h" },
-  { title: "Vagabond", chapter: "Cap. 327", when: "ontem" },
-  { title: "One Piece", chapter: "Cap. 1110", when: "3 dias" },
-];
-
 function Dashboard() {
   const { user } = useAuth();
 
@@ -82,7 +80,8 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-10">
+      {/* Tiles de navegação */}
+      <section className="mx-auto max-w-6xl px-4 pt-8">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {TILES.map((t, i) => {
             const Icon = t.icon;
@@ -109,31 +108,32 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pb-16">
-        <h2 className="font-display text-3xl mb-4 uppercase">Últimas conversões</h2>
-        <ComicPanel bg="card" padding="md">
-          <ul className="divide-y-2 divide-dashed divide-ink/30">
-            {RECENT.map((r) => (
-              <li
-                key={r.title + r.chapter}
-                className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
-              >
-                <div>
-                  <p className="font-display text-xl leading-none">{r.title}</p>
-                  <p className="text-xs font-medium opacity-70 mt-1">
-                    {r.chapter} • {r.when}
-                  </p>
-                </div>
-                <Link
-                  to="/biblioteca"
-                  className="font-display text-sm border-[2.5px] border-ink shadow-comic-sm px-3 py-1 rounded-md bg-comic-yellow hover:-translate-y-0.5 transition-transform"
-                >
-                  Abrir
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </ComicPanel>
+      {/* Última leitura + próximo agendamento */}
+      <section className="mx-auto max-w-6xl px-4 pt-10">
+        <h2 className="font-display text-3xl mb-1 uppercase">Continuar lendo</h2>
+        <p className="text-sm font-medium opacity-70 mb-4">Retome de onde parou e veja o próximo agendamento.</p>
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <LastReadCard />
+          </div>
+          <div className="flex">
+            <NextScheduleBanner />
+          </div>
+        </div>
+      </section>
+
+      {/* Stats animados */}
+      <section className="mx-auto max-w-6xl px-4 pt-8">
+        <h2 className="font-display text-3xl mb-1 uppercase">Estatísticas</h2>
+        <p className="text-sm font-medium opacity-70 mb-4">Visão geral da sua biblioteca e conversões.</p>
+        <StatsRow />
+      </section>
+
+      {/* Atividade recente */}
+      <section className="mx-auto max-w-6xl px-4 py-10">
+        <h2 className="font-display text-3xl mb-1 uppercase">Atividade recente</h2>
+        <p className="text-sm font-medium opacity-70 mb-4">Últimas conversões, envios e agendamentos.</p>
+        <ActivityFeed />
       </section>
     </div>
   );

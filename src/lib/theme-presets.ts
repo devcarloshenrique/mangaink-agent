@@ -122,7 +122,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       red: "oklch(0.72 0.2 350)",
       blue: "oklch(0.75 0.14 260)",
       cream: "oklch(0.22 0.03 270)",
-      ink: "oklch(0.18 0.03 270)",
+      ink: "oklch(0.15 0.02 260)",
     },
   },
   {
@@ -134,7 +134,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       red: "oklch(0.7 0.18 20)",
       blue: "oklch(0.72 0.14 240)",
       cream: "oklch(0.24 0.02 240)",
-      ink: "oklch(0.18 0.02 240)",
+      ink: "oklch(0.15 0.02 260)",
     },
   },
   {
@@ -146,7 +146,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       red: "oklch(0.68 0.2 15)",
       blue: "oklch(0.7 0.16 220)",
       cream: "oklch(0.18 0.02 220)",
-      ink: "oklch(0.15 0.02 220)",
+      ink: "oklch(0.28 0.03 220)",
     },
   },
   {
@@ -158,7 +158,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       red: "oklch(0.65 0.16 15)",
       blue: "oklch(0.7 0.12 210)",
       cream: "oklch(0.24 0.03 220)",
-      ink: "oklch(0.18 0.03 220)",
+      ink: "oklch(0.15 0.02 260)",
     },
   },
   {
@@ -170,7 +170,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       red: "oklch(0.72 0.18 345)",
       blue: "oklch(0.72 0.16 250)",
       cream: "oklch(0.2 0.04 260)",
-      ink: "oklch(0.16 0.04 260)",
+      ink: "oklch(0.15 0.02 260)",
     },
   },
 ];
