@@ -8,23 +8,29 @@ interface SessionUser {
 interface AuthCtx {
   user: SessionUser | null;
   loading: boolean;
-  refresh: () => Promise<void>;
+  signIn: (username: string, password: string) => Promise<void>;
+  signUp: (username: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
-
-const MOCK_USER: SessionUser = {
-  username: "admin",
-  kindleEmail: "admin@kindle.com",
-};
 
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(MOCK_USER);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [loading] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setUser(MOCK_USER);
+  const signIn = useCallback(async (username: string, _password: string) => {
+    await new Promise((r) => setTimeout(r, 300));
+    setUser({ username, kindleEmail: `${username}@kindle.com` });
+  }, []);
+
+  const signUp = useCallback(async (username: string, email: string, _password: string) => {
+    await new Promise((r) => setTimeout(r, 500));
+    setUser({ username, kindleEmail: email });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    setUser(null);
   }, []);
 
   return (
@@ -32,11 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        refresh,
-        signOut: async () => {
-          // No-op in mock mode — user stays "logged in"
-          setUser(MOCK_USER);
-        },
+        signIn,
+        signUp,
+        signOut,
       }}
     >
       {children}

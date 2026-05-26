@@ -14,6 +14,7 @@ import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FontesRouteImport } from './routes/fontes'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as BibliotecaRouteImport } from './routes/biblioteca'
 import { Route as AgendamentosRouteImport } from './routes/agendamentos'
 import { Route as IndexRouteImport } from './routes/index'
@@ -44,6 +45,11 @@ const FontesRoute = FontesRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CadastroRoute = CadastroRouteImport.update({
+  id: '/cadastro',
+  path: '/cadastro',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BibliotecaRoute = BibliotecaRouteImport.update({
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agendamentos': typeof AgendamentosRoute
   '/biblioteca': typeof BibliotecaRouteWithChildren
+  '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agendamentos': typeof AgendamentosRoute
+  '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agendamentos': typeof AgendamentosRoute
   '/biblioteca': typeof BibliotecaRouteWithChildren
+  '/cadastro': typeof CadastroRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/fontes': typeof FontesRoute
   '/login': typeof LoginRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agendamentos'
     | '/biblioteca'
+    | '/cadastro'
     | '/configuracoes'
     | '/fontes'
     | '/login'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agendamentos'
+    | '/cadastro'
     | '/configuracoes'
     | '/fontes'
     | '/login'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agendamentos'
     | '/biblioteca'
+    | '/cadastro'
     | '/configuracoes'
     | '/fontes'
     | '/login'
@@ -162,6 +174,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgendamentosRoute: typeof AgendamentosRoute
   BibliotecaRoute: typeof BibliotecaRouteWithChildren
+  CadastroRoute: typeof CadastroRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   FontesRoute: typeof FontesRoute
   LoginRoute: typeof LoginRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cadastro': {
+      id: '/cadastro'
+      path: '/cadastro'
+      fullPath: '/cadastro'
+      preLoaderRoute: typeof CadastroRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/biblioteca': {
@@ -271,6 +291,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgendamentosRoute: AgendamentosRoute,
   BibliotecaRoute: BibliotecaRouteWithChildren,
+  CadastroRoute: CadastroRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   FontesRoute: FontesRoute,
   LoginRoute: LoginRoute,
