@@ -1,0 +1,23 @@
+services:
+  postgresql:
+    image: bitnami/postgresql:latest
+    container_name: mangaink-agent-postgres
+    environment:
+      POSTGRES_USER: mangaink
+      POSTGRES_PASSWORD: mangaink
+      POSTGRES_DB: mangaink_agent_db
+      POSTGRESQL_USERNAME: mangaink
+      POSTGRESQL_PASSWORD: mangaink
+      POSTGRESQL_DATABASE: mangaink_agent_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - mangaink_agent_postgres_data:/bitnami/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mangaink -d mangaink_agent_db -h 127.0.0.1 -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mangaink_agent_postgres_data:

@@ -1,98 +1,195 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este arquivo fornece orientações ao Claude Code ao trabalhar com este repositório.
 
-## Project: MangaForge
+## Projeto: MangaInk Agent
 
-A self-hosted web app that converts manga from online sources into Kindle-compatible formats (EPUB, MOBI, CBZ, KFX) and sends them to your Kindle device. The UI is in **Brazilian Portuguese** and uses a comic book pop-art design system.
+Aplicação web self-hosted que converte mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ, KFX) e os envia ao dispositivo Kindle. A UI está em **Português Brasileiro** com design temático de quadrinhos pop-art.
+
+---
+
+## Estrutura do Monorepo
+
+```
+mangaink-agent/
+├── apps/
+│   ├── frontend/          ← React 19 + Vite + TanStack Router
+│   │   ├── src/
+│   │   │   ├── components/    (ui/, comic/, auth/)
+│   │   │   ├── hooks/
+│   │   │   ├── integrations/
+│   │   │   ├── lib/
+│   │   │   ├── routes/        (TanStack file-based routing)
+│   │   │   ├── stories/
+│   │   │   ├── styles.css
+│   │   │   └── types/
+│   │   ├── index.html
+│   │   ├── vite.config.ts
+│   │   ├── tsconfig.json
+│   │   └── package.json       (@mangaink/frontend)
+│   └── backend/           ← Fastify + Prisma + PostgreSQL
+│       ├── src/
+│       │   ├── modules/       (auth/, health/, user/)
+│       │   ├── shared/        (config, server, etc.)
+│       │   └── app.ts
+│       ├── prisma/
+│       ├── package.json       (@mangaink/backend)
+│       └── tsconfig.json
+├── docs/
+│   ├── modelagem.md
+│   ├── sprints.md
+│   └── openspec/
+├── package.json           ← scripts orquestradores do monorepo
+├── pnpm-workspace.yaml
+├── docker-compose.yml
+├── .gitignore
+└── README.md
+```
+
+---
 
 ## Tech Stack
 
+### Frontend (`apps/frontend`)
 - **React 19** + **TypeScript** (strict)
 - **Vite 7** (build tool)
 - **TanStack Router** (file-based routing via `createFileRoute`)
-- **TanStack Query** (available but not heavily used yet)
-- **Tailwind CSS v4** with custom comic book theme tokens
-- **Radix UI** primitives (shadcn/ui pattern — components in `src/components/ui/`)
-- **Zod** (available for validation)
-- **react-hook-form** + `@hookform/resolvers` (form handling)
+- **TanStack Query** (data fetching)
+- **Tailwind CSS v4** com tema de quadrinhos customizado
+- **Radix UI** primitives (shadcn/ui — componentes em `src/components/ui/`)
+- **Zod** (validação) + **react-hook-form** + `@hookform/resolvers`
 - **sonner** (toasts)
 
-## Commands
+### Backend (`apps/backend`)
+- **Fastify 5** + **TypeScript**
+- **Prisma 7** (ORM) + **PostgreSQL**
+- **@fastify/jwt** (autenticação JWT)
+- **@fastify/swagger** + **@fastify/swagger-ui** (documentação da API)
+- **Zod** (validação com `fastify-type-provider-zod`)
+- **bcryptjs** (hash de senhas)
+
+---
+
+## Comandos
+
+### Raiz do monorepo
 
 ```bash
-npm run dev        # Start dev server at http://localhost:5173
-npm run build      # Production build
-npm run preview    # Preview production build
-npm run lint       # ESLint
-npm run format     # Prettier
+pnpm dev           # Frontend em http://localhost:5173
+pnpm dev:backend   # Backend em http://localhost:3333
+pnpm dev:full      # Frontend + Backend simultaneamente
+pnpm build         # Build de produção do frontend
+pnpm lint          # ESLint em todos os pacotes
+pnpm format        # Prettier em todos os pacotes
+pnpm test          # Testes do backend (Vitest)
+pnpm db:migrate    # Executa migrations do Prisma
+pnpm db:push       # Push do schema sem migration
+pnpm db:studio     # Prisma Studio (GUI do banco)
+pnpm storybook     # Storybook em http://localhost:6006
 ```
 
-## Routing (TanStack Router)
+### Dentro de `apps/frontend`
 
-File-based routing with `createFileRoute`. Route files live in `src/routes/`:
+```bash
+pnpm dev           # Vite dev server
+pnpm build         # Build de produção
+pnpm lint          # ESLint
+pnpm format        # Prettier
+```
 
-| File                              | Route                                              |
+### Dentro de `apps/backend`
+
+```bash
+pnpm dev           # tsx watch src/app.ts
+pnpm build         # tsc
+pnpm test          # vitest run
+pnpm test:watch    # vitest (modo watch)
+pnpm db:migrate    # prisma migrate dev
+pnpm db:push       # prisma db push
+pnpm db:studio     # prisma studio
+```
+
+---
+
+## Roteamento (TanStack Router)
+
+File-based routing em `apps/frontend/src/routes/`:
+
+| Arquivo                           | Rota                                               |
 | --------------------------------- | -------------------------------------------------- |
-| `src/routes/__root.tsx`           | Root layout (wraps all routes with `AuthProvider`) |
-| `src/routes/index.tsx`            | `/` — Dashboard (requires auth)                    |
-| `src/routes/login.tsx`            | `/login` — Login page                              |
-| `src/routes/wizard.tsx`           | `/wizard` — 5-step manga conversion wizard         |
-| `src/routes/biblioteca.tsx`       | `/biblioteca` — Library of converted manga         |
-| `src/routes/biblioteca.$slug.tsx` | `/biblioteca/:slug` — Library detail               |
-| `src/routes/agendamentos.tsx`     | `/agendamentos` — Scheduled subscriptions          |
-| `src/routes/configuracoes.tsx`    | `/configuracoes` — Settings                        |
-| `src/routes/fontes.tsx`           | `/fontes` — Supported sources (not yet created)    |
+| `src/routes/__root.tsx`           | Root layout (envolve tudo com `AuthProvider`)      |
+| `src/routes/index.tsx`            | `/` — Dashboard (requer auth)                      |
+| `src/routes/login.tsx`            | `/login` — Página de login                         |
+| `src/routes/wizard.tsx`           | `/wizard` — Wizard de conversão (5 passos)         |
+| `src/routes/biblioteca.tsx`       | `/biblioteca` — Biblioteca de mangás convertidos   |
+| `src/routes/biblioteca.$slug.tsx` | `/biblioteca/:slug` — Detalhe da biblioteca        |
+| `src/routes/agendamentos.tsx`     | `/agendamentos` — Assinaturas agendadas            |
+| `src/routes/configuracoes.tsx`    | `/configuracoes` — Configurações                   |
 
-**Important:** The auto-generated `src/routeTree.gen.ts` must not be edited manually. Run `npm run dev` to regenerate it when routes change.
+> **Importante:** O arquivo `src/routeTree.gen.ts` é gerado automaticamente. Não editar manualmente. Rode `pnpm dev` para regenerar ao criar novas rotas.
 
-## Authentication (Mock Mode)
+---
 
-Auth is fully mocked. `src/hooks/useAuth.tsx` provides a `AuthProvider` context with a hardcoded user (`admin` / `admin@kindle.com`). `RequireAuth` in `src/components/auth/RequireAuth.tsx` renders children unconditionally. Login accepts any credentials. When replacing with real auth, update both files and the `AuthProvider` context type.
+## Autenticação
 
-## Architecture
+Autenticação JWT real via backend Fastify:
+- `POST /auth/register` — Registro de novo usuário
+- `POST /auth/login` — Login, retorna `{ token }`
+- `GET /users/me` — Perfil do usuário autenticado (requer Bearer token)
 
-### Route Structure
+O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O token JWT é armazenado e injetado via `useAuth` hook.
 
-- `__root.tsx` wraps everything in `<AuthProvider>` and renders `<Outlet />`
-- All protected routes wrap their component in `<RequireAuth>`
-- Routes use `createFileRoute("/path")({ component: Page })` pattern
-- Navigation uses `useNavigate({ to: "/path" })` and `<Link to="/path">`
+---
 
-### Components
+## Arquitetura
 
-- `src/components/ui/` — shadcn/ui components (Radix-based, styled with Tailwind)
-- `src/components/comic/` — Domain-specific comic UI: `ComicPanel`, `ComicHeader`, `SpeechBubble`, `OnomatopoeiaBadge`, `StepIndicator`, `MockPage`
-- `src/components/auth/` — `RequireAuth` guard
+### Frontend
 
-### Key Domain Logic
+- `__root.tsx` envolve tudo em `<AuthProvider>` e renderiza `<Outlet />`
+- Rotas protegidas usam `beforeLoad` para redirecionar para `/login` se não autenticado
+- Rotas usam padrão `createFileRoute("/path")({ component: Page })`
+- Navegação via `useNavigate({ to: "/path" })` e `<Link to="/path">`
 
-- `src/lib/kindle-presets.ts` — Kindle device profiles, output formats (EPUB/MOBI/CBZ/KFX), and image presets
-- `src/lib/utils.ts` — `cn()` utility (clsx + tailwind-merge)
+### Componentes do Frontend
 
-### Wizard Flow (`/wizard`)
+- `src/components/ui/` — shadcn/ui (Radix + Tailwind)
+- `src/components/comic/` — UI temática: `ComicPanel`, `ComicHeader`, `SpeechBubble`, `OnomatopoeiaBadge`, `StepIndicator`
+- `src/components/auth/` — guards de autenticação
 
-5-step wizard: Origin URL → Chapter Selection → Cover Assignment → Device/Format Config → Delivery. All data fetching is mocked via `mockFetchSeries()`. State is held in a single `WizardData` object with step validation via `canNext`.
+### Backend
 
-## Design System
+- `src/app.ts` — entry point, inicia o servidor Fastify
+- `src/shared/server.ts` — criação e configuração do servidor (plugins, CORS, JWT, Swagger)
+- `src/shared/config/env.ts` — parse e validação das env vars (Zod)
+- `src/modules/auth/` — rotas e handlers de autenticação
+- `src/modules/user/` — rotas de usuário
+- `src/modules/health/` — health check
 
-Defined in `src/styles.css` using Tailwind v4 `@theme inline`:
+---
 
-- **Colors:** `--comic-yellow`, `--comic-red`, `--comic-blue`, `--comic-cream`, `--comic-ink` (all oklch)
-- **Fonts:** `--font-display` (Bangers), `--font-sans` (Inter)
-- **Shadows:** `--shadow-comic-sm` (3px), `--shadow-comic` (6px), `--shadow-comic-lg` (10px) — all hard offset shadows
-- **Utilities:** `.font-display`, `.border-ink`, `.shadow-comic-sm`, `.bg-halftone`, `.animate-comic-pop`, `.animate-comic-shake`
-- **Dark mode:** Supported via `.dark` class with swapped palette
+## Design System (Frontend)
+
+Definido em `src/styles.css` com Tailwind v4 `@theme inline`:
+
+- **Cores:** `--comic-yellow`, `--comic-red`, `--comic-blue`, `--comic-cream`, `--comic-ink` (oklch)
+- **Fontes:** `--font-display` (Bangers), `--font-sans` (Inter)
+- **Sombras:** `--shadow-comic-sm` (3px), `--shadow-comic` (6px), `--shadow-comic-lg` (10px) — hard offset shadows
+- **Utilitários:** `.font-display`, `.border-ink`, `.shadow-comic-sm`, `.bg-halftone`, `.animate-comic-pop`, `.animate-comic-shake`
+- **Dark mode:** suportado via classe `.dark`
+
+---
 
 ## Path Aliases
 
-`@/` maps to `src/` (configured via `vite-tsconfig-paths` and `tsconfig.json`).
+No frontend: `@/` aponta para `src/` (configurado via `vite-tsconfig-paths` e `tsconfig.json`).
 
-## Conventions
+---
 
-- All UI text is in **Brazilian Portuguese**
-- Use `cn()` for conditional class merging
-- Use `ComicPanel` for card-like containers with comic styling (supports `tilt`, `bg`, `padding` props)
-- Use `sonner` for toasts via `toast.success()` / `toast.error()`
-- The `Toaster` component must be mounted in each page (import from `sonner`)
-- Mock data is used throughout — no real backend integration yet
+## Convenções
+
+- Toda UI está em **Português Brasileiro**
+- Use `cn()` para merge condicional de classes
+- Use `ComicPanel` para containers com estilo de quadrinhos (props: `tilt`, `bg`, `padding`)
+- Use `sonner` para toasts via `toast.success()` / `toast.error()`
+- O componente `Toaster` deve ser montado em cada página
+- Backend segue padrão de módulos (module per feature): `routes.ts`, `handler.ts`, `schema.ts`
