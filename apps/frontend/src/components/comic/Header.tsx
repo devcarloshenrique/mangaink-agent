@@ -38,7 +38,7 @@ const NAV = [
 ] as const;
 
 export function ComicHeader() {
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { jobs, clearCompleted } = useConversion();
@@ -237,8 +237,9 @@ export function ComicHeader() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  id="header-logout"
                   onClick={async () => {
-                    await signOut();
+                    await logout();
                     navigate({ to: "/login" });
                   }}
                 >

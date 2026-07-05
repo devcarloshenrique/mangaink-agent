@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,13 +16,11 @@ import {
 import { toast, Toaster } from "sonner";
 import { Calendar, Play, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/agendamentos")({
-  component: () => (
-    <RequireAuth>
-      <AgendamentosPage />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: AgendamentosPage,
 });
 
 interface Sub {

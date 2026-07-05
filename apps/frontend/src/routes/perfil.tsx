@@ -1,19 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { useBiblioteca } from "@/hooks/useBiblioteca";
 import { MonthlyChart } from "@/components/perfil/MonthlyChart";
 import { TopReadings } from "@/components/perfil/TopReadings";
 import { BarChart3, ArrowLeft, BookOpen, HardDrive, Send } from "lucide-react";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/perfil")({
-  component: () => (
-    <RequireAuth>
-      <PerfilPage />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: PerfilPage,
 });
 
 function PerfilPage() {

@@ -1,10 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { StepIndicator } from "@/components/comic/StepIndicator";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,13 +49,11 @@ import {
 import { MockPage } from "@/components/comic/MockPage";
 import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
 import { cn } from "@/lib/utils";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/wizard")({
-  component: () => (
-    <RequireAuth>
-      <WizardPage />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: WizardPage,
 });
 
 const STEPS = [

@@ -1,22 +1,19 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { LastReadCard } from "@/components/dashboard/LastReadCard";
 import { StatsRow } from "@/components/dashboard/StatsRow";
 import { NextScheduleBanner } from "@/components/dashboard/NextScheduleBanner";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { Calendar, Library, Sparkles, Wand2 } from "lucide-react";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/")({
-  component: () => (
-    <RequireAuth>
-      <Dashboard />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: Dashboard,
 });
 
 const TILES = [

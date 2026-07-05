@@ -1,18 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { SuggestSourceForm } from "@/components/fontes/SuggestSourceForm";
 import { Sparkles, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/fontes")({
-  component: () => (
-    <RequireAuth>
-      <FontesPage />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: FontesPage,
 });
 
 type SourceStatus = "active" | "slow" | "beta" | "offline" | "soon";

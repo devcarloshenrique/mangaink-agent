@@ -4,6 +4,7 @@ import { BibliotecaProvider } from "@/hooks/useBiblioteca";
 import { ConversionProvider } from "@/hooks/useConversion";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ComicIntensityProvider } from "@/hooks/useComicIntensity";
+import { useAuth } from "@/hooks/useAuth";
 
 function NotFoundComponent() {
   return (
@@ -27,6 +28,26 @@ function NotFoundComponent() {
   );
 }
 
+/** Aguarda a restauração da sessão antes de renderizar a árvore de rotas */
+function AppShell() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm animate-spin">
+            <span className="font-display text-2xl">M</span>
+          </div>
+          <p className="font-display text-lg opacity-70">Carregando…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Outlet />;
+}
+
 export const Route = createRootRoute({
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -39,7 +60,7 @@ function RootComponent() {
         <AuthProvider>
           <BibliotecaProvider>
             <ConversionProvider>
-              <Outlet />
+              <AppShell />
             </ConversionProvider>
           </BibliotecaProvider>
         </AuthProvider>

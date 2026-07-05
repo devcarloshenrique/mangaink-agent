@@ -1,8 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { RequireAuth } from "@/components/auth/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,13 +9,11 @@ import { toast, Toaster } from "sonner";
 import { Cog, Mail, Lock, HardDrive, Palette } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
+import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/configuracoes")({
-  component: () => (
-    <RequireAuth>
-      <ConfigPage />
-    </RequireAuth>
-  ),
+  beforeLoad: authGuard,
+  component: ConfigPage,
 });
 
 function ConfigPage() {
