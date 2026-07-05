@@ -98,7 +98,7 @@ describe('RegisterUserUseCase', () => {
 
     expect(tokenService.sign).toHaveBeenCalledWith(
       { sub: result.user.id },
-      { expiresIn: '7d' },
+      { expiresIn: '15d' },
     )
   })
 })

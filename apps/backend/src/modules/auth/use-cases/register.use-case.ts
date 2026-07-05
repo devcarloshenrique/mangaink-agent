@@ -30,7 +30,7 @@ export class RegisterUserUseCase {
       passwordHash,
     })
 
-    const token = await this.tokenService.sign({ sub: user.id }, { expiresIn: '7d' })
+    const token = await this.tokenService.sign({ sub: user.id }, { expiresIn: '15d' })
 
     return {
       user: {

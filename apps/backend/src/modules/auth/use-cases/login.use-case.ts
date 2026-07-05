@@ -13,7 +13,11 @@ export class LoginUserUseCase {
   ) {}
 
   async execute(data: LoginDTO): Promise<{ user: PublicUser; token: string }> {
-    const user = await this.userRepository.findByEmail(data.email)
+    // Tenta encontrar por e-mail (contém @) ou por username
+    const isEmail = data.identifier.includes('@')
+    const user = isEmail
+      ? await this.userRepository.findByEmail(data.identifier)
+      : await this.userRepository.findByUsername(data.identifier)
 
     if (!user) {
       throw new InvalidCredentialsError()
@@ -25,7 +29,7 @@ export class LoginUserUseCase {
       throw new InvalidCredentialsError()
     }
 
-    const token = await this.tokenService.sign({ sub: user.id }, { expiresIn: '7d' })
+    const token = await this.tokenService.sign({ sub: user.id }, { expiresIn: '15d' })
 
     return {
       user: {

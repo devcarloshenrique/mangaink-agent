@@ -10,12 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { toast, Toaster } from "sonner";
-import { Lock, Mail, Loader2 } from "lucide-react";
+import { Lock, User, Loader2 } from "lucide-react";
 import { ApiError } from "@/lib/api";
 
 // ─── Schema de validação ───────────────────────────────────────────────────────
 const loginSchema = z.object({
-  email: z.string().min(1, "E-mail é obrigatório").email("E-mail inválido"),
+  identifier: z
+    .string()
+    .min(3, "E-mail ou nome de usuário deve ter no mínimo 3 caracteres"),
   password: z.string().min(1, "Senha é obrigatória"),
 });
 
@@ -45,14 +47,14 @@ function LoginPage() {
 
   const onSubmit = async (data: LoginForm) => {
     try {
-      await login({ email: data.email, password: data.password });
+      await login({ identifier: data.identifier, password: data.password });
       toast.success("Bem-vindo de volta!");
       const destination = search.redirect ?? "/";
       navigate({ to: destination as "/" });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          toast.error("E-mail ou senha inválidos");
+          toast.error("Credenciais inválidas. Verifique seu e-mail/usuário e senha.");
         } else {
           toast.error(err.message);
         }
@@ -76,24 +78,24 @@ function LoginPage() {
 
         <ComicPanel bg="card" padding="lg">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            {/* Email */}
+            {/* Identifier (e-mail ou username) */}
             <div className="space-y-1.5">
-              <Label htmlFor="login-email" className="font-display">
-                <Mail className="inline h-4 w-4 mr-1" /> E-mail
+              <Label htmlFor="login-identifier" className="font-display">
+                <User className="inline h-4 w-4 mr-1" /> E-mail ou usuário
               </Label>
               <Input
-                id="login-email"
-                type="email"
+                id="login-identifier"
+                type="text"
                 autoFocus
-                autoComplete="email"
-                placeholder="seu@email.com"
+                autoComplete="username"
+                placeholder="seu@email.com ou seunome"
                 className="border-[3px] border-ink h-11 shadow-comic-sm"
-                aria-invalid={!!errors.email}
-                {...register("email")}
+                aria-invalid={!!errors.identifier}
+                {...register("identifier")}
               />
-              {errors.email && (
+              {errors.identifier && (
                 <p className="text-xs font-medium text-comic-red mt-0.5">
-                  {errors.email.message}
+                  {errors.identifier.message}
                 </p>
               )}
             </div>

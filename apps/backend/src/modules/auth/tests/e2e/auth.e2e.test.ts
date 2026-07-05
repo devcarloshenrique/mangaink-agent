@@ -38,7 +38,7 @@ async function registerUser(
 
 async function loginUser(
   app: FastifyInstance,
-  payload = { email: 'test@example.com', password: 'senha1234' },
+  payload = { identifier: 'test@example.com', password: 'senha1234' },
 ) {
   return app.inject({
     method: 'POST',
@@ -117,7 +117,7 @@ describe('Auth E2E — /auth/login', () => {
 
   it('POST /auth/login → 401 com senha incorreta', async () => {
     const response = await loginUser(app, {
-      email: 'test@example.com',
+      identifier: 'test@example.com',
       password: 'senhaerrada',
     })
 
@@ -127,7 +127,7 @@ describe('Auth E2E — /auth/login', () => {
 
   it('POST /auth/login → 401 com e-mail inexistente', async () => {
     const response = await loginUser(app, {
-      email: 'naoexiste@example.com',
+      identifier: 'naoexiste@example.com',
       password: 'qualquer',
     })
 

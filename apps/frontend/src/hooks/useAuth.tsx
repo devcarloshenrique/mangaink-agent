@@ -14,7 +14,7 @@ interface AuthCtx {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  /** Login com email e senha */
+  /** Login com e-mail ou nome de usuário e senha */
   login: (credentials: LoginCredentials) => Promise<void>;
   /** Cadastro de novo usuário */
   register: (data: RegisterData) => Promise<void>;
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Compat com consumidores legados ────────────────────────────────────────
   const signIn = useCallback(async (email: string, password: string) => {
-    await login({ email, password });
+    await login({ identifier: email, password });
   }, [login]);
 
   const signUp = useCallback(

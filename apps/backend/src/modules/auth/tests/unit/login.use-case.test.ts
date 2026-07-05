@@ -35,7 +35,7 @@ describe('LoginUserUseCase', () => {
     })
 
     const result = await useCase.execute({
-      email: 'john@example.com',
+      identifier: 'john@example.com',
       password: 'senha123',
     })
 
@@ -51,7 +51,7 @@ describe('LoginUserUseCase', () => {
 
   it('deve lançar InvalidCredentialsError quando o usuário não existe', async () => {
     await expect(
-      useCase.execute({ email: 'naoexiste@example.com', password: 'senha' }),
+      useCase.execute({ identifier: 'naoexiste@example.com', password: 'senha' }),
     ).rejects.toThrow(InvalidCredentialsError)
   })
 
@@ -66,7 +66,7 @@ describe('LoginUserUseCase', () => {
     const ucInvalid = new LoginUserUseCase(userRepository, hasherInvalid, tokenService)
 
     await expect(
-      ucInvalid.execute({ email: 'john@example.com', password: 'errada' }),
+      ucInvalid.execute({ identifier: 'john@example.com', password: 'errada' }),
     ).rejects.toThrow(InvalidCredentialsError)
   })
 
@@ -77,11 +77,30 @@ describe('LoginUserUseCase', () => {
       passwordHash: 'hashed:senha',
     })
 
-    await useCase.execute({ email: 'john@example.com', password: 'senha' })
+    await useCase.execute({ identifier: 'john@example.com', password: 'senha' })
 
     expect(tokenService.sign).toHaveBeenCalledWith(
       { sub: created.id },
-      { expiresIn: '7d' },
+      { expiresIn: '15d' },
     )
+  })
+
+  it('deve fazer login com username (sem @)', async () => {
+    await userRepository.create({
+      username: 'johndoe',
+      email: 'john@example.com',
+      passwordHash: 'hashed:senha',
+    })
+
+    const result = await useCase.execute({ identifier: 'johndoe', password: 'senha' })
+
+    expect(result.user.username).toBe('johndoe')
+    expect(result.token).toBe('mocked-jwt-token')
+  })
+
+  it('deve lançar InvalidCredentialsError ao buscar por username inexistente', async () => {
+    await expect(
+      useCase.execute({ identifier: 'naoexiste', password: 'senha' }),
+    ).rejects.toThrow(InvalidCredentialsError)
   })
 })

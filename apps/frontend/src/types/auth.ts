@@ -10,7 +10,8 @@ export interface User {
 }
 
 export interface LoginCredentials {
-  email: string;
+  /** E-mail ou nome de usuário */
+  identifier: string;
   password: string;
 }
 
