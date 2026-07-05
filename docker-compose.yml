@@ -1,6 +1,0 @@
-services:
-  mangaforge:
-    build: .
-    ports:
-      - "9191:80"
-    restart: unless-stopped
