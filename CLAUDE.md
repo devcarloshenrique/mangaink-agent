@@ -13,33 +13,70 @@ Aplicação web self-hosted que converte mangás de fontes online em formatos co
 ```
 mangaink-agent/
 ├── apps/
-│   ├── frontend/          ← React 19 + Vite + TanStack Router
+│   ├── frontend/              ← React 19 + Vite + TanStack Router
 │   │   ├── src/
-│   │   │   ├── components/    (ui/, comic/, auth/)
-│   │   │   ├── hooks/
-│   │   │   ├── integrations/
-│   │   │   ├── lib/
-│   │   │   ├── routes/        (TanStack file-based routing)
-│   │   │   ├── stories/
-│   │   │   ├── styles.css
-│   │   │   └── types/
+│   │   │   ├── components/
+│   │   │   │   ├── ui/            (shadcn/ui — ~40 primitives Radix)
+│   │   │   │   ├── comic/         (ComicPanel, SpeechBubble, StepIndicator, etc.)
+│   │   │   │   ├── auth/          (RequireAuth)
+│   │   │   │   ├── dashboard/     (StatsRow, ActivityFeed, LastReadCard, etc.)
+│   │   │   │   ├── biblioteca/    (CollectionManager, FilterBar, SearchBar, etc.)
+│   │   │   │   ├── wizard/        (ComparisonSlider)
+│   │   │   │   ├── agendamentos/  (Timeline)
+│   │   │   │   ├── perfil/        (Achievements, MonthlyChart, TopReadings)
+│   │   │   │   ├── reader/        (ReaderToolbar)
+│   │   │   │   ├── fontes/        (SuggestSourceForm)
+│   │   │   │   ├── theme/         (ThemeSelector, ComicIntensitySlider)
+│   │   │   │   ├── notifications/ (ComicToast, NotificationBell)
+│   │   │   │   └── onboarding/    (OnboardingOverlay)
+│   │   │   ├── hooks/            (useAuth, useBiblioteca, useConversion, etc.)
+│   │   │   ├── integrations/     (API client, TanStack Query mutations)
+│   │   │   ├── lib/              (utils, mock-data, kindle-presets, etc.)
+│   │   │   ├── routes/           (TanStack file-based routing)
+│   │   │   ├── stories/          (Storybook)
+│   │   │   ├── types/            (tipagens globais)
+│   │   │   ├── styles.css        (tema Tailwind v4 @theme inline)
+│   │   │   ├── main.tsx
+│   │   │   └── router.tsx        (TanStack Router config)
+│   │   ├── .storybook/
+│   │   ├── .tanstack/            (cache do router — não editar)
 │   │   ├── index.html
 │   │   ├── vite.config.ts
 │   │   ├── tsconfig.json
-│   │   └── package.json       (@mangaink/frontend)
-│   └── backend/           ← Fastify + Prisma + PostgreSQL
+│   │   └── package.json          (@mangaink/frontend)
+│   │
+│   ├── backend/                  ← Fastify + Prisma + PostgreSQL
+│   │   ├── src/
+│   │   │   ├── modules/
+│   │   │   │   ├── auth/         (controllers, services, use-cases, dtos, tests)
+│   │   │   │   ├── user/         (entities, repositories)
+│   │   │   │   └── health/       (controller + routes)
+│   │   │   └── shared/
+│   │   │       ├── config/       (env.ts — Zod env vars)
+│   │   │       ├── database/     (prisma.ts — singleton)
+│   │   │       ├── middlewares/  (verify-jwt.ts)
+│   │   │       └── server.ts     (plugins, CORS, JWT, Swagger)
+│   │   ├── prisma/
+│   │   │   └── migrations/
+│   │   ├── package.json          (@mangaink/backend)
+│   │   └── tsconfig.json
+│   │
+│   └── shared/                   ← Pacote compartilhado para schemas e tipos
 │       ├── src/
-│       │   ├── modules/       (auth/, health/, user/)
-│       │   ├── shared/        (config, server, etc.)
-│       │   └── app.ts
-│       ├── prisma/
-│       ├── package.json       (@mangaink/backend)
+│       │   ├── auth.ts           (schemas Zod: login, register, update-me)
+│       │   ├── user.ts           (tipos de usuário — a criar)
+│       │   └── index.ts          (re-export público)
+│       ├── package.json          (@mangaink/shared)
 │       └── tsconfig.json
+│
 ├── docs/
 │   ├── modelagem.md
 │   ├── sprints.md
 │   └── openspec/
-├── package.json           ← scripts orquestradores do monorepo
+│       ├── archive/auth/         (design, spec, proposal, tasks)
+│       └── changes/auth/         (config de alterações)
+│
+├── package.json                  ← scripts orquestradores do monorepo
 ├── pnpm-workspace.yaml
 ├── docker-compose.yml
 ├── .gitignore
@@ -67,6 +104,13 @@ mangaink-agent/
 - **@fastify/swagger** + **@fastify/swagger-ui** (documentação da API)
 - **Zod** (validação com `fastify-type-provider-zod`)
 - **bcryptjs** (hash de senhas)
+- **Arquitetura modular:** controllers → use-cases → repositories → entities
+- **Testes:** Vitest unitários + E2E com in-memory + mock repositories
+
+### Shared (`apps/shared`)
+- **Zod** schemas compartilhados entre frontend e backend
+- Tipos `PublicUser`, `AuthResponse`, `LoginDTO`, `RegisterDTO`, `UpdateMeDTO`
+- Validacões centralizadas: login, registro, atualizacão de perfil
 
 ---
 
@@ -120,11 +164,16 @@ File-based routing em `apps/frontend/src/routes/`:
 | `src/routes/__root.tsx`           | Root layout (envolve tudo com `AuthProvider`)      |
 | `src/routes/index.tsx`            | `/` — Dashboard (requer auth)                      |
 | `src/routes/login.tsx`            | `/login` — Página de login                         |
+| `src/routes/cadastro.tsx`         | `/cadastro` — Registro de novo usuário             |
 | `src/routes/wizard.tsx`           | `/wizard` — Wizard de conversão (5 passos)         |
-| `src/routes/biblioteca.tsx`       | `/biblioteca` — Biblioteca de mangás convertidos   |
-| `src/routes/biblioteca.$slug.tsx` | `/biblioteca/:slug` — Detalhe da biblioteca        |
+| `src/routes/biblioteca.tsx`       | `/biblioteca` — Layout raiz da biblioteca          |
+| `src/routes/biblioteca.index.tsx` | `/biblioteca` — Listagem de mangás convertidos     |
+| `src/routes/biblioteca.$slug.tsx` | `/biblioteca/:slug` — Detalhe da série             |
+| `src/routes/biblioteca.converter.$jobId.tsx` | `/biblioteca/converter/:jobId` — Job de conversão       |
 | `src/routes/agendamentos.tsx`     | `/agendamentos` — Assinaturas agendadas            |
+| `src/routes/fontes.tsx`           | `/fontes` — Sugestão de novas fontes               |
 | `src/routes/configuracoes.tsx`    | `/configuracoes` — Configurações                   |
+| `src/routes/perfil.tsx`           | `/perfil` — Perfil do usuário                      |
 
 > **Importante:** O arquivo `src/routeTree.gen.ts` é gerado automaticamente. Não editar manualmente. Rode `pnpm dev` para regenerar ao criar novas rotas.
 
@@ -152,18 +201,47 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 
 ### Componentes do Frontend
 
-- `src/components/ui/` — shadcn/ui (Radix + Tailwind)
-- `src/components/comic/` — UI temática: `ComicPanel`, `ComicHeader`, `SpeechBubble`, `OnomatopoeiaBadge`, `StepIndicator`
-- `src/components/auth/` — guards de autenticação
+- `src/components/ui/` — shadcn/ui (~40 primitivas Radix): button, card, dialog, form, table, tabs, sidebar, chart, carousel, drawer, etc.
+- `src/components/comic/` — UI temática: `ComicPanel`, `ComicHeader`, `SpeechBubble`, `OnomatopoeiaBadge`, `StepIndicator`, `AnimatedCounter`, `IntensityControl`, `MockPage`, `ThemeToggle`
+- `src/components/auth/` — `RequireAuth` (guards de autenticação)
+- `src/components/dashboard/` — `StatsRow`, `ActivityFeed`, `LastReadCard`, `NextScheduleBanner`, `NextScheduleCard`, `AnimatedCounter`
+- `src/components/biblioteca/` — `CollectionManager`, `FilterBar`, `SearchBar`, `SeriesActionsMenu`, `DeleteConfirmDialog`, `ReconvertDialog`, `RenameSeriesDialog`
+- `src/components/wizard/` — `ComparisonSlider`
+- `src/components/agendamentos/` — `Timeline`
+- `src/components/perfil/` — `Achievements`, `MonthlyChart`, `TopReadings`
+- `src/components/reader/` — `ReaderToolbar`
+- `src/components/fontes/` — `SuggestSourceForm`
+- `src/components/theme/` — `ThemeSelector`, `ComicIntensitySlider`, `ThemeToggle`
+- `src/components/notifications/` — `ComicToast`, `NotificationBell`
+- `src/components/onboarding/` — `OnboardingOverlay`
 
 ### Backend
 
 - `src/app.ts` — entry point, inicia o servidor Fastify
 - `src/shared/server.ts` — criação e configuração do servidor (plugins, CORS, JWT, Swagger)
 - `src/shared/config/env.ts` — parse e validação das env vars (Zod)
-- `src/modules/auth/` — rotas e handlers de autenticação
-- `src/modules/user/` — rotas de usuário
-- `src/modules/health/` — health check
+- `src/shared/database/prisma.ts` — singleton do Prisma Client
+- `src/shared/middlewares/verify-jwt.ts` — middleware de autenticação JWT
+
+### Módulos do Backend
+
+Cada módulo segue uma **arquitetura em camadas**:
+
+- **`auth/`** — Autenticação e gestão de usuário
+  - `auth.routes.ts` — Definição das rotas
+  - `controllers/` — `register.controller.ts`, `login.controller.ts`, `me.controller.ts`, `update-me.controller.ts`
+  - `use-cases/` — `register.use-case.ts`, `login.use-case.ts`, `get-me.use-case.ts`, `update-me.use-case.ts`
+  - `services/` — `password-hasher.ts`, `token.service.ts`
+  - `errors/` — `auth.errors.ts`
+  - `dtos/` — `login.dto.ts`, `register.dto.ts`, `update-me.dto.ts`
+  - `tests/` — Testes unitários (Vitest) + E2E com in-memory/mock repositories
+
+- **`user/`** — Entidade e repositório de usuário
+  - `entities/user.entity.ts` — Entidade de domínio
+  - `repositories/` — `user.repository.ts` (interface), `prisma-user.repository.ts` (implementação Prisma)
+
+- **`health/`** — Health check da API
+  - `health.controller.ts`, `health.routes.ts`
 
 ---
 
