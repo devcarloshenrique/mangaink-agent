@@ -1,0 +1,394 @@
+{
+  "sourceId": "src-jujutsu-kaisen-modulo-95c0b262",
+  "status": "ready",
+  "provider": {
+    "slug": "mangalivre",
+    "name": "Manga Livre",
+    "engine": "cheerio"
+  },
+  "source": {
+    "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/",
+    "language": null
+  },
+  "metadata": {
+    "title": "Jujutsu Kaisen Modulo",
+    "author": "AKUTAMI Gege",
+    "description": "Ler Mangá Jujutsu Kaisen Modulo traduzido em português online grátis. Manga Livre leia em pt-br no celular ou navegador.",
+    "status": "ongoing",
+    "genres": [
+      "Ação",
+      "Adulto",
+      "+18",
+      "Aventura",
+      "Drama",
+      "Fantasia",
+      "Historico",
+      "Romance",
+      "Manhwa",
+      "Manhuas",
+      "Webtoons",
+      "Novels",
+      "Mangá",
+      "Shounen",
+      "Sobrenatural",
+      "+18                                                                                                    \n                                                        (25)",
+      "Ação                                                                                                    \n                                                        (69)",
+      "Adulto                                                                                                    \n                                                        (28)",
+      "Artes Marciais                                                                                                    \n                                                        (14)",
+      "Aventura                                                                                                    \n                                                        (51)",
+      "Comédia                                                                                                    \n                                                        (70)",
+      "Demônios                                                                                                    \n                                                        (8)",
+      "Doujinshi                                                                                                    \n                                                        (1)",
+      "Drama                                                                                                    \n                                                        (63)",
+      "Ecchi                                                                                                    \n                                                        (12)",
+      "Escolar                                                                                                    \n                                                        (28)",
+      "Esportes                                                                                                    \n                                                        (9)",
+      "Fantasia                                                                                                    \n                                                        (66)",
+      "Harem                                                                                                    \n                                                        (25)",
+      "Historico                                                                                                    \n                                                        (5)",
+      "Isekai                                                                                                    \n                                                        (20)",
+      "Light Novels                                                                                                    \n                                                        (3)",
+      "Mangá                                                                                                    \n                                                        (88)",
+      "Manhuas                                                                                                    \n                                                        (5)",
+      "Manhwa                                                                                                    \n                                                        (16)",
+      "Psicológico                                                                                                    \n                                                        (6)",
+      "Reencarnação                                                                                                    \n                                                        (10)",
+      "Romance                                                                                                    \n                                                        (55)",
+      "Seinen                                                                                                    \n                                                        (24)",
+      "Shoujo                                                                                                    \n                                                        (4)",
+      "Shounen                                                                                                    \n                                                        (57)",
+      "Slice of Life                                                                                                    \n                                                        (34)",
+      "Sobrenatural                                                                                                    \n                                                        (33)",
+      "Suspense                                                                                                    \n                                                        (2)",
+      "Tragédia                                                                                                    \n                                                        (3)",
+      "Vampiros                                                                                                    \n                                                        (1)",
+      "Webtoon                                                                                                    \n                                                        (2)",
+      "Yuri                                                                                                    \n                                                        (2)"
+    ]
+  },
+  "chapters": [
+    {
+      "id": "chap_0001",
+      "number": "01",
+      "title": "Ler primeiro capítulo",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-01/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0002",
+      "number": "02",
+      "title": "Capitulo 02",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-02/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0003",
+      "number": "03",
+      "title": "Capitulo 03",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-03/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0004",
+      "number": "04",
+      "title": "Capitulo 04",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-04/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0005",
+      "number": "05",
+      "title": "Capitulo 05",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-05/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0006",
+      "number": "06",
+      "title": "Capitulo 06",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-06/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0007",
+      "number": "07",
+      "title": "Capitulo 07",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-07/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0008",
+      "number": "08",
+      "title": "Capitulo 08",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-08/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0009",
+      "number": "09",
+      "title": "Capitulo 09",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-09/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0010",
+      "number": "10",
+      "title": "Capitulo 10",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-10/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0011",
+      "number": "11",
+      "title": "Capitulo 11",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-11/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0012",
+      "number": "12",
+      "title": "Capitulo 12",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-12/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0013",
+      "number": "13",
+      "title": "Capitulo 13",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-13/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0014",
+      "number": "14",
+      "title": "Capitulo 14",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-14/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0015",
+      "number": "15",
+      "title": "Capitulo 15",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-15/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0016",
+      "number": "16",
+      "title": "Capitulo 16",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-16/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0017",
+      "number": "17",
+      "title": "Capitulo 17",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-17/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0018",
+      "number": "18",
+      "title": "Capitulo 18",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-18/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0019",
+      "number": "19",
+      "title": "Capitulo 19",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-19/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0020",
+      "number": "20",
+      "title": "Capitulo 20",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-20/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0021",
+      "number": "21",
+      "title": "Capitulo 21",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-21/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0022",
+      "number": "22",
+      "title": "Capitulo 22",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-22/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0023",
+      "number": "23",
+      "title": "Capitulo 23",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-23/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0024",
+      "number": "24",
+      "title": "Capitulo 24",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-24/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0025",
+      "number": "25",
+      "title": "Ler último capítulo",
+      "url": "https://mangalivre.to/manga/jujutsu-kaisen-modulo/capitulo-25/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0035",
+      "number": "35",
+      "title": "Capitulo 35",
+      "url": "https://mangalivre.to/manga/colorist-ptbr/capitulo-35/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0036",
+      "number": "36",
+      "title": "Capitulo 36",
+      "url": "https://mangalivre.to/manga/colorist-ptbr/capitulo-36/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0037",
+      "number": "37",
+      "title": "Capitulo 37",
+      "url": "https://mangalivre.to/manga/reincarnation-coliseum-the-weakest-skill-conquers-the-strongest-women-and-creates-a-harem/capitulo-37/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0067",
+      "number": "67",
+      "title": "Capitulo 67",
+      "url": "https://mangalivre.to/manga/solo-leveling-ragnarok/capitulo-67/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0068",
+      "number": "68",
+      "title": "Capitulo 68",
+      "url": "https://mangalivre.to/manga/solo-leveling-ragnarok/capitulo-68/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0106",
+      "number": "106",
+      "title": "Capitulo 106",
+      "url": "https://mangalivre.to/manga/absolute-regression-ptbr/capitulo-106/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0107",
+      "number": "107",
+      "title": "Capitulo 107",
+      "url": "https://mangalivre.to/manga/absolute-regression-ptbr/capitulo-107/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0168",
+      "number": "168",
+      "title": "Capitulo 168",
+      "url": "https://mangalivre.to/manga/revenge-of-the-baskerville-bloodhound/capitulo-168/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0169",
+      "number": "169",
+      "title": "Capitulo 169",
+      "url": "https://mangalivre.to/manga/revenge-of-the-baskerville-bloodhound/capitulo-169/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0180",
+      "number": "180",
+      "title": "Capitulo 180",
+      "url": "https://mangalivre.to/manga/mato-seihei-no-slave-ptbr/capitulo-180/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0181",
+      "number": "181",
+      "title": "Capitulo 181",
+      "url": "https://mangalivre.to/manga/mato-seihei-no-slave-ptbr/capitulo-181/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0316",
+      "number": "316",
+      "title": "Capitulo 316",
+      "url": "https://mangalivre.to/manga/nano-machine-ptbr/capitulo-316/",
+      "pages": null,
+      "volume": null
+    },
+    {
+      "id": "chap_0317",
+      "number": "317",
+      "title": "Capitulo 317",
+      "url": "https://mangalivre.to/manga/nano-machine-ptbr/capitulo-317/",
+      "pages": null,
+      "volume": null
+    }
+  ],
+  "covers": [
+    {
+      "id": "cover_001",
+      "type": "original",
+      "label": "Original",
+      "imageUrl": "https://mangalivre.to/wp-content/uploads/2025/11/Jujutsu-Kaisen-Modulo-193x278.webp"
+    }
+  ],
+  "statistics": {
+    "chapters": 38,
+    "covers": 1
+  },
+  "cache": {
+    "createdAt": "2026-07-08T22:03:54.287Z",
+    "updatedAt": "2026-07-08T22:03:54.287Z",
+    "lastAccessAt": "2026-07-08T22:03:54.287Z",
+    "cacheTtlHours": 24,
+    "retentionDays": 30
+  }
+}
