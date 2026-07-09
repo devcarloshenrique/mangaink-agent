@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:scraping": "vitest run src/modules/scraping/tests/"
   },
   "type": "commonjs",
   "dependencies": {
