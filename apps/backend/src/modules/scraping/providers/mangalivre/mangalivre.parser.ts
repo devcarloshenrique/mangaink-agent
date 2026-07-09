@@ -44,6 +44,32 @@ function detectStatus($: CheerioAPI): string | null {
   return null
 }
 
+function getMangaSlug(canonicalUrl: string): string {
+  try {
+    return new URL(canonicalUrl).pathname.match(/\/manga\/([^/]+)/)?.[1] ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function extractChapterNumber(
+  href: string,
+  base: string,
+  mangaSlug: string,
+): string | null {
+  const url = absoluteUrl(href, base)
+  if (!url) return null
+
+  try {
+    const { pathname } = new URL(url)
+    const match = pathname.match(/^\/manga\/([^/]+)\/capitulo-(\d+(?:[._-]\d+)?)/)
+    if (!match || match[1] !== mangaSlug) return null
+    return match[2].replace(/[._-]/, '.')
+  } catch {
+    return null
+  }
+}
+
 export function parseMetadata($: CheerioAPI, canonicalUrl: string): MangaMetadata {
   const rawTitle =
     $(SEL.title).first().text().trim() ||
@@ -61,9 +87,10 @@ export function parseMetadata($: CheerioAPI, canonicalUrl: string): MangaMetadat
   const status = detectStatus($)
 
   const genres: string[] = []
-  const genreSel = $(SEL.genres)
+  const scopedGenres = $(SEL.genres)
+  const genreSel = scopedGenres.length > 0 ? scopedGenres : $(SEL.fallbackGenres)
   genreSel.each((_, el) => {
-    const genre = $( el).text().trim()
+    const genre = $(el).text().trim()
     if (genre && !genres.includes(genre)) genres.push(genre)
   })
 
@@ -91,13 +118,14 @@ export function parseCover($: CheerioAPI, base: string): Cover[] {
   ]
 }
 
-export function parseChapters($: CheerioAPI, base: string): Chapter[] {
+export function parseChapters($: CheerioAPI, base: string, canonicalUrl: string): Chapter[] {
+  const mangaSlug = getMangaSlug(canonicalUrl)
   const seen = new Set<string>()
   const chapters: Chapter[] = []
 
   $(SEL.chapters).each((_, el) => {
     const href = $(el).attr('href')
-    const chapterNumber = href?.match(/capitulo-([\d.]+)/)?.[1]
+    const chapterNumber = href ? extractChapterNumber(href, base, mangaSlug) : null
     if (!href || !chapterNumber || seen.has(chapterNumber)) return
 
     seen.add(chapterNumber)

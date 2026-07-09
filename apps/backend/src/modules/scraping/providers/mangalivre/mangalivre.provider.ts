@@ -29,8 +29,8 @@ export class MangalivreProvider implements ScrapingProvider {
   readonly slug = 'mangalivre'
   readonly name = 'Manga Livre'
   readonly engine: ProviderEngine = 'cheerio'
-  readonly urlPattern = /mangalivre\.(to|net)\/manga\//
-  readonly allowedDomains = ['mangalivre.to', 'mangalivre.net']
+  readonly urlPattern = /mangalivre\.to\/manga\//
+  readonly allowedDomains = ['mangalivre.to']
 
   supports(url: string): boolean {
     try {
@@ -59,7 +59,7 @@ export class MangalivreProvider implements ScrapingProvider {
     const sourceId = createSourceId(this.slug, canonicalUrl)
     const metadata = parseMetadata($, canonicalUrl)
     const covers = parseCover($, BASE_URL)
-    const chapters = parseChapters($, BASE_URL)
+    const chapters = parseChapters($, BASE_URL, canonicalUrl)
     const source = parseSourceInfo(canonicalUrl)
     const provider = this.getInfo()
 

@@ -50,14 +50,20 @@ mangaink-agent/
 │   │   │   ├── modules/
 │   │   │   │   ├── auth/         (controllers, services, use-cases, dtos, tests)
 │   │   │   │   ├── user/         (entities, repositories)
-│   │   │   │   └── health/       (controller + routes)
+│   │   │   │   ├── health/       (controller + routes)
+│   │   │   │   └── scraping/     (providers, services, workers, use-cases, tests)
 │   │   │   └── shared/
 │   │   │       ├── config/       (env.ts — Zod env vars)
 │   │   │       ├── database/     (prisma.ts — singleton)
+│   │   │       ├── http/         (http-client.ts — axios + retry)
+│   │   │       ├── redis/        (redis.ts singleton, bullmq.ts queue factory)
 │   │   │       ├── middlewares/  (verify-jwt.ts)
+│   │   │       ├── utils/        (filesystem, hash, id-generator, url-normalizer)
 │   │   │       └── server.ts     (plugins, CORS, JWT, Swagger)
 │   │   ├── prisma/
 │   │   │   └── migrations/
+│   │   ├── storage/              (cache de scraping no filesystem)
+│   │   │   └── sources/          (sourceId/ → metadata.json + covers/ + chapters/)
 │   │   ├── package.json          (@mangaink/backend)
 │   │   └── tsconfig.json
 │   │
@@ -72,10 +78,15 @@ mangaink-agent/
 ├── docs/
 │   ├── modelagem.md
 │   ├── sprints.md
+│   ├── source_inspect_spec.md    (especificação técnica do scraping)
+│   ├── fluxo-conversao-frontend.md
+│   ├── fluxo-conversao-custom.md
 │   └── openspec/
 │       ├── archive/auth/         (design, spec, proposal, tasks)
+│       ├── archive/scraping/     (design, spec, tasks)
 │       └── changes/auth/         (config de alterações)
 │
+├── docker-compose.yml            (PostgreSQL + Redis)
 ├── package.json                  ← scripts orquestradores do monorepo
 ├── pnpm-workspace.yaml
 ├── docker-compose.yml
@@ -104,6 +115,10 @@ mangaink-agent/
 - **@fastify/swagger** + **@fastify/swagger-ui** (documentação da API)
 - **Zod** (validação com `fastify-type-provider-zod`)
 - **bcryptjs** (hash de senhas)
+- **cheerio** (parsing HTML para scraping)
+- **axios** + **axios-retry** (HTTP client com retry automático)
+- **ioredis** (Redis — locks distribuídos e Pub/Sub)
+- **BullMQ** (filas de processamento assíncrono)
 - **Arquitetura modular:** controllers → use-cases → repositories → entities
 - **Testes:** Vitest unitários + E2E com in-memory + mock repositories
 
@@ -130,6 +145,8 @@ pnpm db:migrate    # Executa migrations do Prisma
 pnpm db:push       # Push do schema sem migration
 pnpm db:studio     # Prisma Studio (GUI do banco)
 pnpm storybook     # Storybook em http://localhost:6006
+pnpm docker:up     # docker compose up -d (PostgreSQL + Redis)
+pnpm docker:down   # docker compose down
 ```
 
 ### Dentro de `apps/frontend`
@@ -179,13 +196,56 @@ File-based routing em `apps/frontend/src/routes/`:
 
 ---
 
-## Autenticação
+## API Endpoints
 
-Autenticação JWT real via backend Fastify:
+### Autenticação
+
 - `POST /auth/register` — Registro de novo usuário
 - `POST /auth/login` — Login, retorna `{ token }`
 - `GET /users/me` — Perfil do usuário autenticado (requer Bearer token)
+- `PATCH /users/me` — Atualiza perfil do usuário
 
+### Scraping de Fontes
+
+- `POST /api/conversions/source/inspect` — Dispara inspeção assíncrona de uma URL
+  - Body: `{ url: string }`, Query: `?refresh=true` (opcional, força novo scraping)
+  - Retorna: `{ sourceId, status: "processing" | "ready" }`
+  - `200` se cache válido, `202` se job enfileirado
+- `GET /api/conversions/source/inspect/:sourceId` — Retorna metadados completos da obra
+  - Response: `{ sourceId, status, provider, source, metadata, chapters, covers, statistics }`
+- `GET /api/conversions/source/inspect/:sourceId/events` — SSE com progresso do scraping
+  - Eventos: `progress` (stage, message, progress%), `completed`, `failed`
+- `GET /api/conversions/source/providers` — Lista providers disponíveis
+
+### Fluxo de Inspeção
+
+O scraping é **assíncrono**: o POST enfileira um job BullMQ e retorna imediatamente.
+O frontend acompanha o progresso via SSE e busca o resultado final via GET.
+
+```text
+POST /inspect → cache hit? → 200 { ready }
+              → cache miss? → enfileira job → 202 { processing }
+                              → SSE /events → completed → GET /inspect/:id
+```
+
+---
+
+## Variáveis de Ambiente
+
+| Variável       | Descrição                          | Padrão                    |
+|----------------|------------------------------------|---------------------------|
+| `NODE_ENV`     | Ambiente (dev/test/production)     | `dev`                     |
+| `PORT`         | Porta do servidor Fastify          | `3333`                    |
+| `JWT_SECRET`   | Chave secreta JWT                  | (obrigatório)             |
+| `DATABASE_URL` | URL de conexão PostgreSQL          | (obrigatório)             |
+| `REDIS_URL`    | URL de conexão Redis               | `redis://localhost:6379`  |
+| `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
+
+---
+
+## Autenticação
+
+Autenticação JWT real via backend Fastify, protegida pelo middleware `verify-jwt.ts`.
 O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O token JWT é armazenado e injetado via `useAuth` hook.
 
 ---
@@ -219,9 +279,16 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 
 - `src/app.ts` — entry point, inicia o servidor Fastify
 - `src/shared/server.ts` — criação e configuração do servidor (plugins, CORS, JWT, Swagger)
-- `src/shared/config/env.ts` — parse e validação das env vars (Zod)
+- `src/shared/config/env.ts` — parse e validação das env vars (Zod) — inclui `REDIS_URL`, `STORAGE_PATH`
 - `src/shared/database/prisma.ts` — singleton do Prisma Client
+- `src/shared/http/http-client.ts` — cliente HTTP com axios + retry automático e backoff exponencial
+- `src/shared/redis/redis.ts` — singleton Redis (ioredis) para locks e Pub/Sub
+- `src/shared/redis/bullmq.ts` — factory de filas BullMQ com configurações padrão
 - `src/shared/middlewares/verify-jwt.ts` — middleware de autenticação JWT
+- `src/shared/utils/filesystem.ts` — utilitários de I/O: `mkdirp()`, `writeJson()`, `readJson()`, `pathExists()`
+- `src/shared/utils/hash.ts` — `sha256()` para geração de IDs determinísticos
+- `src/shared/utils/id-generator.ts` — `createSourceId()`, `createChapterId()`, `createCoverId()`
+- `src/shared/utils/url-normalizer.ts` — `normalizeUrl()`: remove tracking params, fragmentos, garante barra final
 
 ### Módulos do Backend
 
@@ -242,6 +309,19 @@ Cada módulo segue uma **arquitetura em camadas**:
 
 - **`health/`** — Health check da API
   - `health.controller.ts`, `health.routes.ts`
+
+- **`scraping/`** — Scraping de fontes online (mangás)
+  - `scraping.routes.ts` — 4 endpoints: POST /inspect, GET /inspect/:id, GET /inspect/:id/events (SSE), GET /providers
+  - `controllers/` — `inspect-source.controller.ts`, `preview-source.controller.ts`, `source-events.controller.ts`, `providers.controller.ts`
+  - `use-cases/` — `inspect-source.use-case.ts` (fluxo: normalizar URL → resolver provider → gerar sourceId → cache check → lock → enfileirar), `get-source.use-case.ts`
+  - `services/` — `cache.service.ts` (TTL de 24h), `inspect-queue.service.ts` (BullMQ), `redis-lock.service.ts` (lock distribuído via Redis SET NX EX), `redis-pubsub.service.ts` (Pub/Sub para SSE), `source-events.service.ts` (bridge Redis → SSE)
+  - `providers/` — `provider.interface.ts` (interface `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL), `mangalivre/` (implementação Cheerio: parser, provider, selectors)
+  - `repositories/` — `source-cache.repository.ts` (interface), `filesystem-source.repository.ts` (implementação filesystem com `storage/sources/{sourceId}/metadata.json`)
+  - `workers/` — `inspect-source.worker.ts` (BullMQ worker: scraping → Pub/Sub progress → salva metadata.json)
+  - `types/` — `source.types.ts` (SourceInspectResponse, Chapter, Cover, MangaMetadata), `metadata.types.ts` (MetadataCache, SourceMetadataFile), `provider.types.ts` (ProviderEngine, ProviderInfo)
+  - `errors/` — `scraping.errors.ts` (ProviderNotFoundError, InvalidUrlError, ScrapingNetworkError, ScrapingParseError, SourceNotFoundError)
+  - `dtos/` — `inspect-source.dto.ts` (InspectSourceBody, InspectSourceQuery), `preview-source.dto.ts` (SourceParams)
+  - `tests/` — Testes unitários (Vitest) — `mangalivre.parser.test.ts`
 
 ---
 

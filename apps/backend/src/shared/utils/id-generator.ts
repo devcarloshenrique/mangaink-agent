@@ -37,8 +37,8 @@ export function createSourceId(provider: string, canonicalUrl: string): string {
  */
 export function createChapterId(number: string | number): string {
   const normalized = String(number)
-    .replace(/[^\d.]/g, '')
-    .replace(/\./, '_')
+    .replace(/[^\d._-]/g, '')
+    .replace(/[._-]/, '_')
 
   const [intPart, decPart] = normalized.split('_')
   const padded = (intPart ?? '0').padStart(4, '0')
