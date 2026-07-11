@@ -33,3 +33,5 @@ storybook-static/
 
 # Prisma
 apps/backend/prisma/migrations/
+graphify-out
+apps/backend/storage
