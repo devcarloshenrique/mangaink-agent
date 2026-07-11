@@ -127,6 +127,10 @@ const worker = new Worker<ConversionJobData>(
     // ── Fase 2.5: Aplicar capa ──────────────────────────────────────
     await applyCover(repository, jobId, sourceId, cover, tempInputDir)
 
+    // ── Fase 2.6: Escrever metadados (ComicInfo.xml) ────────────────
+    const sourceMeta = await readSourceMetadata(sourceId)
+    await writeComicInfoXml(repository, jobId, tempInputDir, metadata, sourceMeta)
+
     // ── Fase 3: Conversão KCC ───────────────────────────────────────
     await repository.update(jobId, {
       status: 'converting',
@@ -135,9 +139,10 @@ const worker = new Worker<ConversionJobData>(
     await sync()
     await repository.appendLog(jobId, `KCC iniciado — device=${output.deviceId}, format=${output.format}`)
 
+    const kccOptions = { ...options, metadataTitle: 'metadataOnly' as const }
     const kccResult = await kccRunner.run(
       jobId,
-      options,
+      kccOptions,
       output.deviceId,
       output.format,
       tempInputDir,
@@ -250,6 +255,79 @@ worker.on('failed', async (job, error) => {
 worker.on('error', (error) => {
   console.error('[ConversionWorker] Worker error:', error.message)
 })
+
+/**
+ * Lê os metadados originais do scraping (autor, descrição, gêneros)
+ * para inclusão no ComicInfo.xml.
+ */
+async function readSourceMetadata(sourceId: string): Promise<{
+  author: string | null
+  description: string | null
+  genres: string[]
+}> {
+  const { readJson } = await import('../../../shared/utils/filesystem')
+  const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
+  const source = await readJson<{
+    metadata?: { author?: string; description?: string; genres?: string[] }
+  }>(sourcePath)
+  if (!source?.metadata) return { author: null, description: null, genres: [] }
+  return {
+    author: source.metadata.author ?? null,
+    description: source.metadata.description ?? null,
+    genres: source.metadata.genres ?? [],
+  }
+}
+
+/**
+ * Escreve ComicInfo.xml no diretório de input do KCC.
+ *
+ * O KCC lê este arquivo para extrair título, autor e outros metadados
+ * que serão embedados no EPUB final. Sem ele, o KCC infere o título do
+ * nome do diretório (ex: "input") e usa "KCC" como autor padrão.
+ */
+async function writeComicInfoXml(
+  repository: FilesystemJobRepository,
+  jobId: string,
+  inputDir: string,
+  metadata: { title: string; author?: string },
+  sourceMeta: { author: string | null; description: string | null; genres: string[] },
+): Promise<void> {
+  try {
+    const author = metadata.author || sourceMeta.author || ''
+    const description = sourceMeta.description || ''
+    const genres = sourceMeta.genres || []
+
+    const escapeXml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+
+    const genre = genres.length > 0 ? `<Genre>${escapeXml(genres.join(', '))}</Genre>` : ''
+
+    const xml = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+      `  <Title>${escapeXml(metadata.title)}</Title>`,
+      `  <Series>${escapeXml(metadata.title)}</Series>`,
+      author ? `  <Writer>${escapeXml(author)}</Writer>` : '',
+      description ? `  <Summary>${escapeXml(description)}</Summary>` : '',
+      genre ? `  ${genre}` : '',
+      '  <Manga>YesAndRightToLeft</Manga>',
+      '</ComicInfo>',
+      '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    await writeFile(join(inputDir, 'ComicInfo.xml'), xml, 'utf-8')
+    await repository.appendLog(jobId, `ComicInfo.xml escrito com título="${metadata.title}", autor="${author}"`)
+  } catch (error) {
+    await repository.appendLog(jobId, `Erro ao escrever ComicInfo.xml (continuando sem): ${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
 
 /**
  * Busca URLs das imagens de um capítulo usando o provider correto.
