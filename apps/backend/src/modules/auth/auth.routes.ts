@@ -25,6 +25,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         tags: ['Auth'],
         summary: 'Cadastra um novo usuário',
+        description: 'Cria uma nova conta com username, e-mail e senha. Retorna o token JWT e dados do usuário.',
         body: registerBodySchema,
         response: {
           201: z.object({ user: publicUserSchema, token: z.string() }),
@@ -43,6 +44,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         tags: ['Auth'],
         summary: 'Login com e-mail e senha',
+        description: 'Autentica o usuário e retorna um token JWT para uso nos endpoints protegidos.',
         body: loginSchema,
         response: {
           200: z.object({ user: publicUserSchema, token: z.string() }),
@@ -59,7 +61,8 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Retorna dados do usuário autenticado',
+        summary: 'Dados do usuário autenticado',
+        description: 'Retorna o perfil completo do usuário atualmente autenticado via token JWT.',
         security: [{ bearerAuth: [] }],
         response: {
           200: publicUserSchema,
@@ -77,7 +80,8 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Atualiza dados do usuário autenticado',
+        summary: 'Atualiza dados do usuário',
+        description: 'Atualiza username, e-mail, kindleEmail ou avatarUrl do usuário autenticado.',
         security: [{ bearerAuth: [] }],
         body: updateMeSchema,
         response: {

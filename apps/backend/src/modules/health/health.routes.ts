@@ -8,8 +8,8 @@ export async function healthRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Health'],
-        summary: 'Verifica o estado da API',
-        description: 'Retorna o status atual da API, uptime e versão.',
+        summary: 'Health check da API',
+        description: 'Retorna o status atual da API, timestamp, versão e uptime. Endpoint público.',
         response: {
           200: z.object({
             status: z.string(),

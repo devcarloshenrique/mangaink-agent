@@ -62,7 +62,11 @@ export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Scraping'],
-        summary: 'Inspeciona uma obra e retorna o sourceId e status',
+        summary: 'Inspeciona uma obra',
+        description:
+          'Dispara inspeção assíncrona (scraping) de uma URL de mangá. ' +
+          'Retorna 200 se o cache ainda é válido, ou 202 se um novo job de scraping foi enfileirado. ' +
+          'Acompanhe o progresso via GET /source/inspect/:sourceId/events (SSE).',
         body: inspectSourceBodySchema,
         querystring: inspectSourceQuerySchema,
         response: {
@@ -82,7 +86,10 @@ export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Scraping'],
-        summary: 'Stream SSE com eventos de progresso do scraping',
+        summary: 'Eventos SSE de progresso do scraping',
+        description:
+          'Stream Server-Sent Events com atualizações em tempo real do scraping. ' +
+          'Eventos: progress (stage, message, progress%), completed, failed.',
         params: sourceParamsSchema,
       },
     },
@@ -95,7 +102,10 @@ export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Scraping'],
-        summary: 'Retorna os metadados completos de uma source inspecionada',
+        summary: 'Metadados de uma source inspecionada',
+        description:
+          'Retorna metadados completos da obra: título, autor, sinopse, gêneros, ' +
+          'lista de capítulos, capas disponíveis e estatísticas.',
         params: sourceParamsSchema,
         response: {
           200: sourceResponseSchema,
@@ -112,7 +122,10 @@ export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ['Scraping'],
-        summary: 'Lista todos os providers disponíveis',
+        summary: 'Lista providers disponíveis',
+        description:
+          'Retorna todos os providers de scraping disponíveis, seus slugs, ' +
+          'motores (cheerio, api, playwright) e domínios suportados.',
         response: {
           200: z.object({
             providers: z.array(
