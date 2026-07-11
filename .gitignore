@@ -32,4 +32,7 @@ storybook-static/
 *.tsbuildinfo
 
 # Prisma
-apps/backend/prisma/migrations/
+apps/backend/storage
+apps/backend/storage/*
+.claude
+graphify-out
