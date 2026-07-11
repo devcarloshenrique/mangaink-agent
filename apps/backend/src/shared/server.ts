@@ -13,6 +13,10 @@ import {
 import { env } from './config/env'
 import { healthRoutes } from '../modules/health/health.routes'
 import { authRoutes } from '../modules/auth/auth.routes'
+import { scrapingRoutes } from '../modules/scraping/scraping.routes'
+import { conversionRoutes } from '../modules/conversion/conversion.routes'
+import '../modules/scraping/workers/inspect-source.worker'
+import '../modules/conversion/workers/conversion-job.worker'
 
 export async function createServer() {
   const app = Fastify({
@@ -41,7 +45,7 @@ export async function createServer() {
       info: {
         title: 'MangaInk Agent API',
         version: '1.0.0',
-        description: 'API do sistema MangaInk Agent — autenticação e gerenciamento de usuários.',
+        description: 'API do sistema MangaInk Agent — autenticação, scraping e conversão de obras.',
         contact: { name: 'MangaInk Agent' },
       },
       servers: [
@@ -53,6 +57,8 @@ export async function createServer() {
       tags: [
         { name: 'Health', description: 'Verificação do estado da API' },
         { name: 'Auth', description: 'Endpoints de autenticação' },
+        { name: 'Scraping', description: 'Inspeção de fontes e scraping de obras' },
+        { name: 'Conversion', description: 'Conversão de obras para formatos e-reader' },
       ],
       components: {
         securitySchemes: {
@@ -99,6 +105,8 @@ export async function createServer() {
   // ── Rotas ───────────────────────────────────────────────────────────────────
   await app.register(healthRoutes)
   await app.register(authRoutes)
+  await app.register(scrapingRoutes)
+  await app.register(conversionRoutes)
 
   return app
 }

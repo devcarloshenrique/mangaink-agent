@@ -1,0 +1,71 @@
+import type { DeviceProfile } from '../types/conversion.types'
+
+/**
+ * Catálogo de dispositivos suportados pelo KCC.
+ * Fonte: https://github.com/ciromattia/kcc/blob/master/KCC/__init__.py
+ */
+export const devices: DeviceProfile[] = [
+  // ── Kindle ──────────────────────────────────────────────────────
+  { id: 'K11', name: 'Kindle 11', resolution: '1072x1448' },
+  { id: 'K21', name: 'Kindle 4', resolution: '600x800' },
+  { id: 'K22', name: 'Kindle 5', resolution: '600x800' },
+  { id: 'K24', name: 'Kindle 7', resolution: '600x800' },
+  { id: 'K33', name: 'Kindle 8', resolution: '600x800' },
+  { id: 'K34', name: 'Kindle 10', resolution: '600x800' },
+  { id: 'K36', name: 'Kindle 12', resolution: '1072x1448' },
+  { id: 'KPW', name: 'Kindle Paperwhite 1', resolution: '758x1024' },
+  { id: 'KPW2', name: 'Kindle Paperwhite 2', resolution: '758x1024' },
+  { id: 'KPW3', name: 'Kindle Paperwhite 3', resolution: '1072x1448' },
+  { id: 'KPW4', name: 'Kindle Paperwhite 4', resolution: '1072x1448' },
+  { id: 'KPW5', name: 'Kindle Paperwhite 5/Signature Edition', resolution: '1236x1648' },
+  { id: 'KPW6', name: 'Kindle Paperwhite 6', resolution: '1236x1648' },
+  { id: 'KV', name: 'Kindle Voyage', resolution: '1072x1448' },
+  { id: 'KO', name: 'Kindle Oasis 1', resolution: '1080x1448' },
+  { id: 'KO2', name: 'Kindle Oasis 2/3', resolution: '1264x1680' },
+  { id: 'KS', name: 'Kindle Scribe', resolution: '1860x2480' },
+  { id: 'KT', name: 'Kindle Touch', resolution: '600x800' },
+  { id: 'KT2', name: 'Kindle Touch 2', resolution: '600x800' },
+  { id: 'KT3', name: 'Kindle Touch 3', resolution: '600x800' },
+  { id: 'KT4', name: 'Kindle Touch 4', resolution: '600x800' },
+  { id: 'KCC', name: 'Kindle Colorsoft', resolution: '1236x1648' },
+  { id: 'K1', name: 'Kindle 1', resolution: '600x800' },
+  { id: 'K2', name: 'Kindle 2', resolution: '600x800' },
+  { id: 'K3', name: 'Kindle Keyboard', resolution: '600x800' },
+  { id: 'K4NT', name: 'Kindle 4 NT', resolution: '600x800' },
+  { id: 'K5NT', name: 'Kindle 5 NT', resolution: '600x800' },
+
+  // ── Kobo ────────────────────────────────────────────────────────
+  { id: 'KA1', name: 'Kobo Aura One', resolution: '1080x1448' },
+  { id: 'KA2', name: 'Kobo Aura 2', resolution: '600x800' },
+  { id: 'KGD', name: 'Kobo Glo', resolution: '600x800' },
+  { id: 'KHD', name: 'Kobo Glo HD', resolution: '1072x1448' },
+  { id: 'KCL', name: 'Kobo Clara HD', resolution: '1072x1448' },
+  { id: 'KCL2', name: 'Kobo Clara 2E', resolution: '1072x1448' },
+  { id: 'KBO', name: 'Kobo Libra 2', resolution: '1264x1680' },
+  { id: 'KBO2', name: 'Kobo Libra Colour', resolution: '1264x1680' },
+  { id: 'KEL', name: 'Kobo Elipsa', resolution: '1404x1872' },
+  { id: 'KFM', name: 'Kobo Forma', resolution: '1080x1448' },
+  { id: 'KSS', name: 'Kobo Sage', resolution: '1440x1920' },
+  { id: 'KSM', name: 'Kobo Aura H2O', resolution: '1080x1448' },
+  { id: 'KSM2', name: 'Kobo Aura H2O 2', resolution: '1080x1448' },
+  { id: 'KTO', name: 'Kobo Touch', resolution: '600x800' },
+  { id: 'KMINI', name: 'Kobo Mini', resolution: '480x640' },
+  { id: 'KNW', name: 'Kobo Nia', resolution: '600x800' },
+  { id: 'KST', name: 'Kobo Stylus', resolution: '1404x1872' },
+
+  // ── Outros ──────────────────────────────────────────────────────
+  { id: 'N7', name: 'Nook 7"', resolution: '600x800' },
+  { id: 'N9', name: 'Nook 9"', resolution: '600x800' },
+  { id: 'RM2', name: 'reMarkable 2', resolution: '1404x1872' },
+  { id: 'RMP', name: 'reMarkable Paper Pro', resolution: '1620x2160' },
+  { id: 'P7', name: 'PocketBook 7"', resolution: '600x800' },
+  { id: 'PBH', name: 'PocketBook HD', resolution: '1080x1448' },
+  { id: 'PW', name: 'PocketBook 7.8"', resolution: '1080x1448' },
+  { id: 'G1', name: 'Generic 1 600x800', resolution: '600x800' },
+  { id: 'G2', name: 'Generic 2 758x1024', resolution: '758x1024' },
+  { id: 'G3', name: 'Generic 3 1072x1448', resolution: '1072x1448' },
+  { id: 'G4', name: 'Generic 4 1264x1680', resolution: '1264x1680' },
+  { id: 'G5', name: 'Generic 5 1404x1872', resolution: '1404x1872' },
+  { id: 'G6', name: 'Generic 6 1620x2160', resolution: '1620x2160' },
+  { id: 'G7', name: 'Generic 7 1860x2480', resolution: '1860x2480' },
+]
