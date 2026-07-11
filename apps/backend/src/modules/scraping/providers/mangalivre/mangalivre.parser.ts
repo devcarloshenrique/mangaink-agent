@@ -162,3 +162,128 @@ export function parseSourceInfo(canonicalUrl: string): SourceInfo {
 export function buildProviderInfo(): ProviderInfo {
   return PROVIDER_INFO
 }
+
+/**
+ * Extrai URLs de imagens de uma página de capítulo.
+ *
+ * Estratégias em ordem de prioridade:
+ * 1. <img> tags dentro do container do leitor (src ou data-src)
+ * 2. <script> tag contendo array de URLs de imagens
+ * 3. Qualquer <img> na página com data-src apontando para domínios de imagem
+ *
+ * @param $ - CheerioAPI carregado com HTML da página do capítulo
+ * @param base - URL base para resolver URLs relativas
+ * @returns Lista de URLs absolutas das imagens do capítulo
+ */
+export function parseChapterImages($: CheerioAPI, base: string): string[] {
+  const seen = new Set<string>()
+  const images: string[] = []
+
+  // ── Estratégia 1: <img> dentro do container do leitor ────────────
+  $(SEL.chapterImages).each((_, el) => {
+    const $el = $(el)
+
+    // Tenta data-src primeiro (lazy loading), depois src
+    const src =
+      $el.attr('data-src') ||
+      $el.attr('data-lazy-src') ||
+      $el.attr('src')
+
+    if (!src) return
+
+    const absolute = absoluteUrl(src, base)
+    if (!absolute || seen.has(absolute)) return
+
+    // Filtra apenas URLs de imagem
+    if (!isImageUrl(absolute)) return
+
+    seen.add(absolute)
+    images.push(absolute)
+  })
+
+  // ── Estratégia 2: se não achou nada, procura em scripts ──────────
+  if (images.length === 0) {
+    $(SEL.imageScript).each((_, el) => {
+      const text = $(el).text()
+
+      // Tenta encontrar arrays de URLs em diferentes formatos
+      const patterns = [
+        /images\s*=\s*(\[[^\]]+\])/i,
+        /imgs\s*=\s*(\[[^\]]+\])/i,
+        /pages\s*=\s*(\[[^\]]+\])/i,
+        /"images"\s*:\s*(\[[^\]]+\])/i,
+        /urls\s*=\s*(\[[^\]]+\])/i,
+      ]
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern)
+        if (!match) continue
+
+        try {
+          // Avalia o array de forma segura (JSON ou JS literal)
+          const parsed = tryParseStringArray(match[1])
+          if (parsed.length > 0) {
+            for (const url of parsed) {
+              const absolute = absoluteUrl(url, base)
+              if (absolute && !seen.has(absolute) && isImageUrl(absolute)) {
+                seen.add(absolute)
+                images.push(absolute)
+              }
+            }
+            return // Sai se encontrou algo
+          }
+        } catch {
+          continue // Próximo pattern
+        }
+      }
+    })
+  }
+
+  return images
+}
+
+/**
+ * Verifica se uma URL parece ser de uma imagem.
+ */
+function isImageUrl(url: string): boolean {
+  // Verifica extensão comum de imagem
+  const imageExtensions = /\.(jpg|jpeg|png|gif|webp|bmp|avif)(\?|#|$)/i
+  if (imageExtensions.test(url)) return true
+
+  // Verifica se o path contém indicadores de imagem
+  const imageIndicators = /\/wp-content\/uploads\//i
+  if (imageIndicators.test(url)) return true
+
+  return false
+}
+
+/**
+ * Tenta fazer parse de um array de strings a partir de uma string literal.
+ * Suporta tanto JSON válido quanto arrays JS com aspas simples.
+ */
+function tryParseStringArray(input: string): string[] {
+  // Tenta como JSON primeiro
+  try {
+    const parsed = JSON.parse(input)
+    if (Array.isArray(parsed) && parsed.every((i) => typeof i === 'string')) {
+      return parsed
+    }
+  } catch {
+    // Ignora
+  }
+
+  // Tenta converter aspas simples para duplas e re-tentar
+  try {
+    const normalized = input
+      .replace(/'/g, '"')
+      .replace(/(\w+):/g, '"$1":') // Converte keys sem aspas
+    const parsed = JSON.parse(normalized)
+    if (Array.isArray(parsed) && parsed.every((i) => typeof i === 'string')) {
+      return parsed
+    }
+  } catch {
+    // Ignora
+  }
+
+  return []
+}

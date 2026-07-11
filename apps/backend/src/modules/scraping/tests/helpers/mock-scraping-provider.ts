@@ -12,6 +12,8 @@ export class MockScrapingProvider implements ScrapingProvider {
   private _supportsResult = true
   private _inspectResult: SourceInspectResponse | null = null
   private _inspectError: Error | null = null
+  private _chapterImagesResult: string[] = []
+  private _chapterImagesError: Error | null = null
 
   supports(url: string): boolean {
     if (!this._supportsResult) return false
@@ -25,6 +27,11 @@ export class MockScrapingProvider implements ScrapingProvider {
 
   getInfo(): ProviderInfo {
     return { slug: this.slug, name: this.name, engine: this.engine }
+  }
+
+  async getChapterImages(_chapterUrl: string): Promise<string[]> {
+    if (this._chapterImagesError) throw this._chapterImagesError
+    return this._chapterImagesResult
   }
 
   async inspect(_canonicalUrl: string): Promise<SourceInspectResponse> {
@@ -60,9 +67,19 @@ export class MockScrapingProvider implements ScrapingProvider {
     this._inspectError = error
   }
 
+  setChapterImagesResult(images: string[]): void {
+    this._chapterImagesResult = images
+  }
+
+  setChapterImagesError(error: Error): void {
+    this._chapterImagesError = error
+  }
+
   reset(): void {
     this._supportsResult = true
     this._inspectResult = null
     this._inspectError = null
+    this._chapterImagesResult = []
+    this._chapterImagesError = null
   }
 }

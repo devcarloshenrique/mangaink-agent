@@ -58,3 +58,9 @@ export interface SourceInspectJob {
   url: string
   refresh: boolean
 }
+
+export interface ChapterImagesResult {
+  chapterId: string
+  chapterUrl: string
+  imageUrls: string[]
+}

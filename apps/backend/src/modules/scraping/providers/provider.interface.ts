@@ -34,4 +34,11 @@ export interface ScrapingProvider {
    * Recebe a URL já normalizada (canonical).
    */
   inspect(canonicalUrl: string): Promise<SourceInspectResponse>
+
+  /**
+   * Extrai as URLs das imagens de um capítulo específico.
+   * Recebe a URL da página do capítulo.
+   * Retorna uma lista de URLs absolutas das imagens.
+   */
+  getChapterImages(chapterUrl: string): Promise<string[]>
 }

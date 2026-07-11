@@ -6,12 +6,13 @@ import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 import {
   buildProviderInfo,
+  parseChapterImages,
   parseChapters,
   parseCover,
   parseMetadata,
   parseSourceInfo,
 } from './mangalivre.parser'
-import { ScrapingNetworkError } from '../../errors/scraping.errors'
+import { ScrapingNetworkError, ScrapingParseError } from '../../errors/scraping.errors'
 
 const BASE_URL = 'https://mangalivre.to'
 
@@ -76,5 +77,28 @@ export class MangalivreProvider implements ScrapingProvider {
         covers: covers.length,
       },
     }
+  }
+
+  async getChapterImages(chapterUrl: string): Promise<string[]> {
+    let html: string
+    try {
+      const response = await http.get<string>(chapterUrl, {
+        headers: { Referer: chapterUrl },
+      })
+      html = response.data
+    } catch (err) {
+      throw new ScrapingNetworkError(chapterUrl, err)
+    }
+
+    const $ = cheerio.load(html)
+    const images = parseChapterImages($, chapterUrl)
+
+    if (images.length === 0) {
+      throw new ScrapingParseError(
+        `Nenhuma imagem encontrada na página do capítulo: ${chapterUrl}`,
+      )
+    }
+
+    return images
   }
 }
