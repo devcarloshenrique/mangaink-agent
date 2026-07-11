@@ -53,3 +53,31 @@ export function createChapterId(number: string | number): string {
 export function createCoverId(index: number): string {
   return `cover_${String(index).padStart(3, '0')}`
 }
+
+/**
+ * Gera um ID de job de conversão usando timestamp + random.
+ * Formato: job_{timestamp}_{random4}
+ *
+ * @exemplo
+ * createJobId()
+ * // => 'job_1720555200000_a1b2'
+ */
+export function createJobId(): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).slice(2, 6)
+  return `job_${timestamp}_${random}`
+}
+
+/**
+ * Gera um ID de conversion usando timestamp + random.
+ * Formato: conv_{timestamp}_{random4}
+ *
+ * @exemplo
+ * createConversionId()
+ * // => 'conv_1720555200000_a1b2'
+ */
+export function createConversionId(): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).slice(2, 6)
+  return `conv_${timestamp}_${random}`
+}

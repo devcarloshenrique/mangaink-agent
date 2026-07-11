@@ -8,6 +8,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   STORAGE_PATH: z.string().default('./storage'),
+  KCC_BIN_PATH: z.string().default('bin/kcc/windows/kcc_c2e_10.3.0.exe'),
+  CONVERSIONS_STORAGE_PATH: z.string().default('./storage/conversions'),
 })
 
 const _env = envSchema.safeParse(process.env)
