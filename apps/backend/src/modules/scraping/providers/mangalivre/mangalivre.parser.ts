@@ -97,6 +97,29 @@ export function parseMetadata($: CheerioAPI, canonicalUrl: string): MangaMetadat
   return { title, author, description, status, genres }
 }
 
+/**
+ * Remove o sufixo de resolucao WordPress (-WxH) da URL da imagem.
+ *
+ * Exemplo:
+ *   https://ex.com/HUNTER-x-HUNTER-193x278.webp → https://ex.com/HUNTER-x-HUNTER.webp
+ */
+function stripResolutionSuffix(url: string): string {
+  if (!url.includes('wp-content')) return url
+
+  try {
+    const parsed = new URL(url)
+    const match = parsed.pathname.match(/^(.+)\-\d+x\d+(\.\w+)$/)
+    if (match) {
+      parsed.pathname = match[1] + match[2]
+      return parsed.href
+    }
+  } catch {
+    // URL invalida, retorna original
+  }
+
+  return url
+}
+
 export function parseCover($: CheerioAPI, base: string): Cover[] {
   const imgEl = $(SEL.cover).first()
   const src =
@@ -108,12 +131,15 @@ export function parseCover($: CheerioAPI, base: string): Cover[] {
   const imageUrl = absoluteUrl(src, base)
   if (!imageUrl) return []
 
+  // Remove sufixo de resolucao (-WxH) para obter a imagem em qualidade original
+  const fullResUrl = stripResolutionSuffix(imageUrl)
+
   return [
     {
       id: createCoverId(1),
       type: 'original',
       label: 'Original',
-      imageUrl,
+      imageUrl: fullResUrl,
     },
   ]
 }
