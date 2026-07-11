@@ -51,7 +51,8 @@ mangaink-agent/
 │   │   │   │   ├── auth/         (controllers, services, use-cases, dtos, tests)
 │   │   │   │   ├── user/         (entities, repositories)
 │   │   │   │   ├── health/       (controller + routes)
-│   │   │   │   └── scraping/     (providers, services, workers, use-cases, tests)
+│   │   │   │   ├── scraping/     (providers, services, workers, use-cases, tests)
+│   │   │   │   └── conversion/   (controllers, use-cases, services, repositories, workers, tests)
 │   │   │   └── shared/
 │   │   │       ├── config/       (env.ts — Zod env vars)
 │   │   │       ├── database/     (prisma.ts — singleton)
@@ -62,8 +63,9 @@ mangaink-agent/
 │   │   │       └── server.ts     (plugins, CORS, JWT, Swagger)
 │   │   ├── prisma/
 │   │   │   └── migrations/
-│   │   ├── storage/              (cache de scraping no filesystem)
-│   │   │   └── sources/          (sourceId/ → metadata.json + covers/ + chapters/)
+│   │   ├── storage/              (cache de scraping + saída de conversões)
+│   │   │   ├── sources/          (sourceId/ → metadata.json + covers/ + chapters/)
+│   │   │   └── conversions/      (convId/ → config.json + status.json + logs/ + jobs/)
 │   │   ├── package.json          (@mangaink/backend)
 │   │   └── tsconfig.json
 │   │
@@ -84,6 +86,7 @@ mangaink-agent/
 │   └── openspec/
 │       ├── archive/auth/         (design, spec, proposal, tasks)
 │       ├── archive/scraping/     (design, spec, tasks)
+│       ├── archive/conversions-job/ (design, proposal, spec, tasks)
 │       └── changes/auth/         (config de alterações)
 │
 ├── docker-compose.yml            (PostgreSQL + Redis)
@@ -228,6 +231,18 @@ POST /inspect → cache hit? → 200 { ready }
                               → SSE /events → completed → GET /inspect/:id
 ```
 
+### Conversão de Obras
+
+- `GET /api/conversions/options` — Catálogo de opções (devices, formats, fields, presets). Público.
+  - `batchSplit` e `fileFusion` são internos — nunca aparecem na resposta
+- `POST /api/conversions` — Cria uma Conversion via Planner
+  - Body: `{ sourceId, cover, output, metadata, books: [{title, chapters, cover?}], options }`
+  - Retorna 202 com `{ conversionId, totalJobs, status: "queued" }`
+- `GET /api/conversions/:conversionId` — Status agregado (syncStatus em tempo real)
+  - Response: `{ status, progress, totalJobs, completedJobs, failedJobs, runningJobs, pendingJobs, jobs[] }`
+- `GET /api/conversions/:conversionId/events` — SSE fan-in de todos os Jobs
+- `DELETE /api/conversions/:conversionId` + `POST .../cancel` — Cancelamento
+
 ---
 
 ## Variáveis de Ambiente
@@ -240,6 +255,8 @@ POST /inspect → cache hit? → 200 { ready }
 | `DATABASE_URL` | URL de conexão PostgreSQL          | (obrigatório)             |
 | `REDIS_URL`    | URL de conexão Redis               | `redis://localhost:6379`  |
 | `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
+| `KCC_BIN_PATH` | Caminho para o binário do KCC      | `bin/kcc/windows/kcc_c2e_10.3.0.exe` |
+| `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
 
 ---
 
@@ -287,7 +304,7 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 - `src/shared/middlewares/verify-jwt.ts` — middleware de autenticação JWT
 - `src/shared/utils/filesystem.ts` — utilitários de I/O: `mkdirp()`, `writeJson()`, `readJson()`, `pathExists()`
 - `src/shared/utils/hash.ts` — `sha256()` para geração de IDs determinísticos
-- `src/shared/utils/id-generator.ts` — `createSourceId()`, `createChapterId()`, `createCoverId()`
+- `src/shared/utils/id-generator.ts` — `createSourceId()`, `createChapterId()`, `createCoverId()`, `createJobId()`, `createConversionId()`
 - `src/shared/utils/url-normalizer.ts` — `normalizeUrl()`: remove tracking params, fragmentos, garante barra final
 
 ### Módulos do Backend
@@ -315,13 +332,32 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `controllers/` — `inspect-source.controller.ts`, `preview-source.controller.ts`, `source-events.controller.ts`, `providers.controller.ts`
   - `use-cases/` — `inspect-source.use-case.ts` (fluxo: normalizar URL → resolver provider → gerar sourceId → cache check → lock → enfileirar), `get-source.use-case.ts`
   - `services/` — `cache.service.ts` (TTL de 24h), `inspect-queue.service.ts` (BullMQ), `redis-lock.service.ts` (lock distribuído via Redis SET NX EX), `redis-pubsub.service.ts` (Pub/Sub para SSE), `source-events.service.ts` (bridge Redis → SSE)
-  - `providers/` — `provider.interface.ts` (interface `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL), `mangalivre/` (implementação Cheerio: parser, provider, selectors)
+  - `providers/` — `provider.interface.ts` (interface `ScrapingProvider` com `getChapterImages()`), `provider-resolver.ts` (resolve provider por URL), `mangalivre/` (implementação Cheerio: parser com `parseChapterImages()` + `stripResolutionSuffix()`, provider, selectors)
   - `repositories/` — `source-cache.repository.ts` (interface), `filesystem-source.repository.ts` (implementação filesystem com `storage/sources/{sourceId}/metadata.json`)
   - `workers/` — `inspect-source.worker.ts` (BullMQ worker: scraping → Pub/Sub progress → salva metadata.json)
-  - `types/` — `source.types.ts` (SourceInspectResponse, Chapter, Cover, MangaMetadata), `metadata.types.ts` (MetadataCache, SourceMetadataFile), `provider.types.ts` (ProviderEngine, ProviderInfo)
+  - `types/` — `source.types.ts` (SourceInspectResponse, Chapter, Cover, MangaMetadata, ChapterImagesResult), `metadata.types.ts` (MetadataCache, SourceMetadataFile), `provider.types.ts` (ProviderEngine, ProviderInfo)
   - `errors/` — `scraping.errors.ts` (ProviderNotFoundError, InvalidUrlError, ScrapingNetworkError, ScrapingParseError, SourceNotFoundError)
   - `dtos/` — `inspect-source.dto.ts` (InspectSourceBody, InspectSourceQuery), `preview-source.dto.ts` (SourceParams)
-  - `tests/` — Testes unitários (Vitest) — `mangalivre.parser.test.ts`
+  - `tests/` — Testes unitários (Vitest) + E2E + mock-scraping-provider
+
+- **`conversion/`** — Conversão de mangás para formatos e-reader via KCC (Kindle Comic Converter)
+  - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
+  - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`
+  - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`), `conversion-events.service.ts` (bridge Redis → SSE fan-in), `image-downloader.service.ts` (download paralelo), `kcc-runner.service.ts` (spawn do KCC)
+  - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
+  - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging)
+  - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)
+  - `types/` — `conversion.types.ts` (ConversionConfig, Book, JobMetadata, ConversionJobSummary, etc.)
+  - `errors/` — `conversion.errors.ts` (ConversionNotFoundError, InvalidConversionStateError, DuplicateChapterError, etc.)
+  - `dtos/` — `create-conversion.dto.ts`, `conversion-options.dto.ts`, `conversion-params.dto.ts`
+  - `tests/` — 76 testes (unit + E2E + helpers: in-memory repo, mock queue, mock events, mock job, fixtures)
+
+  **Convenções importantes do módulo de conversão:**
+  - `batchSplit` e `fileFusion` são internos do Planner — NUNCA expostos na API pública
+  - O Worker escreve `ComicInfo.xml` no diretório de input do KCC com título, autor, série e gêneros do scraping para metadados corretos no EPUB
+  - `metadataTitle: 'metadataOnly'` é forçado no Worker quando ComicInfo.xml está presente
+  - URLs de capa têm sufixo de resolução WordPress (`-WxH`) removido via `stripResolutionSuffix()` no parser — `mangalivre.parser.test.ts`
 
 ---
 
