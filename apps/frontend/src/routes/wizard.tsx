@@ -1,5 +1,5 @@
-﻿import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -18,14 +18,11 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { useConversion } from "@/hooks/useConversion";
-import {
-  KINDLE_DEVICES,
-  OUTPUT_FORMATS,
-  PRESETS,
-  type OutputFormat,
-  type PresetId,
-} from "@/lib/kindle-presets";
+import { useScraping } from "@/hooks/useScraping";
+import { useConversionOptions } from "@/hooks/useConversionOptions";
+import { conversionsApi } from "@/lib/api";
+import type { SourceInspectResponse, Chapter } from "@/types/scraping";
+import type { Book, CoverRef } from "@/types/conversion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -45,6 +42,8 @@ import {
   Moon,
   Clock,
   Split,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { MockPage } from "@/components/comic/MockPage";
 import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
@@ -64,100 +63,106 @@ const STEPS = [
   { label: "Envio", short: "Envio" },
 ];
 
-interface Chapter {
-  id: string;
-  number: string;
-  title: string;
-  pages: number;
-  volume: number;
-}
-
-interface Cover {
-  id: string;
-  label: string;
-  hue: number;
-}
-
-interface Series {
-  title: string;
-  author: string;
-  chapters: Chapter[];
-  covers: Cover[];
-}
-
-type CoverMode = "per-chapter" | "per-volume" | "single";
-type CoverRef =
-  | { kind: "original" }
-  | { kind: "gallery"; coverId: string }
-  | { kind: "upload"; name: string };
-
 type Delivery = "download" | "kindle";
 type VolumeMode = "fixed" | "custom";
+type CoverMode = "single" | "per-volume" | "per-chapter";
 
 interface WizardData {
+  // Step 1 — Origem
   url: string;
-  series: Series | null;
+  sourceId: string | null;
+  inspectData: SourceInspectResponse | null;
+
+  // Step 2 — Capítulos
   selectedChapters: Set<string>;
   grouping: "single" | "separate";
-  coverMode: CoverMode;
-  coverAssignments: Record<string, CoverRef>;
-  device: string;
-  format: OutputFormat;
-  preset: PresetId;
-  meta: { title: string; author: string };
-  delivery: Delivery;
-  kindleEmail: string;
   volumeSize: number;
   volumeMode: VolumeMode;
   volumeSizes: number[];
+
+  // Step 3 — Capas
+  coverMode: CoverMode;
+  coverAssignments: Record<string, CoverRef>;
+
+  // Step 4 — Configurações
+  device: string;
+  format: string;
+  preset: string;
+  fieldOptions: Record<string, string | number | boolean>;
+  meta: { title: string; author: string };
+  errorHandlingStrategy: "ignore" | "skip_chapter" | "abort";
+
+  // Step 5 — Envio
+  delivery: Delivery;
+  kindleEmail: string;
 }
 
-function mockFetchSeries(url: string, volumeSize?: number): Promise<Series> {
-  const size = volumeSize || 8;
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      try {
-        const u = new URL(url);
-        const slug = u.pathname.split("/").filter(Boolean).pop() || "manga-misterioso";
-        const pretty = slug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-        const chapters: Chapter[] = Array.from({ length: 24 }, (_, i) => ({
-          id: `ch-${i + 1}`,
-          number: String(i + 1),
-          title: i === 0 ? "O início" : `Capítulo ${i + 1}`,
-          pages: 18 + ((i * 7) % 14),
-          volume: Math.floor(i / size) + 1,
-        }));
-        const covers: Cover[] = Array.from({ length: 8 }, (_, i) => ({
-          id: `cv-${i + 1}`,
-          label: `Capa ${i + 1}`,
-          hue: (i * 45) % 360,
-        }));
-        resolve({ title: pretty, author: "Autor Desconhecido", chapters, covers });
-      } catch {
-        reject(new Error("URL inválida"));
-      }
-    }, 900);
-  });
+function buildBooks(data: WizardData): Book[] {
+  const chapters = data.inspectData!.chapters.filter((c) => data.selectedChapters.has(c.id));
+
+  if (data.grouping === "single") {
+    return [
+      {
+        title: data.meta.title || data.inspectData!.metadata.title,
+        chapters: chapters.map((c) => c.id),
+      },
+    ];
+  }
+
+  // Agrupar por volumes
+  const volumes = computeVolumes(chapters, data.volumeMode, data.volumeSize, data.volumeSizes);
+  const baseTitle = data.meta.title || data.inspectData!.metadata.title;
+  return volumes.map((vChapters, i) => ({
+    title: `${baseTitle} - Vol. ${i + 1}`,
+    chapters: vChapters.map((c) => c.id),
+  }));
+}
+
+function computeVolumes(
+  chapters: Chapter[],
+  mode: VolumeMode,
+  fixedSize: number,
+  customSizes: number[],
+): Chapter[][] {
+  if (mode === "fixed") {
+    const result: Chapter[][] = [];
+    for (let i = 0; i < chapters.length; i += fixedSize) {
+      result.push(chapters.slice(i, i + fixedSize));
+    }
+    return result;
+  }
+  // custom
+  const result: Chapter[][] = [];
+  let offset = 0;
+  for (const size of customSizes) {
+    result.push(chapters.slice(offset, offset + size));
+    offset += size;
+  }
+  if (offset < chapters.length) result.push(chapters.slice(offset));
+  return result.filter((v) => v.length > 0);
 }
 
 function WizardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { startJob } = useConversion();
+  const scraping = useScraping();
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [data, setData] = useState<WizardData>({
     url: "",
-    series: null,
+    sourceId: null,
+    inspectData: null,
     selectedChapters: new Set(),
     grouping: "single",
-    coverMode: "per-volume",
+    coverMode: "single",
     coverAssignments: {},
-    device: KINDLE_DEVICES[0].id,
+    device: "",
     format: "EPUB",
-    preset: "manga",
+    preset: "",
+    fieldOptions: {},
     meta: { title: "", author: "" },
+    errorHandlingStrategy: "ignore",
     delivery: "kindle",
     kindleEmail: "",
     volumeSize: 8,
@@ -170,14 +175,10 @@ function WizardPage() {
 
   const goto = (i: number) => i <= visited && setStep(i);
 
-  const cost = data.selectedChapters.size;
-  const credits = 0;
-  const enoughCredits = cost > 0;
-
   const canNext = useMemo(() => {
     switch (step) {
       case 0:
-        return !!data.series;
+        return scraping.state.status === "ready";
       case 1:
         return data.selectedChapters.size > 0;
       case 2:
@@ -191,10 +192,13 @@ function WizardPage() {
       default:
         return true;
     }
-  }, [step, data]);
+  }, [step, data, scraping.state.status]);
 
   const next = () => {
-    if (step === 4) return finish();
+    if (step === 4) {
+      finish();
+      return;
+    }
     const n = step + 1;
     setStep(n);
     setVisited((v) => Math.max(v, n));
@@ -203,23 +207,29 @@ function WizardPage() {
 
   const handleFetch = async () => {
     if (!data.url) return;
-    setLoading(true);
-    try {
-      const series = await mockFetchSeries(data.url, data.volumeSize);
+    scraping.reset();
+    setData((d) => ({ ...d, sourceId: null, inspectData: null, selectedChapters: new Set() }));
+    await scraping.inspect(data.url);
+  };
+
+  // Quando scraping finaliza, sincroniza sourceId/inspectData no WizardData
+  useEffect(() => {
+    if (scraping.state.status === "ready" && scraping.state.metadata) {
+      const meta = scraping.state.metadata;
       setData((d) => ({
         ...d,
-        series,
+        sourceId: scraping.state.sourceId,
+        inspectData: meta,
         selectedChapters: new Set(),
-        meta: { title: series.title, author: series.author },
+        meta: {
+          title: d.meta.title || meta.metadata.title,
+          author: d.meta.author || (meta.metadata.author ?? ""),
+        },
       }));
       setVisited((v) => Math.max(v, 1));
-      toast.success("Capítulos encontrados!");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scraping.state.status, scraping.state.sourceId]);
 
   const toggleChapter = (id: string) => {
     setData((d) => {
@@ -230,44 +240,45 @@ function WizardPage() {
     });
   };
 
-  const finish = () => {
+  const finish = async () => {
     if (!user) {
       toast.error("Você precisa estar logado para converter.");
       return;
     }
-    if (!data.series) {
+    if (!data.sourceId || !data.inspectData) {
       toast.error("Nenhuma série carregada. Volte ao passo 1.");
       return;
     }
-    if (cost === 0) {
+    if (data.selectedChapters.size === 0) {
       toast.error("Selecione ao menos um capítulo.");
-      return;
-    }
-    if (data.delivery === "kindle" && !data.kindleEmail) {
-      toast.error("Informe seu e-mail Kindle para envio.");
       return;
     }
     if (
       data.delivery === "kindle" &&
       !/^\S+@(kindle\.com|free\.kindle\.com)$/i.test(data.kindleEmail)
     ) {
-      toast.error("E-mail Kindle inválido. Use um endereço @kindle.com ou @free.kindle.com.");
+      toast.error("E-mail Kindle inválido.");
       return;
     }
 
-    const jobId = startJob({
-      series: data.series,
-      selectedChapters: data.selectedChapters,
-      meta: data.meta,
-      format: data.format,
-      delivery: data.delivery,
-      kindleEmail: data.kindleEmail,
-      volumeSize: data.volumeSize,
-    });
-
-    toast.success(`Conversão de "${data.series.title}" iniciada!`);
-
-    navigate({ to: "/biblioteca/converter/$jobId", params: { jobId } });
+    setFinishing(true);
+    try {
+      const books = buildBooks(data);
+      const { conversionId } = await conversionsApi.create({
+        sourceId: data.sourceId,
+        cover: { kind: "original" },
+        output: { deviceId: data.device || "kpw_11", format: data.format },
+        metadata: data.meta,
+        books,
+        options: data.fieldOptions,
+        errorHandlingStrategy: data.errorHandlingStrategy,
+      });
+      toast.success(`Conversão iniciada!`);
+      navigate({ to: "/biblioteca/converter/$jobId", params: { jobId: conversionId } });
+    } catch (e) {
+      toast.error((e as Error).message ?? "Erro ao iniciar conversão.");
+      setFinishing(false);
+    }
   };
 
   return (
@@ -291,16 +302,14 @@ function WizardPage() {
           {step === 0 && (
             <StepOrigin
               url={data.url}
-              series={data.series}
-              loading={loading}
-              volumeSize={data.volumeSize}
+              scraping={scraping}
               onUrlChange={(v) => update("url", v)}
               onFetch={handleFetch}
             />
           )}
-          {step === 1 && data.series && (
+          {step === 1 && data.inspectData && (
             <StepChapters
-              series={data.series}
+              chapters={data.inspectData.chapters}
               selected={data.selectedChapters}
               grouping={data.grouping}
               volumeSize={data.volumeSize}
@@ -308,7 +317,7 @@ function WizardPage() {
               volumeSizes={data.volumeSizes}
               onToggle={toggleChapter}
               onSelectAll={() =>
-                update("selectedChapters", new Set(data.series!.chapters.map((c) => c.id)))
+                update("selectedChapters", new Set(data.inspectData!.chapters.map((c) => c.id)))
               }
               onClear={() => update("selectedChapters", new Set())}
               onGrouping={(g) => update("grouping", g)}
@@ -317,9 +326,9 @@ function WizardPage() {
               onVolumeSizes={(v) => update("volumeSizes", v)}
             />
           )}
-          {step === 2 && data.series && (
+          {step === 2 && data.inspectData && (
             <StepCovers
-              series={data.series}
+              series={data.inspectData}
               selectedChapters={data.selectedChapters}
               mode={data.coverMode}
               assignments={data.coverAssignments}
@@ -330,16 +339,7 @@ function WizardPage() {
             />
           )}
           {step === 3 && <StepConvert data={data} update={update} />}
-          {step === 4 && (
-            <StepDelivery
-              data={data}
-              update={update}
-              onEdit={goto}
-              cost={cost}
-              credits={credits}
-              enough={enoughCredits}
-            />
-          )}
+          {step === 4 && <StepDelivery data={data} update={update} onEdit={goto} />}
         </ComicPanel>
 
         <div className="mt-8 flex items-center justify-between gap-4">
@@ -361,11 +361,22 @@ function WizardPage() {
           <Button
             type="button"
             onClick={next}
-            disabled={step !== 4 && !canNext}
+            disabled={(step !== 4 && !canNext) || finishing}
             className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-lg disabled:opacity-40 hover:-translate-y-0.5"
           >
-            {step === 4 ? `Converter (${cost} créditos)` : "Próximo"}
-            <ArrowRight className="ml-1" />
+            {finishing ? (
+              <>
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Iniciando…
+              </>
+            ) : step === 4 ? (
+              <>
+                Converter <ArrowRight className="ml-1" />
+              </>
+            ) : (
+              <>
+                Próximo <ArrowRight className="ml-1" />
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -377,19 +388,20 @@ function WizardPage() {
 
 function StepOrigin({
   url,
-  series,
-  loading,
+  scraping,
   onUrlChange,
   onFetch,
-  volumeSize,
 }: {
   url: string;
-  series: Series | null;
-  loading: boolean;
+  scraping: ReturnType<typeof useScraping>;
   onUrlChange: (v: string) => void;
   onFetch: () => void;
-  volumeSize: number;
 }) {
+  const { state } = scraping;
+  const isLoading = state.status === "processing";
+  const isReady = state.status === "ready";
+  const isFailed = state.status === "failed";
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -407,11 +419,13 @@ function StepOrigin({
         />
         <Button
           onClick={onFetch}
-          disabled={loading || !url}
+          disabled={isLoading || !url}
           className="bg-comic-blue text-accent-foreground hover:bg-comic-blue h-12 border-[3px] border-ink shadow-comic font-display text-lg disabled:opacity-50"
         >
-          {loading ? (
-            "Buscando…"
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Buscando…
+            </>
           ) : (
             <>
               <Search className="mr-1" /> Buscar
@@ -420,23 +434,48 @@ function StepOrigin({
         </Button>
       </div>
 
-      {loading && (
-        <SpeechBubble variant="blue" tail="left" className="animate-comic-shake">
-          Vasculhando os arquivos secretos…
-        </SpeechBubble>
+      {isLoading && (
+        <div className="space-y-2">
+          <SpeechBubble variant="blue" tail="left" className="animate-comic-shake">
+            {state.message ?? "Vasculhando os arquivos secretos…"}
+          </SpeechBubble>
+          {state.progress > 0 && (
+            <div className="h-2 w-full border-2 border-ink rounded-full bg-card overflow-hidden">
+              <div
+                className="h-full bg-comic-blue transition-all duration-300"
+                style={{ width: `${state.progress}%` }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
-      {series && !loading && (
+      {isFailed && (
+        <ComicPanel bg="red" padding="md" className="animate-comic-pop">
+          <p className="font-display text-lg">Erro ao inspecionar a URL</p>
+          <p className="text-sm font-medium opacity-80 mt-1">{state.error}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onFetch}
+            className="mt-2 border-[2.5px] border-ink shadow-comic-sm font-display"
+          >
+            Tentar novamente
+          </Button>
+        </ComicPanel>
+      )}
+
+      {isReady && state.metadata && (
         <ComicPanel bg="yellow" padding="md" className="animate-comic-pop">
           <div className="flex items-start gap-4">
             <div className="h-14 w-14 rounded-full border-[3px] border-ink bg-comic-red text-primary-foreground flex items-center justify-center shadow-comic-sm">
               <Check className="h-7 w-7" strokeWidth={3} />
             </div>
             <div>
-              <p className="font-display text-2xl leading-none">{series.title}</p>
+              <p className="font-display text-2xl leading-none">{state.metadata.metadata.title}</p>
               <p className="text-sm font-medium mt-1">
-                {series.chapters.length} capítulos •{" "}
-                {Math.ceil(series.chapters.length / volumeSize)} volumes
+                {state.metadata.statistics.chapters} capítulos encontrados
+                {state.metadata.metadata.author && ` • ${state.metadata.metadata.author}`}
               </p>
             </div>
           </div>
@@ -447,7 +486,7 @@ function StepOrigin({
 }
 
 function StepChapters({
-  series,
+  chapters,
   selected,
   grouping,
   volumeSize,
@@ -461,7 +500,7 @@ function StepChapters({
   onVolumeMode,
   onVolumeSizes,
 }: {
-  series: Series;
+  chapters: Chapter[];
   selected: Set<string>;
   grouping: "single" | "separate";
   volumeSize: number;
@@ -475,22 +514,37 @@ function StepChapters({
   onVolumeMode: (m: VolumeMode) => void;
   onVolumeSizes: (v: number[]) => void;
 }) {
-  const totalChapters = series.chapters.length;
+  const effectiveChapters =
+    selected.size > 0 ? chapters.filter((c) => selected.has(c.id)) : chapters;
+  const effectiveTotal = effectiveChapters.length;
 
-  const calculateVolume = (chapterIndex: number): number => {
-    if (volumeMode === "fixed") {
-      return Math.floor(chapterIndex / volumeSize) + 1;
+  const calculateVolume = (chapterId: string): number => {
+    const idx = effectiveChapters.findIndex((c) => c.id === chapterId);
+    if (idx === -1) {
+      // fallback: full list index
+      const fallbackIdx = chapters.findIndex((c) => c.id === chapterId);
+      if (fallbackIdx === -1) return 1;
+      if (volumeMode === "fixed") return Math.floor(fallbackIdx / volumeSize) + 1;
+      let fi = fallbackIdx;
+      for (let v = 0; v < volumeSizes.length; v++) {
+        if (fi < volumeSizes[v]) return v + 1;
+        fi -= volumeSizes[v];
+      }
+      return volumeSizes.length + 1;
     }
-    let idx = chapterIndex;
+    if (volumeMode === "fixed") {
+      return Math.floor(idx / volumeSize) + 1;
+    }
+    let i = idx;
     for (let v = 0; v < volumeSizes.length; v++) {
-      if (idx < volumeSizes[v]) return v + 1;
-      idx -= volumeSizes[v];
+      if (i < volumeSizes[v]) return v + 1;
+      i -= volumeSizes[v];
     }
     return volumeSizes.length + 1;
   };
 
   const customTotalAssigned = volumeSizes.reduce((a, b) => a + b, 0);
-  const customRemaining = totalChapters - customTotalAssigned;
+  const customRemaining = effectiveTotal - customTotalAssigned;
 
   const addCustomVolume = () => {
     onVolumeSizes([...volumeSizes, Math.min(volumeSize, Math.max(1, customRemaining))]);
@@ -501,7 +555,7 @@ function StepChapters({
       <SectionHeader
         icon={<BookOpen />}
         title="Quais capítulos?"
-        subtitle={`${selected.size} de ${series.chapters.length} selecionados • 1 crédito por capítulo`}
+        subtitle={`${selected.size} de ${chapters.length} selecionados`}
       />
 
       {/* Volume config */}
@@ -520,9 +574,9 @@ function StepChapters({
             onClick={() => {
               onVolumeMode("custom");
               if (volumeSizes.length === 0) {
-                const volCount = Math.ceil(totalChapters / volumeSize);
-                const base = Math.floor(totalChapters / volCount);
-                const remainder = totalChapters - base * volCount;
+                const volCount = Math.ceil(effectiveTotal / volumeSize);
+                const base = Math.floor(effectiveTotal / volCount);
+                const remainder = effectiveTotal - base * volCount;
                 const sizes: number[] = [];
                 for (let i = 0; i < volCount; i++) {
                   sizes.push(base + (i < remainder ? 1 : 0));
@@ -541,16 +595,16 @@ function StepChapters({
             <Input
               type="number"
               min={1}
-              max={totalChapters}
-              value={volumeSize}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(totalChapters, Number(e.target.value) || 1));
-                onVolumeSize(v);
-              }}
-              className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
-            />
-            <span className="text-sm font-medium opacity-70">
-              = {Math.ceil(totalChapters / volumeSize)} volume(s)
+               max={effectiveTotal}
+               value={volumeSize}
+               onChange={(e) => {
+                 const v = Math.max(1, Math.min(effectiveTotal, Number(e.target.value) || 1));
+                 onVolumeSize(v);
+               }}
+               className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
+             />
+             <span className="text-sm font-medium opacity-70">
+               = {Math.ceil(effectiveTotal / volumeSize)} volume(s)
             </span>
           </div>
         ) : (
@@ -621,9 +675,9 @@ function StepChapters({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-auto pr-1">
-        {series.chapters.map((c, i) => {
+        {chapters.map((c) => {
           const checked = selected.has(c.id);
-          const vol = calculateVolume(i);
+          const vol = calculateVolume(c.id);
           return (
             <label
               key={c.id}
@@ -640,7 +694,7 @@ function StepChapters({
               <div className="flex-1">
                 <p className="font-display text-lg leading-none">Cap. {c.number}</p>
                 <p className="text-xs font-medium opacity-80">
-                  Vol. {vol} • {c.title} • {c.pages}p
+                  Vol. {vol} • {c.title} • {c.pages != null ? `${c.pages}p` : "—"}
                 </p>
               </div>
             </label>
@@ -679,7 +733,7 @@ function StepCovers({
   onMode,
   onAssign,
 }: {
-  series: Series;
+  series: SourceInspectResponse;
   selectedChapters: Set<string>;
   mode: CoverMode;
   assignments: Record<string, CoverRef>;
@@ -688,7 +742,12 @@ function StepCovers({
 }) {
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const usedChapters = series.chapters.filter((c) => selectedChapters.has(c.id));
-  const volumes = Array.from(new Set(usedChapters.map((c) => c.volume))).sort((a, b) => a - b);
+  // volumes: usar índices fixos (1..N) baseado nos capítulos disponíveis agrupados
+  const volSize = 8;
+  const volumes = Array.from(
+    { length: Math.ceil(usedChapters.length / volSize) },
+    (_, i) => i + 1,
+  );
 
   const targets =
     mode === "single"
@@ -696,7 +755,7 @@ function StepCovers({
       : mode === "per-volume"
         ? volumes.map((v) => ({
             key: `vol-${v}`,
-            label: `Volume ${v} (${usedChapters.filter((c) => c.volume === v).length} caps)`,
+            label: `Volume ${v} (${usedChapters.filter((_, i) => Math.floor(i / volSize) + 1 === v).length} caps)`,
           }))
         : usedChapters.map((c) => ({ key: c.id, label: `Cap. ${c.number} • ${c.title}` }));
 
@@ -714,7 +773,7 @@ function StepCovers({
           onClick={() => onMode("single")}
           icon={<Layers />}
           title="Uma só capa"
-          text="Aplica a mesma em todos."
+          text="Aplica a capa original em todos."
         />
         <ChoiceCard
           active={mode === "per-volume"}
@@ -746,7 +805,9 @@ function StepCovers({
                 <CoverPreview ref={ref} covers={series.covers} />
                 <div className="flex-1 min-w-0">
                   <p className="font-display text-base truncate">{t.label}</p>
-                  <p className="text-xs font-medium opacity-70">{describeRef(ref)}</p>
+                  <p className="text-xs font-medium opacity-70">
+                    {describeRef(ref, series.covers)}
+                  </p>
                 </div>
                 <Button
                   size="sm"
@@ -791,7 +852,7 @@ function StepCovers({
                   >
                     <div
                       className="aspect-[2/3] flex items-end p-1"
-                      style={{ background: `hsl(${c.hue} 80% 60%)` }}
+                      style={{ background: `hsl(${(c.id.length * 45) % 360} 80% 60%)` }}
                     >
                       <span className="font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink">
                         {c.label}
@@ -811,7 +872,7 @@ function StepCovers({
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) {
-                    onAssign(pickerFor!, { kind: "upload", name: f.name });
+                    onAssign(pickerFor!, { kind: "upload", uploadId: f.name, name: f.name });
                     setPickerFor(null);
                   }
                 }}
@@ -824,7 +885,13 @@ function StepCovers({
   );
 }
 
-function CoverPreview({ ref, covers }: { ref: CoverRef | undefined; covers: Cover[] }) {
+function CoverPreview({
+  ref,
+  covers,
+}: {
+  ref: CoverRef | undefined;
+  covers: SourceInspectResponse["covers"];
+}) {
   const cls = "h-12 w-9 border-[2.5px] border-ink rounded shrink-0";
   if (!ref || ref.kind === "original")
     return (
@@ -848,13 +915,21 @@ function CoverPreview({ ref, covers }: { ref: CoverRef | undefined; covers: Cove
         UP
       </div>
     );
-  const c = covers.find((c) => c.id === ref.coverId);
-  return <div className={cls} style={{ background: c ? `hsl(${c.hue} 80% 60%)` : undefined }} />;
+  const c = covers.find((cv) => cv.id === ref.coverId);
+  return (
+    <div
+      className={cls}
+      style={{ background: c ? `hsl(${(c.id.length * 45) % 360} 80% 60%)` : undefined }}
+    />
+  );
 }
 
-function describeRef(ref: CoverRef | undefined): string {
+function describeRef(ref: CoverRef | undefined, covers: SourceInspectResponse["covers"]): string {
   if (!ref || ref.kind === "original") return "Capa original";
-  if (ref.kind === "gallery") return `Galeria · ${ref.coverId}`;
+  if (ref.kind === "gallery") {
+    const c = covers.find((cv) => cv.id === ref.coverId);
+    return c ? `Galeria · ${c.label}` : `Galeria · ${ref.coverId}`;
+  }
   return `Upload · ${ref.name}`;
 }
 
@@ -865,6 +940,7 @@ function StepConvert({
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
 }) {
+  const { data: options, isLoading: optLoading } = useConversionOptions();
   const [previewChapterId, setPreviewChapterId] = useState("");
   const [previewPage, setPreviewPage] = useState(1);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -872,6 +948,15 @@ function StepConvert({
   const [previewSeed, setPreviewSeed] = useState(0);
   const [previewDarkMode, setPreviewDarkMode] = useState(false);
   const [doublePageSplit, setDoublePageSplit] = useState(false);
+
+  // Inicializa device/format/preset com primeiro valor do catálogo, se ainda não definido
+  useEffect(() => {
+    if (!options) return;
+    if (!data.device && options.devices.length > 0) update("device", options.devices[0].id);
+    if (!data.format && options.formats.length > 0) update("format", options.formats[0].id);
+    if (!data.preset && options.presets.length > 0) update("preset", options.presets[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
 
   const presetFilter: Record<string, string> = {
     default: "contrast(1) brightness(1)",
@@ -895,12 +980,12 @@ function StepConvert({
   const filter = presetFilter[data.preset] ?? "none";
 
   const selectedChapters =
-    data.series?.chapters.filter((c) => data.selectedChapters.has(c.id)) ?? [];
+    data.inspectData?.chapters.filter((c) => data.selectedChapters.has(c.id)) ?? [];
   const currentChapter = selectedChapters.find((c) => c.id === previewChapterId);
   const maxPage = currentChapter?.pages ?? 1;
 
   // Estimate time: ~0.5s per page total
-  const totalPages = selectedChapters.reduce((s, c) => s + c.pages, 0);
+  const totalPages = selectedChapters.reduce((s, c) => s + (c.pages ?? 20), 0);
   const estSeconds = Math.max(5, Math.round(totalPages * 0.5));
   const estMin = Math.floor(estSeconds / 60);
   const estSec = estSeconds % 60;
@@ -920,7 +1005,7 @@ function StepConvert({
     toast.success("Preview gerado com sucesso!");
   };
 
-  const kindleLabel = KINDLE_DEVICES.find((d) => d.id === data.device)?.label ?? "";
+  const kindleLabel = options?.devices.find((d) => d.id === data.device)?.name ?? data.device ?? "";
 
   return (
     <div className="space-y-6">
@@ -930,80 +1015,122 @@ function StepConvert({
         subtitle="Ajuste pro seu Kindle e veja o preview."
       />
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label className="font-display text-base flex items-center gap-1">
-            <Tablet className="h-4 w-4" /> Perfil do dispositivo
-          </Label>
-          <Select value={data.device} onValueChange={(v) => update("device", v)}>
-            <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="border-[3px] border-ink">
-              {KINDLE_DEVICES.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  {d.label}
+      {optLoading ? (
+        <div className="flex items-center gap-2 opacity-60">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="font-display text-base">Carregando opções…</span>
+        </div>
+      ) : (
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="font-display text-base flex items-center gap-1">
+              <Tablet className="h-4 w-4" /> Perfil do dispositivo
+            </Label>
+            <Select value={data.device} onValueChange={(v) => update("device", v)}>
+              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-[3px] border-ink">
+                {(options?.devices ?? []).map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="font-display text-base">Formato de saída</Label>
+            <Select value={data.format} onValueChange={(v) => update("format", v)}>
+              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-[3px] border-ink">
+                {(options?.formats ?? []).map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label className="font-display text-base">Preset</Label>
+            <Select value={data.preset} onValueChange={(v) => update("preset", v)}>
+              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-[3px] border-ink">
+                {(options?.presets ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <span className="font-display mr-2">{p.name}</span>
+                    <span className="opacity-70 text-xs">— {p.description}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs font-medium opacity-70">
+              {options?.presets.find((p) => p.id === data.preset)?.description}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="font-display text-base">Título (opcional)</Label>
+            <Input
+              value={data.meta.title}
+              onChange={(e) => update("meta", { ...data.meta, title: e.target.value })}
+              className="border-[3px] border-ink h-11 shadow-comic-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="font-display text-base">Autor (opcional)</Label>
+            <Input
+              value={data.meta.author}
+              onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
+              className="border-[3px] border-ink h-11 shadow-comic-sm"
+            />
+          </div>
+        </div>
+      )}
+
+        {/* Estratégia de páginas corrompidas */}
+        {!optLoading && (
+          <div className="space-y-2 md:col-span-2">
+            <Label className="font-display text-base flex items-center gap-1">
+              <AlertTriangle className="h-4 w-4" /> Páginas indisponíveis na origem
+            </Label>
+            <Select
+              value={data.errorHandlingStrategy}
+              onValueChange={(v) => update("errorHandlingStrategy", v as "ignore" | "skip_chapter" | "abort")}
+            >
+              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-[3px] border-ink">
+                <SelectItem value="ignore">
+                  Ignorar e continuar (placeholder)
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="font-display text-base">Formato de saída</Label>
-          <Select value={data.format} onValueChange={(v) => update("format", v as OutputFormat)}>
-            <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="border-[3px] border-ink">
-              {OUTPUT_FORMATS.map((f) => (
-                <SelectItem key={f} value={f}>
-                  {f}
+                <SelectItem value="skip_chapter">
+                  Pular capítulo
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <Label className="font-display text-base">Preset</Label>
-          <Select value={data.preset} onValueChange={(v) => update("preset", v as PresetId)}>
-            <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="border-[3px] border-ink">
-              {PRESETS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  <span className="font-display mr-2">{p.label}</span>
-                  <span className="opacity-70 text-xs">— {p.description}</span>
+                <SelectItem value="abort">
+                  Abortar tudo
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs font-medium opacity-70">
-            {PRESETS.find((p) => p.id === data.preset)?.description}
-          </p>
-        </div>
+              </SelectContent>
+            </Select>
+            <p className="text-xs font-medium opacity-70">
+              {data.errorHandlingStrategy === "ignore"
+                ? "Substitui páginas corrompidas por um aviso visual e finaliza a conversão."
+                : data.errorHandlingStrategy === "skip_chapter"
+                  ? "Cancela apenas o capítulo com erro, mas continua convertendo o resto."
+                  : "Para todo o processo imediatamente ao encontrar a primeira página corrompida."}
+            </p>
+          </div>
+        )}
 
-        <div className="space-y-2">
-          <Label className="font-display text-base">Título (opcional)</Label>
-          <Input
-            value={data.meta.title}
-            onChange={(e) => update("meta", { ...data.meta, title: e.target.value })}
-            className="border-[3px] border-ink h-11 shadow-comic-sm"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label className="font-display text-base">Autor (opcional)</Label>
-          <Input
-            value={data.meta.author}
-            onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
-            className="border-[3px] border-ink h-11 shadow-comic-sm"
-          />
-        </div>
-      </div>
-
-      {/* Time estimate */}
+        {/* Time estimate */}
       <ComicPanel bg="blue" padding="md" tilt="left">
         <div className="flex items-center gap-3">
           <Clock className="h-6 w-6 shrink-0" />
@@ -1188,16 +1315,10 @@ function StepDelivery({
   data,
   update,
   onEdit,
-  cost,
-  credits,
-  enough,
 }: {
   data: WizardData;
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
   onEdit: (i: number) => void;
-  cost: number;
-  credits: number;
-  enough: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -1244,16 +1365,24 @@ function StepDelivery({
       <div>
         <p className="font-display text-xl mb-3">Resumo</p>
         <ComicPanel bg="halftone" padding="md" className="space-y-2 text-sm font-medium">
-          <SummaryRow label="Origem" value={data.series?.title ?? "—"} onEdit={() => onEdit(0)} />
+          <SummaryRow
+            label="Origem"
+            value={data.inspectData?.metadata.title ?? "—"}
+            onEdit={() => onEdit(0)}
+          />
           <SummaryRow
             label="Capítulos"
             value={`${data.selectedChapters.size} • ${data.grouping === "single" ? "junto" : "separado"}`}
             onEdit={() => onEdit(1)}
           />
-          <SummaryRow label="Capas" value={describeMode(data.coverMode)} onEdit={() => onEdit(2)} />
           <SummaryRow
-            label="Kindle"
-            value={`${KINDLE_DEVICES.find((d) => d.id === data.device)?.label} • ${data.format} • preset ${data.preset}`}
+            label="Capas"
+            value={coverModeLabel(data.coverMode)}
+            onEdit={() => onEdit(2)}
+          />
+          <SummaryRow
+            label="Dispositivo"
+            value={`${data.device || "—"} • ${data.format}`}
             onEdit={() => onEdit(3)}
           />
           <SummaryRow
@@ -1266,7 +1395,7 @@ function StepDelivery({
         </ComicPanel>
       </div>
 
-      <SizeBudget chapters={cost} delivery={data.delivery} />
+      <SizeBudget chapters={data.selectedChapters.size} delivery={data.delivery} />
     </div>
   );
 }
@@ -1307,7 +1436,7 @@ function SizeBudget({ chapters, delivery }: { chapters: number; delivery: Delive
   );
 }
 
-function describeMode(m: CoverMode) {
+function coverModeLabel(m: CoverMode) {
   return m === "single" ? "Capa única" : m === "per-volume" ? "Por volume" : "Por capítulo";
 }
 

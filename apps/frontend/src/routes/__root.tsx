@@ -1,10 +1,12 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
 import { BibliotecaProvider } from "@/hooks/useBiblioteca";
-import { ConversionProvider } from "@/hooks/useConversion";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ComicIntensityProvider } from "@/hooks/useComicIntensity";
 import { useAuth } from "@/hooks/useAuth";
+
+const queryClient = new QueryClient();
 
 function NotFoundComponent() {
   return (
@@ -55,16 +57,16 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <ThemeProvider>
-      <ComicIntensityProvider>
-        <AuthProvider>
-          <BibliotecaProvider>
-            <ConversionProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <ComicIntensityProvider>
+          <AuthProvider>
+            <BibliotecaProvider>
               <AppShell />
-            </ConversionProvider>
-          </BibliotecaProvider>
-        </AuthProvider>
-      </ComicIntensityProvider>
-    </ThemeProvider>
+            </BibliotecaProvider>
+          </AuthProvider>
+        </ComicIntensityProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }

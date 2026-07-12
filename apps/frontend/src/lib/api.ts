@@ -2,9 +2,16 @@
 // Backend: Fastify + JWT Bearer token na resposta JSON
 
 import type { AuthResponse, LoginCredentials, RegisterData, UpdateProfileData, User } from "@/types/auth";
+import type { InspectTriggerResponse, SourceInspectResponse } from "@/types/scraping";
+import type {
+  ConversionOptions,
+  ConversionState,
+  CreateConversionBody,
+  CreateConversionResponse,
+} from "@/types/conversion";
+import { createSSEStream } from "@/lib/sse";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "mangaink_token";
 
 // ─── Gerenciamento de token ───────────────────────────────────────────────────
@@ -49,7 +56,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(path, {
     ...options,
     headers,
   });
@@ -112,3 +119,101 @@ export const userApi = {
     });
   },
 };
+
+// ─── Scraping API ─────────────────────────────────────────────────────────────
+
+export const scrapingApi = {
+  /**
+   * POST /api/conversions/source/inspect
+   * Dispara inspeção de URL. Retorna { sourceId, status }.
+   * status = "ready" (200) → cache válido; status = "processing" (202) → job enfileirado
+   */
+  async inspect(url: string, refresh = false): Promise<InspectTriggerResponse> {
+    const qs = refresh ? "?refresh=true" : "";
+    return request<InspectTriggerResponse>(`/api/conversions/source/inspect${qs}`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
+  },
+
+  /** GET /api/conversions/source/inspect/:sourceId — metadados completos */
+  async getSource(sourceId: string): Promise<SourceInspectResponse> {
+    return request<SourceInspectResponse>(`/api/conversions/source/inspect/${sourceId}`);
+  },
+
+  /**
+   * SSE /api/conversions/source/inspect/:sourceId/events
+   * SEM auth (token não necessário para scraping SSE)
+   * Retorna { close } para fechar o stream.
+   */
+  inspectEvents(
+    sourceId: string,
+    handlers: {
+      onProgress?: (data: { stage: string; message: string; progress: number }) => void;
+      onCompleted?: (data: { sourceId: string }) => void;
+      onFailed?: (data: { message: string }) => void;
+      onError?: (error: Error) => void;
+    },
+  ): { close: () => void } {
+    const url = `/api/conversions/source/inspect/${sourceId}/events`;
+    return createSSEStream(url, {
+      onEvent(event, data) {
+        if (event === "progress") handlers.onProgress?.(data as never);
+        else if (event === "completed") handlers.onCompleted?.(data as never);
+        else if (event === "failed") handlers.onFailed?.(data as never);
+      },
+      onError: handlers.onError,
+    });
+    // sem token — endpoint público
+  },
+};
+
+// ─── Conversions API ──────────────────────────────────────────────────────────
+
+export const conversionsApi = {
+  /**
+   * GET /api/conversions/options — público (sem auth)
+   * Catálogo de dispositivos, formatos, campos e presets.
+   */
+  async getOptions(): Promise<ConversionOptions> {
+    return request<ConversionOptions>("/api/conversions/options");
+  },
+
+  /**
+   * POST /api/conversions — requer auth
+   * Cria uma nova Conversion. Retorna { conversionId, totalJobs, queued }.
+   */
+  async create(body: CreateConversionBody): Promise<CreateConversionResponse> {
+    return request<CreateConversionResponse>("/api/conversions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  /** GET /api/conversions/:conversionId — estado agregado */
+  async get(conversionId: string): Promise<ConversionState> {
+    return request<ConversionState>(`/api/conversions/${conversionId}`);
+  },
+
+  /** DELETE /api/conversions/:conversionId — cancela */
+  async cancel(conversionId: string): Promise<{ conversionId: string; status: "cancelled" }> {
+    return request(`/api/conversions/${conversionId}`, { method: "DELETE" });
+  },
+
+  /**
+   * SSE /api/conversions/:conversionId/events — requer auth (token injetado)
+   * Fan-in de todos os Jobs da Conversion.
+   */
+  events(
+    conversionId: string,
+    handlers: {
+      onEvent: (event: string, data: unknown) => void;
+      onError?: (error: Error) => void;
+    },
+  ): { close: () => void } {
+    const url = `/api/conversions/${conversionId}/events`;
+    const token = tokenStore.get() ?? undefined;
+    return createSSEStream(url, handlers, token);
+  },
+};
+
