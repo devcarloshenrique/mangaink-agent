@@ -33,8 +33,5 @@ storybook-static/
 
 # Prisma
 apps/backend/storage
-apps/backend/storage/*
 .claude
 graphify-out
-apps/backend/storage/sources/src-hunter-x-hunter-cb3c9071/metadata.json
-apps/backend/storage/sources/src-jujutsu-kaisen-modulo-95c0b262/metadata.json
