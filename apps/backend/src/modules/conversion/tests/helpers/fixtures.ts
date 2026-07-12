@@ -27,6 +27,7 @@ export function makeConversionConfig(overrides: Partial<ConversionConfig> = {}):
     metadata: { title: 'Hunter x Hunter', author: 'Yoshihiro Togashi' },
     books: [makeBook()],
     options: { mangaMode: true, splitter: 'split' },
+    userId: 'test-user-001',
     ...overrides,
   }
 }

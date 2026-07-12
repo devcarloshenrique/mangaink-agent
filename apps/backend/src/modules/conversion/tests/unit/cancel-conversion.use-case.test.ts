@@ -7,8 +7,12 @@ import { makeConversionConfig } from '../helpers/fixtures'
 import {
   ConversionNotFoundError,
   InvalidConversionStateError,
+  ForbiddenError,
 } from '../../errors/conversion.errors'
 import type { ConversionState } from '../../types/conversion.types'
+
+const TEST_USER = 'test-user-001'
+const OTHER_USER = 'other-user-999'
 
 const jobStatusStore = new Map<string, { status: string }>()
 const writtenStatuses = new Map<string, Record<string, unknown>>()
@@ -98,7 +102,7 @@ describe('CancelConversionUseCase', () => {
       status: 'downloading',
     })
 
-    const result = await useCase.execute('conv_test_001')
+    const result = await useCase.execute('conv_test_001', TEST_USER)
 
     expect(result.conversionId).toBe('conv_test_001')
     expect(result.status).toBe('cancelled')
@@ -141,7 +145,7 @@ describe('CancelConversionUseCase', () => {
       status: 'preparing',
     })
 
-    await useCase.execute('conv_test_001')
+    await useCase.execute('conv_test_001', TEST_USER)
 
     const cancelledJobs = Array.from(writtenStatuses.values()).filter(
       (s) => s.status === 'cancelled',
@@ -164,7 +168,7 @@ describe('CancelConversionUseCase', () => {
       status: 'downloading',
     })
 
-    await useCase.execute('conv_test_001')
+    await useCase.execute('conv_test_001', TEST_USER)
 
     const updated = await conversions.findById('conv_test_001')
     expect(updated).not.toBeNull()
@@ -180,7 +184,7 @@ describe('CancelConversionUseCase', () => {
   })
 
   it('deve lancar ConversionNotFoundError quando conversao nao existe', async () => {
-    await expect(useCase.execute('conv_inexistente')).rejects.toThrow(
+    await expect(useCase.execute('conv_inexistente', TEST_USER)).rejects.toThrow(
       ConversionNotFoundError,
     )
   })
@@ -199,7 +203,7 @@ describe('CancelConversionUseCase', () => {
     })
     await conversions.create(state)
 
-    await expect(useCase.execute('conv_test_001')).rejects.toThrow(
+    await expect(useCase.execute('conv_test_001', TEST_USER)).rejects.toThrow(
       InvalidConversionStateError,
     )
   })
@@ -216,7 +220,7 @@ describe('CancelConversionUseCase', () => {
     })
     await conversions.create(state)
 
-    await expect(useCase.execute('conv_test_001')).rejects.toThrow(
+    await expect(useCase.execute('conv_test_001', TEST_USER)).rejects.toThrow(
       InvalidConversionStateError,
     )
   })
@@ -237,7 +241,7 @@ describe('CancelConversionUseCase', () => {
     })
     await conversions.create(state)
 
-    await expect(useCase.execute('conv_test_001')).rejects.toThrow(
+    await expect(useCase.execute('conv_test_001', TEST_USER)).rejects.toThrow(
       InvalidConversionStateError,
     )
   })
@@ -253,7 +257,7 @@ describe('CancelConversionUseCase', () => {
       status: 'queued',
     })
 
-    await useCase.execute('conv_test_001')
+    await useCase.execute('conv_test_001', TEST_USER)
 
     const cancelledEvents = events.emitted.filter(
       (e) => e.event.type === 'conversion.cancelled',
@@ -286,8 +290,22 @@ describe('CancelConversionUseCase', () => {
       status: 'queued',
     })
 
-    const result = await useCase.execute('conv_test_001')
+    const result = await useCase.execute('conv_test_001', TEST_USER)
     expect(result.status).toBe('cancelled')
     expect(queue.removed).toContain('job_002')
+  })
+
+  it('deve lancar ForbiddenError quando userId nao corresponde', async () => {
+    const state = mockState()
+    await conversions.create(state)
+
+    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
+      status: 'queued',
+    })
+    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
+      status: 'downloading',
+    })
+
+    await expect(useCase.execute('conv_test_001', OTHER_USER)).rejects.toThrow(ForbiddenError)
   })
 })

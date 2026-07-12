@@ -184,4 +184,49 @@ describe('CreateConversionUseCase (Planner)', () => {
     expect(createdEvents).toHaveLength(1)
     expect(createdEvents[0].event.data.totalJobs).toBe(1)
   })
+
+  it('deve propagar errorHandlingStrategy do config para cada Job', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadata(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig({
+      books: [
+        { title: 'Vol 01', chapters: ['chap_0001', 'chap_0002'] },
+      ],
+      errorHandlingStrategy: 'abort',
+    })
+    await useCase.execute(config)
+
+    for (const job of jobs.created) {
+      expect(job.config.errorHandlingStrategy).toBe('abort')
+    }
+  })
+
+  it('deve manter errorHandlingStrategy undefined quando nao definido no config', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadata(['chap_0001']))
+    const config = makeConversionConfig({
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+    })
+    await useCase.execute(config)
+
+    expect(jobs.created[0].config.errorHandlingStrategy).toBeUndefined()
+  })
+
+  it('deve propagar errorHandlingStrategy do config para cada Job', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadata(['chap_0001']))
+    const config = makeConversionConfig({
+      errorHandlingStrategy: 'abort',
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+    })
+    await useCase.execute(config)
+    expect(jobs.created[0].config.errorHandlingStrategy).toBe('abort')
+    expect(queue.enqueued[0].errorHandlingStrategy).toBe('abort')
+  })
+
+  it('errorHandlingStrategy padrão deve ser undefined', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadata(['chap_0001']))
+    const config = makeConversionConfig({
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+    })
+    await useCase.execute(config)
+    expect(jobs.created[0].config.errorHandlingStrategy).toBeUndefined()
+  })
 })

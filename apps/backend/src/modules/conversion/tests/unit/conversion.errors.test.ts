@@ -11,6 +11,7 @@ import {
   ChapterNotFoundError,
   KccExecutionError,
   DownloadFailedError,
+  ForbiddenError,
 } from '../../errors/conversion.errors'
 
 describe('Conversion Errors', () => {
@@ -88,10 +89,22 @@ describe('Conversion Errors', () => {
     expect(err.code).toBe('DOWNLOAD_FAILED')
   })
 
+  it('ForbiddenError', () => {
+    const err = new ForbiddenError('conv_123')
+    expect(err.name).toBe('ForbiddenError')
+    expect(err.code).toBe('FORBIDDEN')
+    expect(err.message).toContain('conv_123')
+  })
+
+  it('ForbiddenError deve estender ConversionError', () => {
+    expect(new ForbiddenError('x')).toBeInstanceOf(ConversionError)
+  })
+
   it('todos os erros devem estender ConversionError', () => {
     expect(new ConversionNotFoundError('x')).toBeInstanceOf(ConversionError)
     expect(new SourceNotFoundError('x')).toBeInstanceOf(ConversionError)
     expect(new ValidationError('x')).toBeInstanceOf(ConversionError)
     expect(new KccExecutionError('x', 1, 'x')).toBeInstanceOf(ConversionError)
+    expect(new ForbiddenError('x')).toBeInstanceOf(ConversionError)
   })
 })

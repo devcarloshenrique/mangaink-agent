@@ -1,0 +1,124 @@
+import { describe, it, expect } from 'vitest'
+import type { Chapter, Book } from '@/types/scraping'
+
+// ── Funções extraídas do wizard.tsx ────────────────────────────────────
+
+type VolumeMode = 'fixed' | 'custom'
+
+function computeVolumes(
+  chapters: Chapter[],
+  mode: VolumeMode,
+  fixedSize: number,
+  customSizes: number[],
+): Chapter[][] {
+  if (mode === 'fixed') {
+    const result: Chapter[][] = []
+    for (let i = 0; i < chapters.length; i += fixedSize) {
+      result.push(chapters.slice(i, i + fixedSize))
+    }
+    return result
+  }
+  const result: Chapter[][] = []
+  let offset = 0
+  for (const size of customSizes) {
+    result.push(chapters.slice(offset, offset + size))
+    offset += size
+  }
+  if (offset < chapters.length) result.push(chapters.slice(offset))
+  return result.filter((v) => v.length > 0)
+}
+
+function buildBooks(
+  chapters: Chapter[],
+  selectedIds: Set<string>,
+  metaTitle: string,
+  grouping: 'single' | 'separate',
+  mode: VolumeMode,
+  fixedSize: number,
+  customSizes: number[],
+): Book[] {
+  const selected = chapters.filter((c) => selectedIds.has(c.id))
+
+  if (grouping === 'single') {
+    return [{ title: metaTitle || 'Título', chapters: selected.map((c) => c.id) }]
+  }
+
+  const volumes = computeVolumes(selected, mode, fixedSize, customSizes)
+  const baseTitle = metaTitle || 'Título'
+  return volumes.map((vChapters, i) => ({
+    title: `${baseTitle} - Vol. ${i + 1}`,
+    chapters: vChapters.map((c) => c.id),
+  }))
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+function makeChapter(id: string): Chapter {
+  return { id, title: `Capítulo ${id}`, url: `https://site/${id}`, pages: 20 }
+}
+
+describe('computeVolumes', () => {
+  const chapters = Array.from({ length: 15 }, (_, i) => makeChapter(`chap_${String(i + 1).padStart(4, '0')}`))
+
+  it('fixed: agrupa em chunks de tamanho fixo', () => {
+    const volumes = computeVolumes(chapters, 'fixed', 5, [])
+    expect(volumes).toHaveLength(3)
+    expect(volumes[0]).toHaveLength(5)
+    expect(volumes[1]).toHaveLength(5)
+    expect(volumes[2]).toHaveLength(5)
+  })
+
+  it('fixed: último volume pode ser menor', () => {
+    const volumes = computeVolumes(chapters, 'fixed', 8, [])
+    expect(volumes).toHaveLength(2)
+    expect(volumes[0]).toHaveLength(8)
+    expect(volumes[1]).toHaveLength(7)
+  })
+
+  it('custom: tamanhos definidos pelo usuário', () => {
+    const volumes = computeVolumes(chapters, 'custom', 0, [3, 5])
+    expect(volumes).toHaveLength(3)
+    expect(volumes[0]).toHaveLength(3)
+    expect(volumes[1]).toHaveLength(5)
+    expect(volumes[2]).toHaveLength(7)
+  })
+
+  it('custom: remove volumes vazios', () => {
+    const volumes = computeVolumes(chapters.slice(0, 3), 'custom', 0, [5, 5])
+    expect(volumes).toHaveLength(1)
+    expect(volumes[0]).toHaveLength(3)
+  })
+})
+
+describe('buildBooks', () => {
+  const chapters = Array.from({ length: 6 }, (_, i) => makeChapter(`chap_${String(i + 1).padStart(4, '0')}`))
+  const allIds = new Set(chapters.map((c) => c.id))
+
+  it('single: retorna 1 Book com todos os capítulos', () => {
+    const books = buildBooks(chapters, allIds, 'Hunter x Hunter', 'single', 'fixed', 0, [])
+    expect(books).toHaveLength(1)
+    expect(books[0].title).toBe('Hunter x Hunter')
+    expect(books[0].chapters).toHaveLength(6)
+  })
+
+  it('separate: retorna N Books por volume', () => {
+    const books = buildBooks(chapters, allIds, 'Hunter x Hunter', 'separate', 'fixed', 3, [])
+    expect(books).toHaveLength(2)
+    expect(books[0].title).toBe('Hunter x Hunter - Vol. 1')
+    expect(books[0].chapters).toHaveLength(3)
+    expect(books[1].title).toBe('Hunter x Hunter - Vol. 2')
+    expect(books[1].chapters).toHaveLength(3)
+  })
+
+  it('respeita selectedIds (apenas capítulos marcados)', () => {
+    const selected = new Set([chapters[0].id, chapters[2].id, chapters[4].id])
+    const books = buildBooks(chapters, selected, 'One Piece', 'single', 'fixed', 0, [])
+    expect(books).toHaveLength(1)
+    expect(books[0].chapters).toHaveLength(3)
+  })
+
+  it('usa metaTitle padrão quando vazio', () => {
+    const books = buildBooks(chapters, allIds, '', 'single', 'fixed', 0, [])
+    expect(books[0].title).toBe('Título')
+  })
+})

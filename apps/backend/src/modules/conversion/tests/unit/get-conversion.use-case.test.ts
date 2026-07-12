@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { GetConversionUseCase } from '../../use-cases/get-conversion.use-case'
 import { InMemoryConversionRepository } from '../helpers/in-memory-conversion.repository'
-import { ConversionNotFoundError } from '../../errors/conversion.errors'
+import { ConversionNotFoundError, ForbiddenError } from '../../errors/conversion.errors'
 import { makeConversionConfig } from '../helpers/fixtures'
 import type { ConversionState } from '../../types/conversion.types'
+
+const TEST_USER = 'test-user-001'
+const OTHER_USER = 'other-user-999'
 
 let conversions: InMemoryConversionRepository
 let useCase: GetConversionUseCase
@@ -38,7 +41,7 @@ describe('GetConversionUseCase', () => {
   it('deve retornar estado da conversão após syncStatus', async () => {
     await conversions.create(mockState({ conversionId: 'conv_test_001' }))
 
-    const result = await useCase.execute('conv_test_001')
+    const result = await useCase.execute('conv_test_001', TEST_USER)
 
     expect(result.conversionId).toBe('conv_test_001')
     expect(result.status).toBe('queued')
@@ -61,7 +64,7 @@ describe('GetConversionUseCase', () => {
       }),
     )
 
-    const result = await useCase.execute('conv_test_002')
+    const result = await useCase.execute('conv_test_002', TEST_USER)
 
     expect(result.status).toBe('processing')
     expect(result.progress).toBe(50)
@@ -84,7 +87,7 @@ describe('GetConversionUseCase', () => {
       }),
     )
 
-    const result = await useCase.execute('conv_test_003')
+    const result = await useCase.execute('conv_test_003', TEST_USER)
 
     expect(result.status).toBe('completed')
     expect(result.progress).toBe(100)
@@ -109,7 +112,7 @@ describe('GetConversionUseCase', () => {
       }),
     )
 
-    const result = await useCase.execute('conv_test_004')
+    const result = await useCase.execute('conv_test_004', TEST_USER)
 
     expect(result.status).toBe('partial')
     expect(result.completedJobs).toBe(1)
@@ -117,15 +120,21 @@ describe('GetConversionUseCase', () => {
   })
 
   it('deve lançar ConversionNotFoundError quando conversão não existe', async () => {
-    await expect(useCase.execute('conv_inexistente')).rejects.toThrow(ConversionNotFoundError)
+    await expect(useCase.execute('conv_inexistente', TEST_USER)).rejects.toThrow(ConversionNotFoundError)
   })
 
   it('deve lançar ConversionNotFoundError com código CONVERSION_NOT_FOUND', async () => {
     try {
-      await useCase.execute('conv_inexistente')
+      await useCase.execute('conv_inexistente', TEST_USER)
     } catch (err) {
       expect(err).toBeInstanceOf(ConversionNotFoundError)
       expect((err as ConversionNotFoundError).code).toBe('CONVERSION_NOT_FOUND')
     }
+  })
+
+  it('deve lançar ForbiddenError quando userId não corresponde', async () => {
+    await conversions.create(mockState({ conversionId: 'conv_test_005' }))
+
+    await expect(useCase.execute('conv_test_005', OTHER_USER)).rejects.toThrow(ForbiddenError)
   })
 })
