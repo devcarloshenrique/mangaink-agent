@@ -86,6 +86,22 @@ export class ConversionPubSubService {
     }
   }
 
+  async pubRpush(key: string, value: string): Promise<void> {
+    await this.publisher.rpush(key, value)
+  }
+
+  async pubLrange(key: string, start: number, end: number): Promise<string[]> {
+    return this.publisher.lrange(key, start, end)
+  }
+
+  async pubIncr(key: string): Promise<number> {
+    return this.publisher.incr(key)
+  }
+
+  async pubExpire(key: string, seconds: number): Promise<void> {
+    await this.publisher.expire(key, seconds)
+  }
+
   async close(): Promise<void> {
     this.listeners.clear()
     await this.publisher.quit()

@@ -2,34 +2,30 @@ import type { FastifyReply } from 'fastify'
 import { ConversionPubSubService } from './conversion-pubsub.service'
 import type { SSEEvent, SSEEventType } from '../types/conversion.types'
 
-/**
- * Faz a ponte entre Redis Pub/Sub (eventos internos dos workers) e o
- * SSE exposto ao cliente. Suporta dois modos:
- *
- *  - Por Job: conecta um cliente a um único job.
- *  - Por Conversion: faz fan-in de todos os jobs da Conversion, prefixando
- *    os eventos com `jobId` em `data`.
- */
 export class ConversionEventsService {
+  private static readonly JOURNAL_TTL = 3600
+  private static readonly JOURNAL_PREFIX = 'conversion-journal:'
+  private static readonly ID_PREFIX = 'conversion-event-id:'
+
   constructor(private readonly pubsub: ConversionPubSubService) {}
 
-  createEvent(
-    type: SSEEventType,
-    data: Record<string, unknown> = {},
-  ): SSEEvent {
-    return {
-      type,
-      data,
-      timestamp: new Date().toISOString(),
-    }
+  createEvent(type: SSEEventType, data: Record<string, unknown> = {}): SSEEvent {
+    return { type, data, timestamp: new Date().toISOString() }
   }
 
-  /** Publica evento de um job no canal do job. */
   async emit(jobId: string, event: SSEEvent): Promise<void> {
-    await this.pubsub.publish(jobId, event)
+    const idKey = `${ConversionEventsService.ID_PREFIX}${jobId}`
+    const journalKey = `${ConversionEventsService.JOURNAL_PREFIX}${jobId}`
+    const id = await this.pubsub.pubIncr(idKey)
+    const journalEntry: SSEEvent = { ...event, id }
+    const payload = JSON.stringify(journalEntry)
+
+    await this.pubsub.pubRpush(journalKey, payload)
+    await this.pubsub.publish(jobId, journalEntry)
+    await this.pubsub.pubExpire(journalKey, ConversionEventsService.JOURNAL_TTL)
+    await this.pubsub.pubExpire(idKey, ConversionEventsService.JOURNAL_TTL)
   }
 
-  /** Conecta SSE de um único job. */
   async connectJobToSSE(jobId: string, reply: FastifyReply): Promise<void> {
     this.writeSseHeaders(reply)
 
@@ -43,27 +39,71 @@ export class ConversionEventsService {
     })
   }
 
-  /**
-   * Conecta SSE fan-in de uma Conversion: encaminha TODOS os eventos
-   * dos jobs pertencentes à Conversion, marcando cada um com `jobId`.
-   */
   async connectConversionToSSE(jobIds: string[], reply: FastifyReply): Promise<void> {
     this.writeSseHeaders(reply)
+
+    let isReplaying = true
+    const lastReplayedId = new Map<string, number>()
+    for (const jobId of jobIds) lastReplayedId.set(jobId, 0)
+    const liveBuffer: Array<{ jobId: string; event: SSEEvent }> = []
+
+    const writeSseEvent = (event: SSEEvent, jobId: string) => {
+      try {
+        reply.raw.write(`event: ${event.type}\n`)
+        reply.raw.write(`data: ${JSON.stringify({ ...event.data, jobId })}\n\n`)
+      } catch {
+        // socket fechado
+      }
+    }
 
     const onMessage = (channel: string, message: string) => {
       try {
         const event = JSON.parse(message) as SSEEvent
         const jobId = channel.replace('conversion-job:', '')
-        reply.raw.write(`event: ${event.type}\n`)
-        reply.raw.write(`data: ${JSON.stringify({ ...event.data, jobId })}\n\n`)
+
+        if (isReplaying) {
+          liveBuffer.push({ jobId, event })
+          return
+        }
+
+        const lastId = lastReplayedId.get(jobId) ?? 0
+        if (event.id != null && event.id <= lastId) return
+
+        writeSseEvent(event, jobId)
       } catch {
         // ignora mensagem malformada
       }
     }
 
     await this.pubsub.subscribeMany(jobIds, onMessage)
-    const keepAlive = this.startKeepAlive(reply)
 
+    for (const jobId of jobIds) {
+      const journalKey = `${ConversionEventsService.JOURNAL_PREFIX}${jobId}`
+      const entries = await this.pubsub.pubLrange(journalKey, 0, -1)
+      let maxId = 0
+      for (const entry of entries) {
+        try {
+          const event = JSON.parse(entry) as SSEEvent
+          writeSseEvent(event, jobId)
+          if (event.id != null) maxId = Math.max(maxId, event.id)
+        } catch {
+          // entrada inválida no journal
+        }
+      }
+      lastReplayedId.set(jobId, maxId)
+    }
+
+    isReplaying = false
+
+    for (const { jobId, event } of liveBuffer) {
+      const lastId = lastReplayedId.get(jobId) ?? 0
+      if (event.id != null && event.id > lastId) {
+        writeSseEvent(event, jobId)
+      }
+    }
+    liveBuffer.length = 0
+
+    const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
       await this.pubsub.unsubscribeMany(jobIds, onMessage)

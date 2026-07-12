@@ -8,6 +8,7 @@ import type { ConversionState } from '../types/conversion.types'
 import {
   ConversionNotFoundError,
   InvalidConversionStateError,
+  ForbiddenError,
 } from '../errors/conversion.errors'
 
 /**
@@ -21,10 +22,14 @@ export class CancelConversionUseCase {
     private readonly events: ConversionEventsService,
   ) {}
 
-  async execute(conversionId: string): Promise<{ conversionId: string; status: 'cancelled' }> {
+  async execute(conversionId: string, userId: string): Promise<{ conversionId: string; status: 'cancelled' }> {
     const found = await this.conversions.findById(conversionId)
     if (!found) {
       throw new ConversionNotFoundError(conversionId)
+    }
+
+    if (found.config.userId !== userId) {
+      throw new ForbiddenError(conversionId)
     }
 
     const terminal = ['completed', 'failed', 'cancelled']

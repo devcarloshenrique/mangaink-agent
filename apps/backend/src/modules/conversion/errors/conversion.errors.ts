@@ -95,3 +95,10 @@ export class DownloadFailedError extends ConversionError {
     this.cause = cause
   }
 }
+
+export class ForbiddenError extends ConversionError {
+  constructor(conversionId: string) {
+    super(`Acesso negado à conversão: ${conversionId}`, 'FORBIDDEN')
+    this.name = 'ForbiddenError'
+  }
+}

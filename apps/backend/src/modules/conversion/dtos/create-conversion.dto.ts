@@ -34,6 +34,10 @@ export const createConversionBodySchema = z.object({
     .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
     .optional()
     .default({}),
+  errorHandlingStrategy: z
+    .enum(['ignore', 'skip_chapter', 'abort'])
+    .optional()
+    .default('ignore'),
 })
 
 export type CreateConversionBody = z.infer<typeof createConversionBodySchema>

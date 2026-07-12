@@ -7,9 +7,10 @@ import { FilesystemJobRepository } from '../repositories/filesystem-job.reposito
 import { FilesystemConversionRepository } from '../repositories/filesystem-conversion.repository'
 import { ConversionPubSubService } from '../services/conversion-pubsub.service'
 import { ConversionEventsService } from '../services/conversion-events.service'
-import { ImageDownloaderService } from '../services/image-downloader.service'
+import { ImageDownloaderService, writeChapterImagesMeta } from '../services/image-downloader.service'
 import { KccRunnerService } from '../services/kcc-runner.service'
-import type { ConversionJobData } from '../types/conversion.types'
+import { PlaceholderService } from '../services/placeholder.service'
+import type { ConversionJobData, ErrorHandlingStrategy } from '../types/conversion.types'
 
 const pubsub = new ConversionPubSubService()
 const events = new ConversionEventsService(pubsub)
@@ -44,42 +45,33 @@ const worker = new Worker<ConversionJobData>(
     await repository.appendLog(jobId, `Job iniciado — ${chapters.length} capítulos selecionados`)
     await events.emit(jobId, events.createEvent('job.started', { jobId }))
 
-    // ── Fase 1: Garantir cache em sources/ ──────────────────────────
-    // O downloader apenas salva em sources/{sourceId}/chapters/ (cache)
-    let needsDownload = false
-
-    for (const chapterId of chapters) {
-      const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
-      if (!(await pathExists(cacheDir))) {
-        needsDownload = true
-        break
-      }
-    }
-
-    if (needsDownload) {
-      await repository.update(jobId, {
-        status: 'downloading',
-        currentStep: 'Downloading images...',
-      })
-      await sync()
-      await events.emit(jobId, events.createEvent('download.started', {
-        jobId,
-        totalChapters: chapters.length,
-      }))
-    }
+    // ── Fase 1: Download de imagens ──────────────────────────────────
+    await repository.update(jobId, {
+      status: 'downloading',
+      currentStep: 'Downloading images...',
+    })
+    await sync()
+    await events.emit(jobId, events.createEvent('download.started', {
+      jobId,
+      totalChapters: chapters.length,
+    }))
 
     let totalDownloaded = 0
     let totalErrors = 0
+    let totalCorrupt = 0
+    const skippedChapters: string[] = []
+    const successfulChapters: string[] = []
+
+    const strategy: ErrorHandlingStrategy = job.data.errorHandlingStrategy ?? 'ignore'
+    const placeholderService = new PlaceholderService()
 
     for (const chapterId of chapters) {
-      // Verifica cancelamento
       const currentJob = await repository.findById(jobId)
       if (currentJob?.status === 'cancelled') {
         await repository.appendLog(jobId, 'Job cancelado durante download')
         return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
       }
 
-      // Busca URLs e garante cache
       const imageUrls = await getChapterImageUrls(sourceId, chapterId)
 
       const result = await downloader.downloadChapter(
@@ -91,17 +83,113 @@ const worker = new Worker<ConversionJobData>(
 
       totalDownloaded += result.downloadedImages
       totalErrors += result.errors
+
+      if (result.corruptPages.length > 0) {
+        totalCorrupt += result.corruptPages.length
+
+        if (strategy === 'abort') {
+          await repository.appendLog(jobId,
+            `ABORTAR: ${result.corruptPages.length} páginas corrompidas no capítulo ${chapterId} ` +
+            `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Estratégia: abort`)
+          throw new Error(
+            `Páginas corrompidas encontradas no capítulo ${chapterId}. ` +
+            `Estratégia de erro: abort. Páginas: ${result.corruptPages.map(c => c.pageIndex).join(', ')}`)
+        }
+
+        if (strategy === 'skip_chapter') {
+          await repository.appendLog(jobId,
+            `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`)
+          skippedChapters.push(chapterId)
+          continue
+        }
+
+        if (strategy === 'ignore') {
+          const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
+          
+          if (result.fromCache) {
+            await repository.appendLog(jobId,
+              `Capítulo ${chapterId}: ${result.corruptPages.length} placeholder(s) em cache ` +
+              `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Nenhuma ação necessária.`)
+            
+            await events.emit(jobId, events.createEvent('download.progress', {
+              chapterId,
+              downloadedImages: result.totalImages,
+              totalImages: result.totalImages,
+              errors: 0,
+            }))
+            
+            successfulChapters.push(chapterId)
+          } else {
+            let placeholderCount = 0
+            for (const cp of result.corruptPages) {
+              const filename = `${String(cp.pageIndex).padStart(4, '0')}.png`
+              const cachePath = join(cacheDir, filename)
+              try {
+                const pageLabel = `Cap. ${chapterId.replace(/^chap_0*/, '')}, Pág. ${cp.pageIndex}`
+                const placeholder = await placeholderService.generate(output.deviceId, pageLabel)
+                await writeFile(cachePath, placeholder)
+                placeholderCount++
+              } catch (err) {
+                await repository.appendLog(jobId,
+                  `Erro ao gerar placeholder para ${chapterId} página ${cp.pageIndex}: ${err instanceof Error ? err.message : 'unknown'}`)
+              }
+            }
+            
+            const placeholderIndices = result.corruptPages.map(cp => cp.pageIndex)
+            await writeChapterImagesMeta(cacheDir, { placeholderPageIndices: placeholderIndices })
+            
+            await repository.appendLog(jobId,
+              `${placeholderCount}/${result.corruptPages.length} placeholders gerados para capítulo ${chapterId} ` +
+              `(resolução do dispositivo ${output.deviceId})`)
+            
+            const effectiveTotal = result.totalImages
+            const effectiveDownloaded = result.downloadedImages + placeholderCount
+            totalDownloaded += placeholderCount
+            
+            await events.emit(jobId, events.createEvent('download.progress', {
+              chapterId,
+              downloadedImages: effectiveDownloaded,
+              totalImages: effectiveTotal,
+              errors: result.errors - placeholderCount,
+            }))
+
+            successfulChapters.push(chapterId)
+          }
+        }
+      } else if (result.skipped) {
+        skippedChapters.push(chapterId)
+      } else {
+        successfulChapters.push(chapterId)
+      }
+    }
+
+    if (successfulChapters.length === 0) {
+      const corruptDetail = totalCorrupt > 0 ? `, ${totalCorrupt} página(s) corrompida(s)` : ''
+      throw new Error(
+        `Nenhum capítulo pôde ser baixado. ` +
+        `${skippedChapters.length} capítulo(s) estão indisponíveis no site de origem (erros 404)${corruptDetail}.`,
+      )
+    }
+
+    // Avisa sobre capítulos ignorados, mas continua com os disponíveis
+    if (skippedChapters.length > 0) {
+      await repository.appendLog(
+        jobId,
+        `AVISO: ${skippedChapters.length} capítulo(s) ignorado(s) por indisponibilidade: ${skippedChapters.join(', ')}. ` +
+        `Convertendo os ${successfulChapters.length} capítulo(s) disponíveis.`,
+      )
     }
 
     // ── Fase 2: Montar temp/input/ com hard links ───────────────────
     await repository.update(jobId, {
       status: 'preparing',
-      currentStep: 'Creating hard links from cache...',
+      currentStep: `Creating hard links from cache (${successfulChapters.length}/${chapters.length} chapters)...`,
     })
     await sync()
-    await repository.appendLog(jobId, 'Montando temp/input/ com hard links do cache')
+    await repository.appendLog(jobId, `Montando temp/input/ com hard links do cache (${successfulChapters.length} capítulos disponíveis)`)
 
-    for (const chapterId of chapters) {
+    // Usa apenas capítulos com download bem-sucedido
+    for (const chapterId of successfulChapters) {
       const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
       const chapterInputDir = join(tempInputDir, chapterId)
       await mkdir(chapterInputDir, { recursive: true })
@@ -159,7 +247,9 @@ const worker = new Worker<ConversionJobData>(
 
     // Renomeia o arquivo de saída para o nome bonito com o título real
     let finalOutputFile = kccResult.outputFile
-    const desiredName = `${metadata.title}.${output.format.toLowerCase()}`
+    // Sanitiza o título para remover caracteres inválidos em nomes de arquivo
+    // Exemplo: "Boruto: Two Blue Vortex" → "Boruto - Two Blue Vortex"
+    const desiredName = `${sanitizeFilename(metadata.title)}.${output.format.toLowerCase()}`
 
     if (finalOutputFile && finalOutputFile !== desiredName) {
       const currentPath = join(outputPath, finalOutputFile)
@@ -168,9 +258,10 @@ const worker = new Worker<ConversionJobData>(
         await rename(currentPath, desiredPath)
         finalOutputFile = desiredName
         await repository.appendLog(jobId, `Output renomeado: "${kccResult.outputFile}" → "${desiredName}"`)
-      } catch {
-        // Se renomear falhar, mantém o nome original
-        await repository.appendLog(jobId, `Falha ao renomear output, mantendo "${finalOutputFile}"`)
+      } catch (renameErr) {
+        // Loga o motivo real da falha para facilitar debug
+        const reason = renameErr instanceof Error ? renameErr.message : String(renameErr)
+        await repository.appendLog(jobId, `AVISO: Falha ao renomear output ("${reason}"), mantendo "${finalOutputFile}"`)
       }
     }
 
@@ -255,6 +346,22 @@ worker.on('failed', async (job, error) => {
 worker.on('error', (error) => {
   console.error('[ConversionWorker] Worker error:', error.message)
 })
+
+/**
+ * Remove caracteres inválidos em nomes de arquivo (Windows + Unix).
+ * Converte ":" → " -", "?" → "", "*" → "", etc.
+ * Exemplos:
+ *   "Boruto: Two Blue Vortex" → "Boruto - Two Blue Vortex"
+ *   "Attack on Titan/Final" → "Attack on Titan-Final"
+ */
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/:/g, ' -')           // ":" → " -" (comum em títulos de mangá)
+    .replace(/[\/\\|?*<>"\x00-\x1f]/g, '') // outros chars inválidos → remove
+    .replace(/\s+/g, ' ')          // normaliza espaços múltiplos
+    .trim()
+    || 'output'                    // fallback se o resultado for vazio
+}
 
 /**
  * Lê os metadados originais do scraping (autor, descrição, gêneros)

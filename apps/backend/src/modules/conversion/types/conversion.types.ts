@@ -47,6 +47,8 @@ export interface Book {
 }
 
 /** Snapshot imutável da requisição do usuário, salvo em config.json. */
+export type ErrorHandlingStrategy = 'ignore' | 'skip_chapter' | 'abort'
+
 export interface ConversionConfig {
   sourceId: string
   cover: CoverRef
@@ -55,6 +57,10 @@ export interface ConversionConfig {
   books: Book[]
   /** Opções KCC aceitas pela API pública (sem batchSplit/fileFusion). */
   options: Record<string, string | number | boolean | undefined>
+  /** Estratégia para lidar com páginas corrompidas durante o download. */
+  errorHandlingStrategy?: ErrorHandlingStrategy
+  /** ID do usuário dono da conversão. */
+  userId: string
 }
 
 /** Resumo do estado de um Job dentro de uma Conversion. */
@@ -118,7 +124,9 @@ export type SSEEventType =
   | 'download.started'
   | 'download.chapter.started'
   | 'download.chapter.finished'
+  | 'download.chapter.skipped'
   | 'download.progress'
+  | 'download.image.corrupt'
   | 'conversion.started'
   | 'conversion.progress'
   | 'conversion.finished'
@@ -129,6 +137,7 @@ export interface SSEEvent {
   type: SSEEventType
   data: Record<string, unknown>
   timestamp: string
+  id?: number
 }
 
 export interface DeviceProfile {
@@ -195,6 +204,7 @@ export interface ConversionJobConfig {
   output: ConversionOutput
   metadata: JobMetadata
   options: Record<string, string | number | boolean | undefined>
+  errorHandlingStrategy?: ErrorHandlingStrategy
 }
 
 /**
@@ -233,4 +243,5 @@ export interface ConversionJobData {
   metadata: JobMetadata
   options: Record<string, string | number | boolean | undefined>
   storagePath: string
+  errorHandlingStrategy?: ErrorHandlingStrategy
 }

@@ -130,6 +130,7 @@ export class CreateConversionUseCase {
           author: request.metadata.author,
         },
         options: jobOptions,
+        errorHandlingStrategy: request.errorHandlingStrategy,
       }
 
       const jobState: ConversionJobState = {
@@ -156,6 +157,7 @@ export class CreateConversionUseCase {
         metadata: { title: book.title, author: request.metadata.author },
         options: jobOptions,
         storagePath,
+        errorHandlingStrategy: request.errorHandlingStrategy,
       })
 
       jobSummaries.push({

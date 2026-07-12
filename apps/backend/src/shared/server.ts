@@ -15,6 +15,8 @@ import { healthRoutes } from '../modules/health/health.routes'
 import { authRoutes } from '../modules/auth/auth.routes'
 import { scrapingRoutes } from '../modules/scraping/scraping.routes'
 import { conversionRoutes } from '../modules/conversion/conversion.routes'
+import { ConversionError } from '../modules/conversion/errors/conversion.errors'
+import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import '../modules/scraping/workers/inspect-source.worker'
 import '../modules/conversion/workers/conversion-job.worker'
 
@@ -98,6 +100,30 @@ export async function createServer() {
         issues: error.validation,
       })
     }
+
+    if (error instanceof ConversionError) {
+      const statusMap: Record<string, number> = {
+        CONVERSION_NOT_FOUND: 404,
+        SOURCE_NOT_FOUND: 404,
+        CHAPTER_NOT_FOUND: 404,
+        JOB_NOT_FOUND: 404,
+        FORBIDDEN: 403,
+        VALIDATION_ERROR: 400,
+        DUPLICATE_CHAPTER: 404,
+        INVALID_CONVERSION_STATE: 409,
+        INVALID_JOB_STATE: 409,
+        KCC_EXECUTION_ERROR: 500,
+        DOWNLOAD_FAILED: 500,
+      }
+      const status = statusMap[error.code] ?? 500
+      return reply.code(status).send({ error: error.message })
+    }
+
+    if (error instanceof UserAlreadyExistsError) return reply.code(409).send({ error: error.message })
+    if (error instanceof InvalidCredentialsError) return reply.code(401).send({ error: error.message })
+    if (error instanceof EmailAlreadyInUseError) return reply.code(409).send({ error: error.message })
+    if (error instanceof UsernameAlreadyInUseError) return reply.code(409).send({ error: error.message })
+
     app.log.error(error)
     reply.code(500).send({ error: 'Internal Server Error' })
   })

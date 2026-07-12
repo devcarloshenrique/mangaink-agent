@@ -131,6 +131,7 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
         response: {
           200: conversionStateSchema,
           404: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
         },
       },
     },
@@ -176,6 +177,7 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
           }),
           404: z.object({ error: z.string() }),
           409: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
         },
       },
     },
@@ -199,6 +201,7 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
           }),
           404: z.object({ error: z.string() }),
           409: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
         },
       },
     },
