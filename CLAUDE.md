@@ -344,20 +344,29 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
   - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`
   - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`
-  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`), `conversion-events.service.ts` (bridge Redis → SSE fan-in), `image-downloader.service.ts` (download paralelo), `kcc-runner.service.ts` (spawn do KCC)
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download paralelo com validação de magic bytes), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC)
   - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
   - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging)
   - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)
   - `types/` — `conversion.types.ts` (ConversionConfig, Book, JobMetadata, ConversionJobSummary, etc.)
-  - `errors/` — `conversion.errors.ts` (ConversionNotFoundError, InvalidConversionStateError, DuplicateChapterError, etc.)
+  - `errors/` — `conversion.errors.ts` (ConversionNotFoundError, InvalidConversionStateError, DuplicateChapterError, ForbiddenError, KccExecutionError, DownloadFailedError, etc.)
   - `dtos/` — `create-conversion.dto.ts`, `conversion-options.dto.ts`, `conversion-params.dto.ts`
-  - `tests/` — 76 testes (unit + E2E + helpers: in-memory repo, mock queue, mock events, mock job, fixtures)
+  - `tests/` — testes (unit + E2E + helpers: in-memory repo, mock queue, mock events, mock job, fixtures)
 
   **Convenções importantes do módulo de conversão:**
   - `batchSplit` e `fileFusion` são internos do Planner — NUNCA expostos na API pública
   - O Worker escreve `ComicInfo.xml` no diretório de input do KCC com título, autor, série e gêneros do scraping para metadados corretos no EPUB
   - `metadataTitle: 'metadataOnly'` é forçado no Worker quando ComicInfo.xml está presente
   - URLs de capa têm sufixo de resolução WordPress (`-WxH`) removido via `stripResolutionSuffix()` no parser — `mangalivre.parser.test.ts`
+  - Tratamento de erros é centralizado no error handler global do Fastify (`server.ts`): erros de domínio (`ConversionError`) são mapeados por `error.code` → HTTP status (403/404/409/400/500). Controllers **não** usam try/catch para erros de domínio.
+  - Toda conversão tem `userId` em `ConversionConfig` (salvo em `config.json`). Use-cases validam ownership antes de acessar qualquer conversão.
+  - Eventos SSE são persistidos em Redis List (`conversion-journal:{jobId}`) com ID monotônico (`INCR`). O `connectConversionToSSE()` faz replay automático do journal para clientes que conectam tardiamente.
+  - Imagens baixadas são validadas via magic bytes (JPEG, PNG, WEBP, GIF, BMP). Páginas corrompidas são detectadas e tratadas conforme `errorHandlingStrategy`:
+    - `ignore`: substitui por placeholder (PNG gerado via sharp na resolução do dispositivo)
+    - `skip_chapter`: pula o capítulo
+    - `abort`: cancela o job
+  - Metadados de placeholders são persistidos em `images.json` no diretório de cache do capítulo para reportar páginas faltantes mesmo em cache hits.
+  - Progresso de conversão persiste entre navegações: ao re-navegar, `processedChapters` é computado a partir dos jobs completed via GET + SSE journal replay.
 
 ---
 
