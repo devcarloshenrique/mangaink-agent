@@ -17,11 +17,30 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     proxy: {
-      // Proxy /api → backend Fastify (porta 3333)
+      // Rotas com prefixo /api → backend Fastify (porta 3333)
+      // configure() desabilita bufferização para SSE (text/event-stream)
       "/api": {
         target: "http://localhost:3333",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const ct = proxyRes.headers["content-type"] ?? "";
+            if (ct.includes("text/event-stream")) {
+              // Desativa compressão e bufferização para SSE
+              proxyRes.headers["cache-control"] = "no-cache";
+              delete proxyRes.headers["content-encoding"];
+            }
+          });
+        },
+      },
+      // Rotas de auth/users (backend NÃO tem prefixo /api)
+      "/auth": {
+        target: "http://localhost:3333",
+        changeOrigin: true,
+      },
+      "/users": {
+        target: "http://localhost:3333",
+        changeOrigin: true,
       },
     },
   },
