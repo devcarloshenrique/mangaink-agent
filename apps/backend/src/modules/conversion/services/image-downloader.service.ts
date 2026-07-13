@@ -1,10 +1,10 @@
 import { join } from 'node:path'
 import { writeFile, readdir } from 'node:fs/promises'
 import { mkdirp, pathExists, writeJson, readJson } from '../../../shared/utils/filesystem'
-import { httpClient } from '../../../shared/http/http-client'
 import { env } from '../../../shared/config/env'
 import { ConversionEventsService } from './conversion-events.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
+import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
 
 export interface CorruptPage {
   pageIndex: number
@@ -18,9 +18,7 @@ export interface DownloadResult {
   downloadedImages: number
   errors: number
   fromCache: boolean
-  /** true quando nenhuma imagem pôde ser obtida (capítulo indisponível no site) */
   skipped?: boolean
-  /** Páginas corrompidas detectadas (não salvas no disco) */
   corruptPages: CorruptPage[]
 }
 
@@ -38,20 +36,11 @@ const IMAGE_MAGIC_BYTES: Array<{ signature: number[]; label: string }> = [
   { signature: [0x42, 0x4d], label: 'BMP' },
 ]
 
-/**
- * Extrai o Content-Type como string, tratando o tipo complexo do Axios.
- */
-function getContentType(response: { headers: Record<string, unknown> }): string {
-  const ct = response.headers['content-type']
-  if (typeof ct === 'string') return ct
-  if (Array.isArray(ct)) return ct[0] ?? ''
-  return ''
+function looksLikeHtml(buf: Buffer): boolean {
+  const start = buf.toString('utf-8', 0, Math.min(256, buf.length)).trimStart()
+  return start.startsWith('<!') || start.startsWith('<html') || start.startsWith('<HTML')
 }
 
-/**
- * Verifica se um buffer contém bytes mágicos de um formato de imagem conhecido.
- * Previne salvar HTML, 0-byte, ou outros dados corrompidos como imagem.
- */
 function isImageBuffer(buf: Buffer): boolean {
   if (buf.length === 0) return false
 
@@ -76,14 +65,6 @@ function isImageBuffer(buf: Buffer): boolean {
   return false
 }
 
-/**
- * Detecta se o conteúdo parece ser HTML (começa com <!DOCTYPE, <html, ou whitespace + <).
- */
-function looksLikeHtml(buf: Buffer): boolean {
-  const start = buf.toString('utf-8', 0, Math.min(256, buf.length)).trimStart()
-  return start.startsWith('<!') || start.startsWith('<html') || start.startsWith('<HTML')
-}
-
 export async function readChapterImagesMeta(cacheDir: string): Promise<ChapterImagesMeta | null> {
   const metaPath = join(cacheDir, IMAGES_META_FILENAME)
   const exists = await pathExists(metaPath)
@@ -100,41 +81,21 @@ export async function writeChapterImagesMeta(cacheDir: string, meta: ChapterImag
   await writeJson(metaPath, meta)
 }
 
-/**
- * Serviço de download de imagens com cache em sources/.
- *
- * Responsabilidade única: garantir que as imagens de um capítulo existam
- * no cache persistente em `storage/sources/{sourceId}/chapters/{chapterId}/`.
- *
- * NÃO copia para o diretório do job — o worker fará isso via hard links.
- */
 export class ImageDownloaderService {
   constructor(
     private readonly events: ConversionEventsService,
     private readonly repository: ConversionJobRepository,
   ) {}
 
-  /**
-   * Garante que as imagens de um capítulo existam no cache de sources.
-   *
-   * Se o cache já existe e é válido, retorna imediatamente (cache hit).
-   * Se não existe, faz o download e popula o cache.
-   *
-   * @param jobId - ID do job (para eventos e progresso)
-   * @param sourceId - ID da source (para path do cache)
-   * @param chapterId - ID do capítulo
-   * @param imageUrls - URLs das imagens do capítulo
-   * @returns Resultado do download (ou cache hit)
-   */
   async downloadChapter(
     jobId: string,
     sourceId: string,
     chapterId: string,
     imageUrls: string[],
+    provider: IProviderStrategy,
   ): Promise<DownloadResult> {
     const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
 
-    // ── Verifica cache ────────────────────────────────────────────
     const cacheExists = await this.isCacheValid(cacheDir, imageUrls.length)
 
     if (cacheExists) {
@@ -191,7 +152,6 @@ export class ImageDownloaderService {
       }
     }
 
-    // ── Download para o cache em sources/ ─────────────────────────
     await mkdirp(cacheDir)
 
     await this.events.emit(jobId, this.events.createEvent('download.chapter.started', {
@@ -206,93 +166,81 @@ export class ImageDownloaderService {
     let errors = 0
     const corruptPages: CorruptPage[] = []
 
-    const concurrency = 5
-    const chunks: string[][] = []
-    for (let i = 0; i < imageUrls.length; i += concurrency) {
-      chunks.push(imageUrls.slice(i, i + concurrency))
-    }
+    const total = imageUrls.length
 
-    for (const chunk of chunks) {
-      const results = await Promise.allSettled(
-        chunk.map(async (url, index) => {
-          const globalIndex = downloaded + errors + corruptPages.length + index + 1
-          const ext = url.split('.').pop()?.split('?')[0] ?? 'jpg'
-          const filename = `${String(globalIndex).padStart(4, '0')}.${ext}`
-          const cachePath = join(cacheDir, filename)
+    const results = await Promise.allSettled(
+      imageUrls.map(async (url, index) => {
+        const globalIndex = index + 1
+        const ext = url.split('.').pop()?.split('?')[0] ?? 'jpg'
+        const filename = `${String(globalIndex).padStart(4, '0')}.${ext}`
+        const cachePath = join(cacheDir, filename)
 
-          const response = await httpClient.get(url, {
-            responseType: 'arraybuffer',
-            validateStatus: (status) => status === 200,
-          })
+        const { buffer, contentType } = await provider.downloadImage(url)
 
-          const data = Buffer.from(response.data)
-          const contentType = getContentType(response as { headers: Record<string, unknown> })
+        if (!isImageBuffer(buffer)) {
+          const reason = looksLikeHtml(buffer)
+            ? `Resposta HTML em vez de imagem (Content-Type: "${contentType}")`
+            : buffer.length === 0
+              ? 'Imagem vazia (0 bytes)'
+              : `Magic bytes inválidos (Content-Type: "${contentType}", tamanho: ${buffer.length})`
+          throw { corrupt: true, pageIndex: globalIndex, url, reason }
+        }
 
-          if (!isImageBuffer(data)) {
-            const reason = looksLikeHtml(data)
-              ? `Resposta HTML em vez de imagem (Content-Type: "${contentType}")`
-              : data.length === 0
-                ? 'Imagem vazia (0 bytes)'
-                : `Magic bytes inválidos (Content-Type: "${contentType}", tamanho: ${data.length})`
-            throw { corrupt: true, pageIndex: globalIndex, url, reason }
-          }
-
-          if (!contentType.startsWith('image/')) {
-            throw {
-              corrupt: true,
-              pageIndex: globalIndex,
-              url,
-              reason: `Content-Type inesperado: "${contentType}" (imagem válida mas tipo suspeito)`,
-            }
-          }
-
-          await writeFile(cachePath, data)
-          return true
-        }),
-      )
-
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          downloaded++
-        } else {
-          const reason = (result as PromiseRejectedResult).reason
-          if (reason && typeof reason === 'object' && (reason as { corrupt?: boolean }).corrupt) {
-            const cp: CorruptPage = {
-              pageIndex: (reason as CorruptPage).pageIndex,
-              url: (reason as CorruptPage).url,
-              reason: (reason as CorruptPage).reason,
-            }
-            corruptPages.push(cp)
-
-            await this.events.emit(jobId, this.events.createEvent('download.image.corrupt', {
-              chapterId,
-              pageIndex: cp.pageIndex,
-              url: cp.url,
-              reason: cp.reason,
-            }))
-          } else {
-            errors++
-            console.error(
-              `[ImageDownloader] Erro ao baixar imagem do capítulo ${chapterId}:`,
-              reason?.message ?? 'unknown error',
-            )
+        if (contentType && !contentType.startsWith('image/')) {
+          throw {
+            corrupt: true,
+            pageIndex: globalIndex,
+            url,
+            reason: `Content-Type inesperado: "${contentType}" (imagem válida mas tipo suspeito)`,
           }
         }
+
+        await writeFile(cachePath, buffer)
+        return true
+      }),
+    )
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        downloaded++
+      } else {
+        const reason = (result as PromiseRejectedResult).reason
+        if (reason && typeof reason === 'object' && (reason as { corrupt?: boolean }).corrupt) {
+          const cp: CorruptPage = {
+            pageIndex: (reason as CorruptPage).pageIndex,
+            url: (reason as CorruptPage).url,
+            reason: (reason as CorruptPage).reason,
+          }
+          corruptPages.push(cp)
+
+          await this.events.emit(jobId, this.events.createEvent('download.image.corrupt', {
+            chapterId,
+            pageIndex: cp.pageIndex,
+            url: cp.url,
+            reason: cp.reason,
+          }))
+        } else {
+          errors++
+          console.error(
+            `[ImageDownloader] Erro ao baixar imagem do capítulo ${chapterId}:`,
+            reason?.message ?? 'unknown error',
+          )
+        }
       }
-
-      await this.events.emit(jobId, this.events.createEvent('download.progress', {
-        chapterId,
-        downloadedImages: downloaded,
-        totalImages: imageUrls.length,
-        errors: errors + corruptPages.length,
-      }))
-
-      await this.repository.update(jobId, {
-        downloadedImages: downloaded,
-        totalImages: imageUrls.length,
-        currentStep: `Downloading chapter ${chapterId} (${downloaded}/${imageUrls.length}, ${errors + corruptPages.length} errors)`,
-      })
     }
+
+    await this.events.emit(jobId, this.events.createEvent('download.progress', {
+      chapterId,
+      downloadedImages: downloaded,
+      totalImages: imageUrls.length,
+      errors: errors + corruptPages.length,
+    }))
+
+    await this.repository.update(jobId, {
+      downloadedImages: downloaded,
+      totalImages: imageUrls.length,
+      currentStep: `Downloading chapter ${chapterId} (${downloaded}/${imageUrls.length}, ${errors + corruptPages.length} errors)`,
+    })
 
     if (downloaded === 0 && imageUrls.length > 0) {
       const isAllCorrupt = corruptPages.length === imageUrls.length
@@ -343,9 +291,6 @@ export class ImageDownloaderService {
     }
   }
 
-  /**
-   * Verifica se o cache do capítulo é válido.
-   */
   private async isCacheValid(cacheDir: string, expectedCount: number): Promise<boolean> {
     const exists = await pathExists(cacheDir)
     if (!exists) return false

@@ -65,6 +65,11 @@ const worker = new Worker<ConversionJobData>(
     const strategy: ErrorHandlingStrategy = job.data.errorHandlingStrategy ?? 'ignore'
     const placeholderService = new PlaceholderService()
 
+    const provider = await resolveProvider(sourceId)
+    if (!provider) {
+      throw new Error(`Não foi possível resolver o provider para sourceId: ${sourceId}`)
+    }
+
     for (const chapterId of chapters) {
       const currentJob = await repository.findById(jobId)
       if (currentJob?.status === 'cancelled') {
@@ -72,13 +77,14 @@ const worker = new Worker<ConversionJobData>(
         return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
       }
 
-      const imageUrls = await getChapterImageUrls(sourceId, chapterId)
+      const imageUrls = await getChapterImageUrls(provider, sourceId, chapterId)
 
       const result = await downloader.downloadChapter(
         jobId,
         sourceId,
         chapterId,
         imageUrls,
+        provider,
       )
 
       totalDownloaded += result.downloadedImages
@@ -213,7 +219,7 @@ const worker = new Worker<ConversionJobData>(
     }
 
     // ── Fase 2.5: Aplicar capa ──────────────────────────────────────
-    await applyCover(repository, jobId, sourceId, cover, tempInputDir)
+    await applyCover(repository, jobId, sourceId, cover, tempInputDir, provider)
 
     // ── Fase 2.6: Escrever metadados (ComicInfo.xml) ────────────────
     const sourceMeta = await readSourceMetadata(sourceId)
@@ -437,23 +443,24 @@ async function writeComicInfoXml(
 }
 
 /**
- * Busca URLs das imagens de um capítulo usando o provider correto.
+ * Busca URLs das imagens de um capítulo usando o provider com rate limiting.
  */
-async function getChapterImageUrls(sourceId: string, chapterId: string): Promise<string[]> {
+async function getChapterImageUrls(
+  provider: import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null,
+  sourceId: string,
+  chapterId: string,
+): Promise<string[]> {
   const { readJson } = await import('../../../shared/utils/filesystem')
   const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
   const source = await readJson<{
     provider: { slug: string }
     chapters: Array<{ id: string; url: string }>
   }>(sourcePath)
-  if (!source) return []
+  if (!source || !provider) return []
 
   const chapter = source.chapters.find((c) => c.id === chapterId)
   if (!chapter?.url) return []
 
-  const { ProviderResolver } = await import('../../scraping/providers/provider-resolver')
-  const resolver = new ProviderResolver()
-  const provider = resolver.resolve(chapter.url)
   const images = await provider.getChapterImages(chapter.url)
 
   if (images.length === 0) {
@@ -463,6 +470,25 @@ async function getChapterImageUrls(sourceId: string, chapterId: string): Promise
   }
 
   return images
+}
+
+/**
+ * Resolve o provider correto para o sourceId com rate limiter injetado.
+ */
+async function resolveProvider(sourceId: string): Promise<import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null> {
+  const { readJson } = await import('../../../shared/utils/filesystem')
+  const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
+  const source = await readJson<{
+    chapters: Array<{ id: string; url: string }>
+  }>(sourcePath)
+  if (!source) return null
+
+  const firstChapter = source.chapters[0]
+  if (!firstChapter?.url) return null
+
+  const { ProviderResolver } = await import('../../scraping/providers/provider-resolver')
+  const resolver = new ProviderResolver()
+  return resolver.resolve(firstChapter.url)
 }
 
 /**
@@ -478,6 +504,7 @@ async function applyCover(
   sourceId: string,
   cover: { kind: string; coverId?: string; uploadId?: string; name?: string },
   inputDir: string,
+  provider: import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null,
 ): Promise<void> {
   try {
     if (cover.kind !== 'original') {
@@ -502,7 +529,6 @@ async function applyCover(
       return
     }
 
-    // Verifica cache de capas em sources/
     const coversCacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
     const urlExt = extname(new URL(coverEntry.imageUrl).pathname).toLowerCase() || '.jpg'
     const cachedCoverPath = join(coversCacheDir, `${coverEntry.id}${urlExt}`)
@@ -512,14 +538,9 @@ async function applyCover(
     if (await pathExists(cachedCoverPath)) {
       coverData = await readFile(cachedCoverPath)
       await repository.appendLog(jobId, `Capa do cache: ${cachedCoverPath}`)
-    } else {
-      const { httpClient } = await import('../../../shared/http/http-client')
-      const response = await httpClient.get(coverEntry.imageUrl, {
-        responseType: 'arraybuffer',
-        validateStatus: (status: number) => status === 200,
-      })
-
-      coverData = Buffer.from(response.data)
+    } else if (provider) {
+      const { buffer } = await provider.downloadImage(coverEntry.imageUrl)
+      coverData = buffer
 
       if (coverData.length === 0) {
         await repository.appendLog(jobId, `Capa vazia baixada de ${coverEntry.imageUrl}`)
@@ -529,9 +550,11 @@ async function applyCover(
       await mkdirp(coversCacheDir)
       await writeFile(cachedCoverPath, coverData)
       await repository.appendLog(jobId, `Capa baixada e cacheada: ${cachedCoverPath}`)
+    } else {
+      await repository.appendLog(jobId, 'Provider não disponível para download de capa — pulando')
+      return
     }
 
-    // Salva como cover.jpg na raiz do input (KCC reconhece este nome)
     const coverExt = ['.png'].includes(urlExt) ? '.png' : '.jpg'
     const finalCoverName = `cover${coverExt}`
     await writeFile(join(inputDir, finalCoverName), coverData)
