@@ -1,7 +1,8 @@
 import * as cheerio from 'cheerio'
 import { createHttpClient } from '../../../../shared/http/http-client'
 import { createSourceId } from '../../../../shared/utils/id-generator'
-import type { ScrapingProvider } from '../provider.interface'
+import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
+import type { RateLimiter } from '../../rate-limit/types'
 import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 import {
@@ -21,17 +22,18 @@ const http = createHttpClient({
   headers: {
     Referer: `${BASE_URL}/`,
   },
-  // Rate limit do MangaLivre: conservador, 3 tentativas com backoff agressivo
   retries: 3,
   retryDelay: 2_000,
 })
 
-export class MangalivreProvider implements ScrapingProvider {
+export class MangaLivreStrategy implements IProviderStrategy {
   readonly slug = 'mangalivre'
   readonly name = 'Manga Livre'
   readonly engine: ProviderEngine = 'cheerio'
   readonly urlPattern = /mangalivre\.to\/manga\//
   readonly allowedDomains = ['mangalivre.to']
+
+  constructor(readonly rateLimiter: RateLimiter) {}
 
   supports(url: string): boolean {
     try {
@@ -49,7 +51,7 @@ export class MangalivreProvider implements ScrapingProvider {
   async inspect(canonicalUrl: string): Promise<SourceInspectResponse> {
     let html: string
     try {
-      const response = await http.get<string>(canonicalUrl)
+      const response = await this.rateLimiter.schedule(() => http.get<string>(canonicalUrl))
       html = response.data
     } catch (err) {
       throw new ScrapingNetworkError(canonicalUrl, err)
@@ -82,9 +84,11 @@ export class MangalivreProvider implements ScrapingProvider {
   async getChapterImages(chapterUrl: string): Promise<string[]> {
     let html: string
     try {
-      const response = await http.get<string>(chapterUrl, {
-        headers: { Referer: chapterUrl },
-      })
+      const response = await this.rateLimiter.schedule(() =>
+        http.get<string>(chapterUrl, {
+          headers: { Referer: chapterUrl },
+        }),
+      )
       html = response.data
     } catch (err) {
       throw new ScrapingNetworkError(chapterUrl, err)
@@ -101,4 +105,32 @@ export class MangalivreProvider implements ScrapingProvider {
 
     return images
   }
+
+  async downloadImage(imageUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      const response = await this.rateLimiter.schedule(() =>
+        http.get(imageUrl, {
+          responseType: 'arraybuffer',
+          validateStatus: (status) => status === 200,
+        }),
+      )
+
+      const buffer = Buffer.from(response.data)
+      const contentType =
+        typeof response.headers['content-type'] === 'string'
+          ? response.headers['content-type']
+          : Array.isArray(response.headers['content-type'])
+            ? response.headers['content-type'][0] ?? ''
+            : ''
+
+      return { buffer, contentType: contentType || 'application/octet-stream' }
+    } catch (err) {
+      throw new ScrapingNetworkError(imageUrl, err)
+    }
+  }
 }
+
+/**
+ * @deprecated Use MangaLivreStrategy (renamed for consistency with IProviderStrategy)
+ */
+export { MangaLivreStrategy as MangalivreProvider }
