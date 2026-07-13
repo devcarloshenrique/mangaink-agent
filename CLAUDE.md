@@ -51,7 +51,7 @@ mangaink-agent/
 │   │   │   │   ├── auth/         (controllers, services, use-cases, dtos, tests)
 │   │   │   │   ├── user/         (entities, repositories)
 │   │   │   │   ├── health/       (controller + routes)
-│   │   │   │   ├── scraping/     (providers, services, workers, use-cases, tests)
+│   │   │   │   ├── scraping/     (providers, interfaces, rate-limit, services, workers, use-cases, tests)
 │   │   │   │   └── conversion/   (controllers, use-cases, services, repositories, workers, tests)
 │   │   │   └── shared/
 │   │   │       ├── config/       (env.ts — Zod env vars)
@@ -87,6 +87,7 @@ mangaink-agent/
 │       ├── archive/auth/         (design, spec, proposal, tasks)
 │       ├── archive/scraping/     (design, spec, tasks)
 │       ├── archive/conversions-job/ (design, proposal, spec, tasks)
+│       ├── archive/limit-rating/    (design, proposal, spec, tasks)
 │       └── changes/auth/         (config de alterações)
 │
 ├── docker-compose.yml            (PostgreSQL + Redis)
@@ -120,6 +121,7 @@ mangaink-agent/
 - **bcryptjs** (hash de senhas)
 - **cheerio** (parsing HTML para scraping)
 - **axios** + **axios-retry** (HTTP client com retry automático)
+- **bottleneck** (rate limiting por provider — controle de concorrência e throttling)
 - **ioredis** (Redis — locks distribuídos e Pub/Sub)
 - **BullMQ** (filas de processamento assíncrono)
 - **Arquitetura modular:** controllers → use-cases → repositories → entities
@@ -257,6 +259,10 @@ POST /inspect → cache hit? → 200 { ready }
 | `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
 | `KCC_BIN_PATH` | Caminho para o binário do KCC      | `bin/kcc/windows/kcc_c2e_10.3.0.exe` |
 | `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
+| `RATE_LIMIT_{SLUG}_MAX_CONCURRENT` | Máximo de requisições simultâneas por provider | `6` (default) |
+| `RATE_LIMIT_{SLUG}_MIN_TIME` | Intervalo mínimo entre requisições (ms) | `50` (default) |
+| `RATE_LIMIT_{SLUG}_RESERVOIR` | Teto de requisições por intervalo | (opcional) |
+| `RATE_LIMIT_{SLUG}_RESERVOIR_REFRESH_INTERVAL` | Intervalo do reservoir (ms) | (opcional) |
 
 ---
 
@@ -332,7 +338,9 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `controllers/` — `inspect-source.controller.ts`, `preview-source.controller.ts`, `source-events.controller.ts`, `providers.controller.ts`
   - `use-cases/` — `inspect-source.use-case.ts` (fluxo: normalizar URL → resolver provider → gerar sourceId → cache check → lock → enfileirar), `get-source.use-case.ts`
   - `services/` — `cache.service.ts` (TTL de 24h), `inspect-queue.service.ts` (BullMQ), `redis-lock.service.ts` (lock distribuído via Redis SET NX EX), `redis-pubsub.service.ts` (Pub/Sub para SSE), `source-events.service.ts` (bridge Redis → SSE)
-  - `providers/` — `provider.interface.ts` (interface `ScrapingProvider` com `getChapterImages()`), `provider-resolver.ts` (resolve provider por URL), `mangalivre/` (implementação Cheerio: parser com `parseChapterImages()` + `stripResolutionSuffix()`, provider, selectors)
+  - `interfaces/` — `provider-strategy.interface.ts` (interface `IProviderStrategy` com `inspect()`, `getChapterImages()`, `downloadImage()`, `rateLimiter`)
+  - `providers/` — `provider.interface.ts` (deprecated re-export `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL + injeta `RateLimiter`), `mangalivre/` (implementação Cheerio: `MangaLivreStrategy`, parser com `parseChapterImages()` + `stripResolutionSuffix()`, selectors)
+  - `rate-limit/` — `types.ts` (`RateLimiterConfig`, `RateLimiter`), `rate-limiter.ts` (`createRateLimiter()` factory Bottleneck), `rate-limit-registry.ts` (lê `RATE_LIMIT_*` env vars, `Map<slug, config>` com fallback `default`)
   - `repositories/` — `source-cache.repository.ts` (interface), `filesystem-source.repository.ts` (implementação filesystem com `storage/sources/{sourceId}/metadata.json`)
   - `workers/` — `inspect-source.worker.ts` (BullMQ worker: scraping → Pub/Sub progress → salva metadata.json)
   - `types/` — `source.types.ts` (SourceInspectResponse, Chapter, Cover, MangaMetadata, ChapterImagesResult), `metadata.types.ts` (MetadataCache, SourceMetadataFile), `provider.types.ts` (ProviderEngine, ProviderInfo)
@@ -340,11 +348,19 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `dtos/` — `inspect-source.dto.ts` (InspectSourceBody, InspectSourceQuery), `preview-source.dto.ts` (SourceParams)
   - `tests/` — Testes unitários (Vitest) + E2E + mock-scraping-provider
 
+  **Convenções importantes do módulo de scraping:**
+  - A interface principal é `IProviderStrategy` (em `interfaces/`). `ScrapingProvider` é um re-export deprecated.
+  - Todo provider implementa `IProviderStrategy` e recebe um `RateLimiter` (Bottleneck) via constructor.
+  - `downloadImage()` encapsula chamadas HTTP de download com rate limiting. O `ImageDownloaderService` chama `provider.downloadImage()` em vez de `httpClient.get()`.
+  - Rate limits são configuráveis por provider via env vars `RATE_LIMIT_{SLUG}_{PARAM}`. Providers sem config específica usam `RATE_LIMIT_DEFAULT_*`.
+  - O `ProviderResolver` injeta automaticamente o `RateLimiter` no constructor do provider (Composition Root).
+  - Adicionar novo provider: criar classe `implements IProviderStrategy` + registrar no array do `ProviderResolver` + (opicional) configurar env vars.
+
 - **`conversion/`** — Conversão de mangás para formatos e-reader via KCC (Kindle Comic Converter)
   - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
   - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`
   - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`
-  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download paralelo com validação de magic bytes), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC)
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC)
   - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
   - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging)
   - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)
