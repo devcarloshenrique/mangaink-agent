@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { env } from '../../../shared/config/env'
 import { ProviderResolver } from '../providers/provider-resolver'
+import { RateLimitRegistry } from '../rate-limit/rate-limit-registry'
 import { FilesystemSourceRepository } from '../repositories/filesystem-source.repository'
 import { CacheService } from '../services/cache.service'
 import { RedisLockService } from '../services/redis-lock.service'
@@ -10,7 +11,8 @@ import type { SourceMetadataFile } from '../types/metadata.types'
 
 const QUEUE_NAME = 'source-inspect'
 
-const resolver = new ProviderResolver()
+const registry = new RateLimitRegistry()
+const resolver = new ProviderResolver(registry)
 const repository = new FilesystemSourceRepository()
 const cacheService = new CacheService(repository)
 const lockService = new RedisLockService()
