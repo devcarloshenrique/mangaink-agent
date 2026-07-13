@@ -1,13 +1,19 @@
-import type { ScrapingProvider } from '../../providers/provider.interface'
+import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
+import type { RateLimiter } from '../../rate-limit/types'
 import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 
-export class MockScrapingProvider implements ScrapingProvider {
+const fakeLimiter: RateLimiter = {
+  schedule: (fn: () => Promise<unknown>) => fn(),
+} as unknown as RateLimiter
+
+export class MockScrapingProvider implements IProviderStrategy {
   readonly slug = 'test-provider'
   readonly name = 'Test Provider'
   readonly engine: ProviderEngine = 'cheerio'
   readonly urlPattern = /test\.example\.com\/manga\//
   readonly allowedDomains = ['test.example.com']
+  readonly rateLimiter: RateLimiter = fakeLimiter
 
   private _supportsResult = true
   private _inspectResult: SourceInspectResponse | null = null
@@ -32,6 +38,10 @@ export class MockScrapingProvider implements ScrapingProvider {
   async getChapterImages(_chapterUrl: string): Promise<string[]> {
     if (this._chapterImagesError) throw this._chapterImagesError
     return this._chapterImagesResult
+  }
+
+  async downloadImage(_imageUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
+    return { buffer: Buffer.from('mock-image-data'), contentType: 'image/png' }
   }
 
   async inspect(_canonicalUrl: string): Promise<SourceInspectResponse> {

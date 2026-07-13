@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { MangalivreProvider } from '../../providers/mangalivre/mangalivre.provider'
+import { MangaLivreStrategy } from '../../providers/mangalivre/mangalivre.provider'
 import { ScrapingNetworkError } from '../../errors/scraping.errors'
+import type { RateLimiter } from '../../rate-limit/types'
 
 const mockGet = vi.hoisted(() => vi.fn())
 
@@ -10,11 +11,15 @@ vi.mock('../../../../shared/http/http-client', () => ({
   })),
 }))
 
-describe('MangalivreProvider', () => {
-  let provider: MangalivreProvider
+const fakeLimiter: RateLimiter = {
+  schedule: (fn: () => Promise<unknown>) => fn(),
+} as unknown as RateLimiter
+
+describe('MangaLivreStrategy', () => {
+  let provider: MangaLivreStrategy
 
   beforeEach(() => {
-    provider = new MangalivreProvider()
+    provider = new MangaLivreStrategy(fakeLimiter)
   })
 
   describe('supports', () => {
