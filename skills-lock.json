@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "openspec-implementation": {
+      "source": "forztf/open-skilled-sdd",
+      "sourceType": "github",
+      "skillPath": "skills/openspec-implementation/SKILL.md",
+      "computedHash": "07da259f3bad1632ced61cb553d35c16f4f263d1d041712b6a4e0802653e502d"
+    }
+  }
+}
