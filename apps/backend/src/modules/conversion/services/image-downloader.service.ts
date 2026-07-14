@@ -4,6 +4,7 @@ import { mkdirp, pathExists, writeJson, readJson } from '../../../shared/utils/f
 import { env } from '../../../shared/config/env'
 import { ConversionEventsService } from './conversion-events.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
+import type { SourceCacheRepository } from '../../scraping/repositories/source-cache.repository'
 import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
 
 export interface CorruptPage {
@@ -85,6 +86,7 @@ export class ImageDownloaderService {
   constructor(
     private readonly events: ConversionEventsService,
     private readonly repository: ConversionJobRepository,
+    private readonly sourceRepo?: SourceCacheRepository,
   ) {}
 
   async downloadChapter(
@@ -103,11 +105,14 @@ export class ImageDownloaderService {
       const cachedFiles = await readdir(cacheDir)
       const imageFiles = cachedFiles.filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp|avif)$/i.test(f))
 
-      const meta = await readChapterImagesMeta(cacheDir)
+      const placeholderIndices = this.sourceRepo
+        ? await this.sourceRepo.getPlaceholderIndices(sourceId, chapterId)
+        : (await readChapterImagesMeta(cacheDir))?.placeholderPageIndices ?? []
+
       const corruptPages: CorruptPage[] = []
 
-      if (meta && meta.placeholderPageIndices.length > 0) {
-        for (const idx of meta.placeholderPageIndices) {
+      if (placeholderIndices.length > 0) {
+        for (const idx of placeholderIndices) {
           const cp: CorruptPage = {
             pageIndex: idx,
             url: '(cache)',
@@ -122,7 +127,7 @@ export class ImageDownloaderService {
           }))
         }
         await this.repository.appendLog(jobId,
-          `Capítulo ${chapterId}: cache hit — ${imageFiles.length} imagens, ${meta.placeholderPageIndices.length} placeholders (${meta.placeholderPageIndices.map(i => `p${i}`).join(', ')})`)
+          `Capítulo ${chapterId}: cache hit — ${imageFiles.length} imagens, ${placeholderIndices.length} placeholders (${placeholderIndices.map(i => `p${i}`).join(', ')})`)
       } else {
         await this.repository.appendLog(jobId,
           `Capítulo ${chapterId}: cache hit (${imageFiles.length} imagens)`)

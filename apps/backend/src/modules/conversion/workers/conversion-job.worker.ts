@@ -7,9 +7,10 @@ import { FilesystemJobRepository } from '../repositories/filesystem-job.reposito
 import { FilesystemConversionRepository } from '../repositories/filesystem-conversion.repository'
 import { ConversionPubSubService } from '../services/conversion-pubsub.service'
 import { ConversionEventsService } from '../services/conversion-events.service'
-import { ImageDownloaderService, writeChapterImagesMeta } from '../services/image-downloader.service'
+import { ImageDownloaderService } from '../services/image-downloader.service'
 import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
+import { getSourceRepository } from '../../../shared/database/repositories'
 import type { ConversionJobData, ErrorHandlingStrategy } from '../types/conversion.types'
 
 const pubsub = new ConversionPubSubService()
@@ -23,7 +24,8 @@ const worker = new Worker<ConversionJobData>(
     // Repositórios escopados por conversionId (Jobs em storage/conversions/{conv}/jobs/{jobId}).
     const repository = new FilesystemJobRepository(conversionId)
     const conversions = new FilesystemConversionRepository()
-    const downloader = new ImageDownloaderService(events, repository)
+    const sourceRepo = getSourceRepository()
+    const downloader = new ImageDownloaderService(events, repository, sourceRepo)
     const kccRunner = new KccRunnerService(events)
 
     /** Recomputa o status.json da Conversion após cada fase do Job. */
@@ -142,7 +144,7 @@ const worker = new Worker<ConversionJobData>(
             }
             
             const placeholderIndices = result.corruptPages.map(cp => cp.pageIndex)
-            await writeChapterImagesMeta(cacheDir, { placeholderPageIndices: placeholderIndices })
+            await sourceRepo.updatePlaceholderIndices(sourceId, chapterId, placeholderIndices)
             
             await repository.appendLog(jobId,
               `${placeholderCount}/${result.corruptPages.length} placeholders gerados para capítulo ${chapterId} ` +
