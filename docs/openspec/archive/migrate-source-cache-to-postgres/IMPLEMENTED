@@ -1,0 +1,13 @@
+Implementation completed: 2026-07-14
+
+Summary:
+- Created PrismaSourceRepository implementing SourceCacheRepository interface (save, load, update, exists, delete, getPlaceholderIndices, updatePlaceholderIndices)
+- Extended SourceCacheRepository interface with placeholder methods
+- Updated FilesystemSourceRepository to implement placeholder methods
+- Updated composer (getSourceRepository) to return PrismaSourceRepository when REPO_BACKEND=prisma
+- Updated ImageDownloaderService to accept optional SourceCacheRepository for placeholder I/O
+- Updated conversion-job.worker.ts and inspect-source.worker.ts to use composer
+- Updated inspect-source.use-case.ts and get-source.use-case.ts to use composer
+- Created 15 unit tests for PrismaSourceRepository (all passing)
+- All 350 existing tests pass (1 pre-existing failure in cancel-conversion.use-case.test.ts)
+- TypeScript: no new errors introduced (pre-existing test errors remain unchanged)
