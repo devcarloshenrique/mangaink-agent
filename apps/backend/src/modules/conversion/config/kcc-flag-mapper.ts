@@ -221,15 +221,10 @@ function getDefaultNumber(key: string): number {
 }
 
 /**
- * Retorna o caminho para o binário do KCC, verificando se existe.
- * Primeiro tenta env var, depois PATH, depois fallback.
- */
-export function getKccBinaryPath(kccBinPath: string): string {
-  return kccBinPath
-}
-
-/**
- * Gera o comando KCC completo para spawn.
+ * Gera o comando KCC ( CLI `kcc-c2e` ) pronto para ser executado dentro do
+ * container Docker. Os paths recebidos devem ser paths **do container**
+ * (`/input`, `/output`) — o `kcc-runner.service.ts` encarrega de montar os
+ * volumes do host e envolver o comando em `docker run`.
  */
 export function buildKccCommand(
   options: KccOptions,
@@ -237,10 +232,9 @@ export function buildKccCommand(
   format: string,
   inputPath: string,
   outputPath: string,
-  kccBinPath: string,
-): { command: string; args: string[] } {
+): { command: 'kcc-c2e'; args: string[] } {
   const flags = mapOptionsToFlags(options, deviceId, format)
   const args = [...flags, '-o', outputPath, inputPath]
 
-  return { command: kccBinPath, args }
+  return { command: 'kcc-c2e', args }
 }

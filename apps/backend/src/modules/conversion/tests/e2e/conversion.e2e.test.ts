@@ -72,4 +72,10 @@ describe('Conversion API E2E', () => {
     expect(epub).toBeDefined()
     expect(epub.default).toBe(true)
   })
+
+  it('formats NÃO deve conter KFX (requer Kindle Previewer — fora de escopo)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/conversions/options' })
+    const formatIds = res.json().formats.map((f: any) => f.id)
+    expect(formatIds).not.toContain('KFX')
+  })
 })

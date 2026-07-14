@@ -1,9 +1,8 @@
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { env } from '../../../shared/config/env'
 import { buildKccCommand } from '../config/kcc-flag-mapper'
 import { ConversionEventsService } from './conversion-events.service'
-import type { KccExecutionError } from '../errors/conversion.errors'
 
 export interface KccRunResult {
   success: boolean
@@ -13,18 +12,85 @@ export interface KccRunResult {
   outputSize: number
 }
 
+/**
+ * Argumentos `--user` do `docker run` para que os arquivos gerados em `/output`
+ * pertençam ao usuário do host. No Linux usa UID/GID do processo atual; no
+ * Windows/macOS as permissões são gerenciadas pelo Docker Desktop (omitido).
+ */
+export function buildUserArgs(): string[] {
+  if (process.platform !== 'linux') return []
+  try {
+    const uid = process.getuid?.()
+    const gid = process.getgid?.()
+    if (uid !== undefined && gid !== undefined) {
+      return ['--user', `${uid}:${gid}`]
+    }
+  } catch {
+    // Fallback: roda como root (arriscado, mas funcional).
+  }
+  return []
+}
+
+/**
+ * Monta os argumentos completos do `docker run`:
+ *  - `--rm`: remove o container automaticamente ao terminar.
+ *  - `--workdir /tmp` e `-e HOME=/tmp`: evitam que o KCC tente escrever em
+ *    `~/.kcc` (não existe para usuários não-root no container).
+ *  - `-v <absInput>:/input:ro`: mount read-only do diretorio de imagens.
+ *  - `-v <absOutput>:/output`: mount do diretorio de saida (escrita).
+ *  - `env.KCC_DOCKER_IMAGE`: imagem do KCC.
+ *  - `...kccArgs`: flags do KCC + paths do container (`/input`, `/output`).
+ */
+export function buildDockerArgs(absInput: string, absOutput: string, kccArgs: string[]): string[] {
+  return [
+    'run',
+    '--rm',
+    '--workdir', '/tmp',
+    '-e', 'HOME=/tmp',
+    ...buildUserArgs(),
+    '-v', `${absInput}:/input:ro`,
+    '-v', `${absOutput}:/output`,
+    env.KCC_DOCKER_IMAGE,
+    ...kccArgs,
+  ]
+}
+
+let dockerChecked = false
+
+/**
+ * Verifica (uma vez por processo) se o Docker está disponível no host. Emite um
+ * erro claro em stdout e segue — o erro concreto só acontecerá na primeira
+ * chamada `spawn('docker', ...)` se o daemon não estiver acessível.
+ */
+export function checkDockerAvailable(): void {
+  if (dockerChecked) return
+  dockerChecked = true
+  try {
+    execSync('docker --version', { stdio: 'ignore' })
+  } catch {
+    console.error(
+      '❌ Docker não encontrado. Instale o Docker e rode: pnpm kcc:build',
+    )
+  }
+}
+
 export class KccRunnerService {
   constructor(private readonly events: ConversionEventsService) {}
 
   /**
-   * Executa o KCC (Kindle Comic Converter) via child_process.spawn.
+   * Executa o KCC (Kindle Comic Converter) via `docker run`.
+   *
+   * O backend permanece rodando nativamente; apenas o KCC roda efêmero em um
+   * container da imagem `env.KCC_DOCKER_IMAGE`. Os diretorios de entrada e
+   * saida (paths do host) são montados como `/input` (read-only) e `/output`
+   * no container. As flags do KCC usam os paths do container.
    *
    * @param jobId - ID do job
    * @param options - Opções de conversão (valores semânticos)
    * @param deviceId - ID do dispositivo de saída
    * @param format - Formato de saída
-   * @param inputPath - Diretório com as imagens de entrada
-   * @param outputPath - Diretório para o arquivo de saída
+   * @param inputPath - Diretório do host com as imagens de entrada
+   * @param outputPath - Diretório do host para o arquivo de saída
    * @param title - Título da obra (para nome do arquivo)
    */
   async run(
@@ -36,33 +102,32 @@ export class KccRunnerService {
     outputPath: string,
     title: string,
   ): Promise<KccRunResult> {
+    checkDockerAvailable()
+
     await this.events.emit(jobId, this.events.createEvent('conversion.started', {
       deviceId,
       format,
       title,
     }))
 
-    // Resolve o caminho do KCC e dos paths de input/output para absolutos
-    const kccBinPath = resolve(env.KCC_BIN_PATH)
-    const kccDir = resolve(kccBinPath, '..')
+    // Paths absolutos do host para os bind mounts.
     const absoluteInputPath = resolve(inputPath)
     const absoluteOutputPath = resolve(outputPath)
 
-    const { command, args } = buildKccCommand(
+    // As flags do KCC usam os paths do container (/input, /output).
+    const { args: kccArgs } = buildKccCommand(
       options as Record<string, string | number | boolean | undefined>,
       deviceId,
       format,
-      absoluteInputPath,
-      absoluteOutputPath,
-      kccBinPath,
+      '/input',
+      '/output',
     )
 
-    return new Promise((resolve, reject) => {
-      const child = spawn(command, args, {
-        cwd: kccDir,
-        env: { ...process.env },
+    const dockerArgs = buildDockerArgs(absoluteInputPath, absoluteOutputPath, kccArgs)
+
+    return new Promise((resolvePromise, reject) => {
+      const child = spawn('docker', dockerArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
       })
 
       let stdout = ''
@@ -92,7 +157,7 @@ export class KccRunnerService {
 
       child.on('close', async (exitCode) => {
         if (exitCode === 0) {
-          // Descobre o arquivo de saída gerado
+          // Descobre o arquivo de saída gerado (lê no host via bind mount).
           const { readdir } = await import('node:fs/promises')
           const files = await readdir(absoluteOutputPath)
           const outputFile = files[0] ?? `${title.replace(/[^a-zA-Z0-9]/g, '-')}.${format.toLowerCase()}`
@@ -112,7 +177,7 @@ export class KccRunnerService {
             outputSize,
           }))
 
-          resolve({
+          resolvePromise({
             success: true,
             exitCode,
             outputPath,

@@ -5,6 +5,5 @@ export const formats: OutputFormat[] = [
   { id: 'MOBI', name: 'MOBI' },
   { id: 'CBZ', name: 'CBZ' },
   { id: 'PDF', name: 'PDF' },
-  { id: 'KFX', name: 'KFX' },
   { id: 'MOBI+EPUB', name: 'MOBI + EPUB' },
 ]
