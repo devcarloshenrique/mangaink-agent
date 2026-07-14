@@ -267,6 +267,7 @@ POST /inspect → cache hit? → 200 { ready }
 | `RATE_LIMIT_{SLUG}_MIN_TIME` | Intervalo mínimo entre requisições (ms) | `50` (default) |
 | `RATE_LIMIT_{SLUG}_RESERVOIR` | Teto de requisições por intervalo | (opcional) |
 | `RATE_LIMIT_{SLUG}_RESERVOIR_REFRESH_INTERVAL` | Intervalo do reservoir (ms) | (opcional) |
+| `REPO_BACKEND` | Backend de persistência — `filesystem` ou `prisma` | `filesystem` |
 
 ---
 
@@ -307,7 +308,7 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 - `src/app.ts` — entry point, inicia o servidor Fastify
 - `src/shared/server.ts` — criação e configuração do servidor (plugins, CORS, JWT, Swagger)
 - `src/shared/config/env.ts` — parse e validação das env vars (Zod) — inclui `REDIS_URL`, `STORAGE_PATH`
-- `src/shared/database/prisma.ts` — singleton do Prisma Client
+- `src/shared/database/repositories/index.ts` — composer de repositórios: factories `getSourceRepository()`, `getConversionRepository()`, `getConversionJobRepository()` que selecionam adapter (`filesystem` ou `prisma`) via flag `REPO_BACKEND`
 - `src/shared/http/http-client.ts` — cliente HTTP com axios + retry automático e backoff exponencial
 - `src/shared/redis/redis.ts` — singleton Redis (ioredis) para locks e Pub/Sub
 - `src/shared/redis/bullmq.ts` — factory de filas BullMQ com configurações padrão
