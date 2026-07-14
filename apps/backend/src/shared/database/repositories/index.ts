@@ -5,14 +5,13 @@ import type { ConversionRepository } from '../../../modules/conversion/repositor
 import type { ConversionJobRepository } from '../../../modules/conversion/repositories/conversion-job.repository'
 
 import { FilesystemSourceRepository } from '../../../modules/scraping/repositories/filesystem-source.repository'
+import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
 import { FilesystemConversionRepository } from '../../../modules/conversion/repositories/filesystem-conversion.repository'
 import { FilesystemJobRepository } from '../../../modules/conversion/repositories/filesystem-job.repository'
 
 export function getSourceRepository(): SourceCacheRepository {
   if (isPrismaBackend()) {
-    throw new Error(
-      'Prisma adapter for SourceCacheRepository not implemented yet — implement in subsequent change',
-    )
+    return new PrismaSourceRepository()
   }
 
   return new FilesystemSourceRepository()
