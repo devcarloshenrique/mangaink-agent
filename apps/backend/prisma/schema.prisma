@@ -20,5 +20,129 @@ model User {
   createdAt    DateTime @default(now()) @db.Timestamptz @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz @map("updated_at")
 
+  conversions  Conversion[]
+
   @@map("users")
+}
+
+model Source {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId      String    @unique @map("source_id") @db.VarChar(255)
+  url           String    @db.VarChar(2048)
+  language      String?   @db.VarChar(10)
+  metadata      Json      @db.JsonB
+  statistics    Json?     @db.JsonB
+  status        String    @db.VarChar(20)
+  providerSlug  String    @map("provider_slug") @db.VarChar(50)
+  providerName  String    @map("provider_name") @db.VarChar(100)
+  ttlExpiresAt  DateTime? @map("ttl_expires_at") @db.Timestamptz
+  cacheTtlHours Int       @default(24) @map("cache_ttl_hours")
+  retentionDays Int?      @map("retention_days")
+  lastAccessAt  DateTime  @default(now()) @map("last_access_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  chapters      Chapter[]
+  covers        Cover[]
+
+  @@index([providerSlug])
+  @@index([ttlExpiresAt])
+  @@map("sources")
+}
+
+model Chapter {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chapterId             String   @unique @map("chapter_id") @db.VarChar(100)
+  sourceId              String   @map("source_id") @db.VarChar(255)
+  number                String   @db.VarChar(20)
+  title                 String   @db.VarChar(500)
+  url                   String   @db.VarChar(2048)
+  pages                 Int?
+  volume                Int?
+  placeholderPageIndices Json?   @map("placeholder_page_indices") @db.JsonB
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  source                Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+
+  @@index([sourceId, number])
+  @@map("chapters")
+}
+
+model Cover {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  coverId   String   @unique @map("cover_id") @db.VarChar(100)
+  sourceId  String   @map("source_id") @db.VarChar(255)
+  type      String   @db.VarChar(20)
+  label     String   @db.VarChar(255)
+  imageUrl  String   @map("image_url") @db.VarChar(2048)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  source    Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@map("covers")
+}
+
+model Conversion {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversionId         String    @unique @map("conversion_id") @db.VarChar(100)
+  userId               String    @map("user_id") @db.Uuid
+  sourceId             String    @map("source_id") @db.VarChar(255)
+  cover                Json      @db.JsonB
+  output               Json      @db.JsonB
+  metadata             Json      @db.JsonB
+  books                Json      @db.JsonB
+  options              Json      @db.JsonB
+  errorHandlingStrategy String?  @map("error_handling_strategy") @db.VarChar(20)
+  status               String    @db.VarChar(20)
+  progress             Int       @default(0)
+  totalJobs            Int       @default(0) @map("total_jobs")
+  completedJobs        Int       @default(0) @map("completed_jobs")
+  failedJobs           Int       @default(0) @map("failed_jobs")
+  runningJobs          Int       @default(0) @map("running_jobs")
+  pendingJobs          Int       @default(0) @map("pending_jobs")
+  error                String?
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz
+  finishedAt           DateTime? @map("finished_at") @db.Timestamptz
+
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs                 ConversionJob[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("conversions")
+}
+
+model ConversionJob {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId                String    @unique @map("job_id") @db.VarChar(100)
+  conversionId         String    @map("conversion_id") @db.Uuid
+  sourceId             String    @map("source_id") @db.VarChar(255)
+  bookIndex            Int       @map("book_index")
+  chapters             Json      @db.JsonB
+  cover                Json      @db.JsonB
+  output               Json      @db.JsonB
+  metadata             Json      @db.JsonB
+  options              Json      @db.JsonB
+  errorHandlingStrategy String?  @map("error_handling_strategy") @db.VarChar(20)
+  status               String    @db.VarChar(20)
+  progress             Int       @default(0)
+  currentStep          String    @default("") @map("current_step") @db.VarChar(50)
+  downloadedImages     Int       @default(0) @map("downloaded_images")
+  totalImages          Int       @default(0) @map("total_images")
+  error                String?
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz
+  downloadUrl          String?   @map("download_url") @db.VarChar(2048)
+  outputFile           String?   @map("output_file") @db.VarChar(500)
+  outputSize           BigInt?   @map("output_size")
+
+  conversion           Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+
+  @@index([conversionId])
+  @@index([status])
+  @@map("conversion_jobs")
 }
