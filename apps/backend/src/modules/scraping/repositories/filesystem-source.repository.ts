@@ -1,10 +1,17 @@
 import path from 'node:path'
+import { join } from 'node:path'
 import fs from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
-import { mkdirp, readJson, writeJson } from '../../../shared/utils/filesystem'
+import { mkdirp, readJson, writeJson, pathExists } from '../../../shared/utils/filesystem'
 import type { SourceCacheRepository } from './source-cache.repository'
 import type { SourceMetadataFile } from '../types/metadata.types'
 import type { MetadataCache } from '../types/metadata.types'
+
+const IMAGES_META_FILENAME = 'images.json'
+
+interface ChapterImagesMeta {
+  placeholderPageIndices: number[]
+}
 
 function sourceDir(sourceId: string): string {
   return path.join(env.STORAGE_PATH, 'sources', sourceId)
@@ -12,6 +19,10 @@ function sourceDir(sourceId: string): string {
 
 function metadataPath(sourceId: string): string {
   return path.join(sourceDir(sourceId), 'metadata.json')
+}
+
+function chapterCacheDir(sourceId: string, chapterId: string): string {
+  return path.join(sourceDir(sourceId), 'chapters', chapterId)
 }
 
 /**
@@ -69,5 +80,24 @@ export class FilesystemSourceRepository implements SourceCacheRepository {
     } catch {
       // Silently ignore if already deleted
     }
+  }
+
+  async getPlaceholderIndices(sourceId: string, chapterId: string): Promise<number[]> {
+    const metaPath = join(chapterCacheDir(sourceId, chapterId), IMAGES_META_FILENAME)
+    const exists = await pathExists(metaPath)
+    if (!exists) return []
+    try {
+      const meta = await readJson<ChapterImagesMeta>(metaPath)
+      return meta?.placeholderPageIndices ?? []
+    } catch {
+      return []
+    }
+  }
+
+  async updatePlaceholderIndices(sourceId: string, chapterId: string, indices: number[]): Promise<void> {
+    const dir = chapterCacheDir(sourceId, chapterId)
+    const metaPath = join(dir, IMAGES_META_FILENAME)
+    await mkdirp(dir)
+    await writeJson(metaPath, { placeholderPageIndices: indices })
   }
 }

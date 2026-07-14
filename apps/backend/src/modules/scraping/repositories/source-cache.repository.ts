@@ -5,8 +5,7 @@ import type { MetadataCache } from '../types/metadata.types'
  * Interface/Porta do repositório de cache de sources.
  * O use-case depende desta abstração, não da implementação concreta.
  *
- * Implementação atual: FilesystemSourceRepository (storage/sources/{sourceId}/metadata.json)
- * Futuro: S3SourceRepository, DatabaseSourceRepository, etc.
+ * Implementações: FilesystemSourceRepository, PrismaSourceRepository.
  */
 export interface SourceCacheRepository {
   /** Verifica se a source já existe no storage. */
@@ -23,4 +22,10 @@ export interface SourceCacheRepository {
 
   /** Remove completamente a pasta da source do storage. */
   delete(sourceId: string): Promise<void>
+
+  /** Obtém índices de páginas placeholder de um capítulo (corrupção). */
+  getPlaceholderIndices(sourceId: string, chapterId: string): Promise<number[]>
+
+  /** Atualiza índices de páginas placeholder de um capítulo. */
+  updatePlaceholderIndices(sourceId: string, chapterId: string, indices: number[]): Promise<void>
 }

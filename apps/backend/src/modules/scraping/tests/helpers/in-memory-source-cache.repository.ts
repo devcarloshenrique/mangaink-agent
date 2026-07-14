@@ -4,6 +4,7 @@ import type { MetadataCache } from '../../types/metadata.types'
 
 export class InMemorySourceCacheRepository implements SourceCacheRepository {
   private store = new Map<string, SourceMetadataFile>()
+  private placeholderStore = new Map<string, number[]>()
 
   async exists(sourceId: string): Promise<boolean> {
     return this.store.has(sourceId)
@@ -31,7 +32,18 @@ export class InMemorySourceCacheRepository implements SourceCacheRepository {
     this.store.delete(sourceId)
   }
 
+  async getPlaceholderIndices(sourceId: string, chapterId: string): Promise<number[]> {
+    const key = `${sourceId}:${chapterId}`
+    return this.placeholderStore.get(key) ?? []
+  }
+
+  async updatePlaceholderIndices(sourceId: string, chapterId: string, indices: number[]): Promise<void> {
+    const key = `${sourceId}:${chapterId}`
+    this.placeholderStore.set(key, indices)
+  }
+
   reset(): void {
     this.store.clear()
+    this.placeholderStore.clear()
   }
 }
