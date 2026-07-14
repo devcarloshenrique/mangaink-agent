@@ -1,0 +1,58 @@
+# Imagem dedicada do KCC (Kindle Comic Converter) para o MangaInk Agent.
+#
+# O backend continua rodando nativamente — apenas a execucao do KCC e feita
+# via `docker run mangaink-kcc:10.3.0 kcc-c2e <flags>`.
+#
+# Build:  pnpm kcc:build
+# Teste:  docker run --rm mangaink-kcc:10.3.0 kcc-c2e --help
+
+FROM python:3.11-slim-bookworm
+
+# Debian bookworm: unrar esta em non-free (removido do main).
+# Habilite contrib non-free non-free-firmware em sources antes de instalar.
+# python:3.11-slim-bookworm usa formato deb822 em /etc/apt/sources.list.d/debian.sources.
+RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+    /etc/apt/sources.list.d/debian.sources
+
+# ── Dependencias de sistema ──
+#  - p7zip-full, unrar: suporte a CBZ/CBR no KCC
+#  - git, ca-certificates: pip install git+https (KCC nao esta no PyPI)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    p7zip-full \
+    unrar \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── KCC 10.3.0 (mesma versao do binario Windows atual) ──
+# KCC NAO esta publicado no PyPI — instalamos a partir do source da tag v10.3.0
+# no GitHub. O setup.py registra os entry_points `kcc-c2e` (CLI) e `kcc` (GUI).
+RUN pip3 install --no-cache-dir \
+    'git+https://github.com/ciromattia/kcc.git@v10.3.0'
+
+# ── Patch MangaInk: previne capa duplicada em MOBI ──
+# KCC's sanitizeTree renomeia a primeira imagem (ex: cover.jpg → kcc-0001.jpg)
+# e cria um objeto Cover a partir dela. O Cover carrega a imagem na memória,
+# mas o arquivo renomeado permanece no diretório e é incluido como pagina de
+# conteudo. No MOBI/Kindle isso resulta em duas paginas consecutivas de capa
+# (uma esticada pelo Cover, outra em resolução original pelo imgDirectoryProcessing).
+# Este patch remove o arquivo cover_path após criar o objeto Cover (apenas MOBI).
+COPY docker/patches/patch_mobi_cover.py /tmp/patch_mobi_cover.py
+RUN python3 /tmp/patch_mobi_cover.py && rm /tmp/patch_mobi_cover.py
+
+# ── KindleGen V2.9 (build 1028-0897292, Linux i386 estaticamente linkado) ──
+# Amazon descontinuou o KindleGen em 2022 e a URL S3 oficial retorna 403.
+# O binario e baixado uma unica vez (snapshot archive.org 2015) e versionado em
+# `docker/kindlegen/kindlegen` (~28MB ELF i386, estatico — sem deps i386).
+# Necessario para que KCC-emita MOBI/AZW3 com `-f MOBI`.
+COPY docker/kindlegen/kindlegen /usr/local/bin/kindlegen
+RUN chmod +x /usr/local/bin/kindlegen
+
+# KCC tenta escrever em ~/.kcc — usar /tmp como HOME e workdir evita problemas
+# quando rodamos como usuario nao-root em Linux.
+WORKDIR /tmp
+ENV HOME=/tmp
+
+# Entrypoint e o CLI do KCC. Os argumentos do `docker run` (flags + paths)
+# sao repassados para o kcc-c2e.
+ENTRYPOINT ["kcc-c2e"]
