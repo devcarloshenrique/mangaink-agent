@@ -1,6 +1,6 @@
 # MangaInk Agent 📚
 
-> Aplicação web self-hosted para converter mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ, KFX) e enviá-los diretamente ao seu dispositivo Kindle.
+> Aplicação web self-hosted para converter mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ) e enviá-los diretamente ao seu dispositivo Kindle.
 
 Interface em **Português Brasileiro** com design temático de quadrinhos pop-art.
 
@@ -22,14 +22,17 @@ mangaink-agent/                (monorepo)
 
 ## 🔧 Pré-requisitos
 
-| Ferramenta | Versão mínima |
-|------------|---------------|
-| [Node.js](https://nodejs.org/) | 20+ |
-| [pnpm](https://pnpm.io/) | 9+ |
-| [Docker](https://www.docker.com/) | 24+ (para o banco de dados) |
-| [Docker Compose](https://docs.docker.com/compose/) | v2+ |
+| Ferramenta | Versão mínima | Obrigatório |
+|------------|---------------|-------------|
+| [Node.js](https://nodejs.org/) | 20+ | Sim |
+| [pnpm](https://pnpm.io/) | 9+ | Sim |
+| [Docker](https://www.docker.com/) | 24+ | Sim (PostgreSQL + Redis + KCC) |
+| [Docker Compose](https://docs.docker.com/compose/) | v2+ | Sim |
 
 > Instalar pnpm: `npm install -g pnpm`
+> 
+> **O KCC (Kindle Comic Converter) é executado em um container Docker dedicado.** 
+> Antes da primeira conversão, construa a imagem: `pnpm kcc:build`
 
 ---
 
@@ -54,9 +57,10 @@ cp apps/backend/.env.example apps/backend/.env
 
 Edite `apps/backend/.env` com suas configurações:
 ```env
-DATABASE_URL="postgresql://mangaink:mangaink@localhost:5432/mangaink_db"
+DATABASE_URL="postgresql://mangaink:mangaink@localhost:5432/mangaink_agent_db"
 JWT_SECRET="sua-chave-secreta-aqui-min-32-chars"
 PORT=3333
+KCC_DOCKER_IMAGE=mangaink-kcc:10.3.0
 ```
 
 #### Frontend (`apps/frontend/.env`)
@@ -69,18 +73,27 @@ VITE_API_URL=http://localhost:3333
 ### 3. Subir o banco de dados
 
 ```bash
-# Inicia o PostgreSQL via Docker
-docker-compose up -d
+pnpm docker:up
 ```
 
-### 4. Rodar as migrations do Prisma
+### 4. Construir imagem Docker do KCC
+
+```bash
+pnpm kcc:build
+```
+
+> O KCC (Kindle Comic Converter) converte as imagens em EPUB/MOBI. 
+> A imagem Docker `mangaink-kcc:10.3.0` contém Python, KCC 10.3.0 e KindleGen.
+> Esta etapa só precisa ser executada uma vez (ou quando a imagem for atualizada).
+
+### 5. Rodar as migrations do Prisma
 
 ```bash
 pnpm db:migrate
 pnpm db:generate
 ```
 
-### 5. Iniciar o projeto
+### 6. Iniciar o projeto
 
 #### Ambos simultaneamente (recomendado):
 ```bash
@@ -106,9 +119,13 @@ pnpm dev:backend
 | `pnpm dev:backend` | Inicia o backend em `localhost:3333` |
 | `pnpm dev:full` | Inicia frontend e backend simultaneamente |
 | `pnpm build` | Build de produção do frontend |
+| `pnpm build:backend` | Build de produção do backend (tsc) |
 | `pnpm lint` | ESLint em todos os pacotes |
 | `pnpm format` | Prettier em todos os pacotes |
 | `pnpm test` | Executa os testes do backend |
+| `pnpm kcc:build` | Constrói a imagem Docker do KCC |
+| `pnpm docker:up` | Inicia PostgreSQL + Redis via Docker |
+| `pnpm docker:down` | Para e remove containers PostgreSQL + Redis |
 | `pnpm db:migrate` | Executa as migrations do Prisma |
 | `pnpm db:push` | Push do schema sem migration |
 | `pnpm db:studio` | Abre o Prisma Studio (GUI do banco) |
@@ -169,15 +186,31 @@ Com ambos rodando (`pnpm dev:full`):
 
 ---
 
-## 🐳 Docker (Produção)
+## 🐳 Docker
+
+### Infraestrutura (PostgreSQL + Redis)
 
 ```bash
-# Build da imagem do frontend
-docker build -t mangaink-frontend ./apps/frontend
+# Iniciar
+pnpm docker:up
 
-# Ou use o docker-compose completo
-docker-compose up --build
+# Parar
+pnpm docker:down
 ```
+
+### Imagem do KCC (Kindle Comic Converter)
+
+```bash
+# Construir imagem (executar uma vez)
+pnpm kcc:build
+
+# Testar a imagem
+docker run --rm mangaink-kcc:10.3.0 --help
+```
+
+> O backend executa o KCC via `docker run` com bind mounts para os diretórios de input/output.
+> A imagem contém Python 3.11, KCC 10.3.0, p7zip, unrar e KindleGen (MOBI/AZW3).
+> Formato KFX não está disponível (requer Kindle Previewer, fora de escopo).
 
 ---
 

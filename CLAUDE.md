@@ -4,7 +4,9 @@ Este arquivo fornece orientações ao Claude Code ao trabalhar com este reposit�
 
 ## Projeto: MangaInk Agent
 
-Aplicação web self-hosted que converte mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ, KFX) e os envia ao dispositivo Kindle. A UI está em **Português Brasileiro** com design temático de quadrinhos pop-art.
+Aplicação web self-hosted que converte mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ) e os envia ao dispositivo Kindle. A UI está em **Português Brasileiro** com design temático de quadrinhos pop-art.
+
+> **Dependência de infraestrutura:** O KCC é executado em um container Docker dedicado. Antes da primeira conversão, instale o Docker e construa a imagem: `pnpm kcc:build`. Formato KFX foi removido (requer Kindle Previewer, fora de escopo).
 
 ---
 
@@ -143,6 +145,7 @@ pnpm dev           # Frontend em http://localhost:5173
 pnpm dev:backend   # Backend em http://localhost:3333
 pnpm dev:full      # Frontend + Backend simultaneamente
 pnpm build         # Build de produção do frontend
+pnpm build:backend # Build de produção do backend
 pnpm lint          # ESLint em todos os pacotes
 pnpm format        # Prettier em todos os pacotes
 pnpm test          # Testes do backend (Vitest)
@@ -152,6 +155,7 @@ pnpm db:studio     # Prisma Studio (GUI do banco)
 pnpm storybook     # Storybook em http://localhost:6006
 pnpm docker:up     # docker compose up -d (PostgreSQL + Redis)
 pnpm docker:down   # docker compose down
+pnpm kcc:build     # Build da imagem Docker do KCC (mangaink-kcc:10.3.0)
 ```
 
 ### Dentro de `apps/frontend`
@@ -257,7 +261,7 @@ POST /inspect → cache hit? → 200 { ready }
 | `DATABASE_URL` | URL de conexão PostgreSQL          | (obrigatório)             |
 | `REDIS_URL`    | URL de conexão Redis               | `redis://localhost:6379`  |
 | `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
-| `KCC_BIN_PATH` | Caminho para o binário do KCC      | `bin/kcc/windows/kcc_c2e_10.3.0.exe` |
+| `KCC_DOCKER_IMAGE` | Imagem Docker do KCC (executada via `docker run`) | `mangaink-kcc:10.3.0` |
 | `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
 | `RATE_LIMIT_{SLUG}_MAX_CONCURRENT` | Máximo de requisições simultâneas por provider | `6` (default) |
 | `RATE_LIMIT_{SLUG}_MIN_TIME` | Intervalo mínimo entre requisições (ms) | `50` (default) |
@@ -360,7 +364,7 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
   - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`
   - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`
-  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC)
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC via `docker run mangaink-kcc:10.3.0` — bind mounts `/input:ro` e `/output`, paths do container nas flags KCC; `--user` aplicado apenas em Linux)
   - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
   - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging)
   - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)

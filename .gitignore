@@ -35,3 +35,12 @@ storybook-static/
 apps/backend/storage
 .claude
 graphify-out
+.playwright-mcp
+cadastro-snapshot.md
+dashboard-snapshot.md
+login-page-snapshot.md
+login-page.yml
+login-test-result.md
+opencode.json
+
+wizard-step1.yml

@@ -15,7 +15,10 @@
     "db:push": "pnpm --filter @mangaink/backend db:push",
     "db:generate": "pnpm --filter @mangaink/backend db:generate",
     "db:studio": "pnpm --filter @mangaink/backend db:studio",
-    "test": "pnpm --filter @mangaink/backend test"
+    "test": "pnpm --filter @mangaink/backend test",
+    "kcc:build": "docker build -f docker/Dockerfile.kcc -t mangaink-kcc:10.3.0 .",
+    "docker:up": "docker compose -f apps/backend/docker-compose.yml up -d",
+    "docker:down": "docker compose -f apps/backend/docker-compose.yml down"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"
