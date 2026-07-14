@@ -1,7 +1,7 @@
 import { normalizeUrl } from '../../../shared/utils/url-normalizer'
 import { createSourceId } from '../../../shared/utils/id-generator'
 import { ProviderResolver } from '../providers/provider-resolver'
-import { FilesystemSourceRepository } from '../repositories/filesystem-source.repository'
+import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
 import { RedisLockService } from '../services/redis-lock.service'
 import { InspectQueueService } from '../services/inspect-queue.service'
@@ -9,7 +9,7 @@ import type { SourceInspectState } from '../types/source.types'
 import { InvalidUrlError } from '../errors/scraping.errors'
 
 const resolver = new ProviderResolver()
-const repository = new FilesystemSourceRepository()
+const repository = getSourceRepository()
 const cacheService = new CacheService(repository)
 const lockService = new RedisLockService()
 const queueService = new InspectQueueService()

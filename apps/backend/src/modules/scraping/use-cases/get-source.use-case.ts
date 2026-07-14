@@ -1,8 +1,8 @@
-import { FilesystemSourceRepository } from '../repositories/filesystem-source.repository'
+import { getSourceRepository } from '../../../shared/database/repositories'
 import type { SourceInspectResponse } from '../types/source.types'
 import { SourceNotFoundError } from '../errors/scraping.errors'
 
-const repository = new FilesystemSourceRepository()
+const repository = getSourceRepository()
 
 /**
  * Caso de uso: buscar os dados completos de uma source já inspecionada.
