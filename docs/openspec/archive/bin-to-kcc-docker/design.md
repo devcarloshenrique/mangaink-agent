@@ -1,8 +1,8 @@
 # bin-to-kcc-docker — Design de Arquitetura
 
-> **Status:** PROPOSED
+> **Status:** IMPLEMENTED
 > **Data:** 2026-07-13
-> **Ultima revisao:** 2026-07-13 — Revisao apos analise do codigo atual: 10 inconsistencias corrigidas.
+> **Ultima revisao:** 2026-07-13 — Implementacao concluida. KindleGen Linux incluido via binario local versionado (`docker/kindlegen/kindlegen`).
 
 ---
 
@@ -161,11 +161,27 @@ WORKDIR /tmp
 ENTRYPOINT ["kcc-c2e"]
 ```
 
-### 6.1. Risco: KindleGen URL
+### 6.1. Risco: KindleGen URL — RESOLVIDO
 
-A URL `http://kindlegen.s3.amazonaws.com/...` e HTTP e pode estar indisponivel (Amazon descontinuou o KindleGen em 2022). O Dockerfile usa `|| echo` para nao quebrar o build se o download falhar — a imagem sera construida sem KindleGen e o formato MOBI nao funcionara.
+A URL `http://kindlegen.s3.amazonaws.com/...` retorna 403 Forbidden (Amazon descontinuou o KindleGen em 2022).
 
-**Mitigacao:** Se a URL falhar, criar diretorio `docker/kindlegen/` com uma copia local do binario e alterar o Dockerfile para copia-lo via `COPY`.
+**Mitigacao aplicada (implementada em 2026-07-13):**
+A previsao original era criar `docker/kindlegen/` com copia local do binario caso a URL falhasse — exatamente isso foi implementado:
+
+1. Download via Internet Archive Wayback Machine:
+   snapshot de 2015-08-03 de `kindlegen_linux_2.6_i386_v2_9.tar.gz`
+2. Binario extraido e commitado em `docker/kindlegen/kindlegen` (~28MB)
+   - ELF 32-bit LSB, Intel i386, **estaticamente linkado** (sem deps libc6:i386)
+3. Dockerfile passou a usar:
+   ```
+   COPY docker/kindlegen/kindlegen /usr/local/bin/kindlegen
+   RUN chmod +x /usr/local/bin/kindlegen
+   ```
+4. Bloco `dpkg --add-architecture i386 && apt-get install libc6:i386 libstdc++6:i386 libgcc-s1:i386`
+   foi REMOVIDO do Dockerfile (nao necessario — kindlegen e estatico).
+5. Validacao end-to-end: `kcc-c2e -f MOBI` gera `.mobi`; `kcc-c2e -f MOBI+EPUB` gera ambos.
+
+**Tradeoff:** Repositorio aumenta ~28MB. Compensado por builds deterministas (sem dependencia de rede para kindlegen) e imagem ~150MB menor por dispensar libc6:i386 + libstdc++6:i386.
 
 ## 7. Estrutura de Arquivos
 
