@@ -5,9 +5,11 @@ import { createConversionHandler } from './controllers/create-conversion.control
 import { getConversionHandler } from './controllers/get-conversion.controller'
 import { conversionEventsHandler } from './controllers/conversion-events.controller'
 import { cancelConversionHandler } from './controllers/cancel-conversion.controller'
+import { listConversionsHandler } from './controllers/list-conversions.controller'
 import { CreateConversionUseCase } from './use-cases/create-conversion.use-case'
 import { GetConversionUseCase } from './use-cases/get-conversion.use-case'
 import { CancelConversionUseCase } from './use-cases/cancel-conversion.use-case'
+import { ListConversionsUseCase } from './use-cases/list-conversions.use-case'
 import { ConversionQueueService } from './services/conversion-queue.service'
 import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
@@ -18,6 +20,7 @@ import {
 } from './dtos/create-conversion.dto'
 import { conversionParamsSchema } from './dtos/conversion-params.dto'
 import { conversionOptionsResponseSchema } from './dtos/conversion-options.dto'
+import { listConversionsQuerySchema } from './dtos/list-conversions.dto'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 
 // ── Instâncias compartilhadas ──────────────────────────────────────────
@@ -30,6 +33,7 @@ const events = new ConversionEventsService(pubsub)
 const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepository, queue, events)
 const getConversionUseCase = new GetConversionUseCase(conversions)
 const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events)
+const listConversionsUseCase = new ListConversionsUseCase(conversions)
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -70,6 +74,27 @@ const conversionStateSchema = z.object({
   config: z.any(),
 })
 
+const conversionSummarySchema = z.object({
+  conversionId: z.string(),
+  sourceId: z.string(),
+  title: z.string(),
+  status: z.enum(['queued', 'processing', 'completed', 'failed', 'cancelled', 'partial']),
+  progress: z.number(),
+  totalJobs: z.number(),
+  completedJobs: z.number(),
+  failedJobs: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  finishedAt: z.string().optional(),
+})
+
+const listConversionsResponseSchema = z.object({
+  items: z.array(conversionSummarySchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+})
+
 export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
   // GET /api/conversions/options
   app.get(
@@ -88,6 +113,32 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     conversionOptionsHandler,
+  )
+
+  // GET /api/conversions (listagem paginada por usuário)
+  app.get(
+    '/api/conversions',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Lista conversões do usuário autenticado',
+        description:
+          'Retorna conversões paginadas pertencentes ao usuário autenticado, ordenadas por ' +
+          'criação descendente, com filtros opcionais por status e sourceId. ' +
+          'Cada item é um resumo leve (sem books/options/chapters) — use ' +
+          'GET /api/conversions/:id para detalhe. ' +
+          'Requer backend Prisma (REPO_BACKEND=prisma); em modo filesystem retorna 501.',
+        security: [{ bearerAuth: [] }],
+        querystring: listConversionsQuerySchema,
+        response: {
+          200: listConversionsResponseSchema,
+          401: z.object({ error: z.string() }),
+          501: z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
+        },
+      },
+    },
+    listConversionsHandler(listConversionsUseCase),
   )
 
   // POST /api/conversions

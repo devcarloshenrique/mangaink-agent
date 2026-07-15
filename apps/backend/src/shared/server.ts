@@ -114,8 +114,14 @@ export async function createServer() {
         INVALID_JOB_STATE: 409,
         KCC_EXECUTION_ERROR: 500,
         DOWNLOAD_FAILED: 500,
+        LISTING_REQUIRES_PRISMA: 501,
       }
       const status = statusMap[error.code] ?? 500
+      if (error.code === 'LISTING_REQUIRES_PRISMA') {
+        return reply.code(status).send({
+          error: { code: error.code, message: error.message },
+        })
+      }
       return reply.code(status).send({ error: error.message })
     }
 
