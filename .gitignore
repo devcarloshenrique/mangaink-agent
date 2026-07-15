@@ -44,4 +44,5 @@ login-test-result.md
 opencode.json
 
 wizard-step1.yml
-apps/backend/storage.opencode/
+apps/backend/storage/
+.opencode/
