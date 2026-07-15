@@ -3,6 +3,10 @@ import type {
   ConversionStatusFile,
   ConversionState,
   ConversionStatus,
+  ConversionListFilters,
+  ConversionListPagination,
+  ConversionListResult,
+  ConversionSummary,
 } from '../../types/conversion.types'
 import type { ConversionRepository } from '../../repositories/conversion.repository'
 
@@ -85,6 +89,44 @@ export class InMemoryConversionRepository implements ConversionRepository {
     }
     this.store.set(conversionId, updated)
     return { ...updated }
+  }
+
+  async listByUser(
+    userId: string,
+    filters: ConversionListFilters,
+    pagination: ConversionListPagination,
+  ): Promise<ConversionListResult> {
+    let items = [...this.store.values()].filter((s) => s.config.userId === userId)
+
+    if (filters.status) {
+      items = items.filter((s) => s.status === filters.status)
+    }
+    if (filters.sourceId) {
+      items = items.filter((s) => s.config.sourceId === filters.sourceId)
+    }
+
+    items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+    const total = items.length
+    const { page, limit } = pagination
+    const start = (page - 1) * limit
+    const paged = items.slice(start, start + limit)
+
+    const summaries: ConversionSummary[] = paged.map((s) => ({
+      conversionId: s.conversionId,
+      sourceId: s.config.sourceId,
+      title: s.config.metadata.title ?? '',
+      status: s.status,
+      progress: s.progress,
+      totalJobs: s.totalJobs,
+      completedJobs: s.completedJobs,
+      failedJobs: s.failedJobs,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      finishedAt: s.finishedAt,
+    }))
+
+    return { items: summaries, total, page, limit }
   }
 
   async listJobIds(conversionId: string): Promise<string[]> {

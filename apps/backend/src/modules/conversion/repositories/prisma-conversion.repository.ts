@@ -17,6 +17,10 @@ import type {
   Book,
   CoverRef,
   ErrorHandlingStrategy,
+  ConversionListFilters,
+  ConversionListPagination,
+  ConversionListResult,
+  ConversionSummary,
 } from '../types/conversion.types'
 
 export class PrismaConversionRepository implements ConversionRepository {
@@ -57,6 +61,63 @@ export class PrismaConversionRepository implements ConversionRepository {
     if (!row) return null
 
     return this.toState(row)
+  }
+
+  async listByUser(
+    userId: string,
+    filters: ConversionListFilters,
+    pagination: ConversionListPagination,
+  ): Promise<ConversionListResult> {
+    const where: Prisma.ConversionWhereInput = { userId }
+
+    if (filters.status) {
+      where.status = filters.status
+    }
+    if (filters.sourceId) {
+      where.sourceId = filters.sourceId
+    }
+
+    const { page, limit } = pagination
+    const skip = (page - 1) * limit
+
+    const [rows, total] = await Promise.all([
+      prisma.conversion.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          conversionId: true,
+          sourceId: true,
+          metadata: true,
+          status: true,
+          progress: true,
+          totalJobs: true,
+          completedJobs: true,
+          failedJobs: true,
+          createdAt: true,
+          updatedAt: true,
+          finishedAt: true,
+        },
+      }),
+      prisma.conversion.count({ where }),
+    ])
+
+    const items: ConversionSummary[] = rows.map((row) => ({
+      conversionId: row.conversionId,
+      sourceId: row.sourceId,
+      title: (row.metadata as unknown as { title?: string })?.title ?? '',
+      status: row.status as ConversionStatus,
+      progress: row.progress,
+      totalJobs: row.totalJobs,
+      completedJobs: row.completedJobs,
+      failedJobs: row.failedJobs,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      finishedAt: row.finishedAt?.toISOString(),
+    }))
+
+    return { items, total, page, limit }
   }
 
   async update(conversionId: string, updates: Partial<ConversionStatusFile>): Promise<void> {

@@ -1,4 +1,11 @@
-import type { ConversionConfig, ConversionStatusFile, ConversionState } from '../types/conversion.types'
+import type {
+  ConversionConfig,
+  ConversionStatusFile,
+  ConversionState,
+  ConversionListFilters,
+  ConversionListPagination,
+  ConversionListResult,
+} from '../types/conversion.types'
 
 export interface ConversionRepository {
   /** Cria a Conversion + diretórios (logs/, jobs/). */
@@ -17,6 +24,17 @@ export interface ConversionRepository {
    */
   syncStatus(conversionId: string): Promise<ConversionState | null>
 
+  /**
+   * Lista Conversions de um usuário com filtros opcionais e paginação,
+   * ordenadas por createdAt DESC.
+   * Em modo filesystem lança ListingNotSupportedError (LISTING_REQUIRES_PRISMA).
+   */
+  listByUser(
+    userId: string,
+    filters: ConversionListFilters,
+    pagination: ConversionListPagination,
+  ): Promise<ConversionListResult>
+
   /** Lista os jobIds em disco. */
   listJobIds(conversionId: string): Promise<string[]>
 
@@ -27,4 +45,11 @@ export interface ConversionRepository {
   delete(conversionId: string): Promise<void>
 }
 
-export type { ConversionConfig, ConversionStatusFile, ConversionState }
+export type {
+  ConversionConfig,
+  ConversionStatusFile,
+  ConversionState,
+  ConversionListFilters,
+  ConversionListPagination,
+  ConversionListResult,
+}

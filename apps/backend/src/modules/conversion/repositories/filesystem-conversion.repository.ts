@@ -7,9 +7,13 @@ import type {
   ConversionState,
   ConversionJobSummary,
   ConversionStatus,
+  ConversionListFilters,
+  ConversionListPagination,
+  ConversionListResult,
 } from '../types/conversion.types'
 import type { ConversionRepository } from './conversion.repository'
 import { env } from '../../../shared/config/env'
+import { ListingNotSupportedError } from '../errors/conversion.errors'
 
 /**
  * Persistência de Conversion em filesystem.
@@ -185,6 +189,14 @@ export class FilesystemConversionRepository implements ConversionRepository {
     await this.update(conversionId, updated)
 
     return this.findById(conversionId)
+  }
+
+  async listByUser(
+    _userId: string,
+    _filters: ConversionListFilters,
+    _pagination: ConversionListPagination,
+  ): Promise<ConversionListResult> {
+    throw new ListingNotSupportedError()
   }
 
   async listJobIds(conversionId: string): Promise<string[]> {
