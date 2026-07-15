@@ -112,6 +112,7 @@ model Conversion {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
+  @@index([sourceId])
   @@map("conversions")
 }
 
