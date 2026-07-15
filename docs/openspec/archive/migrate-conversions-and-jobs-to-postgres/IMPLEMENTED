@@ -1,0 +1,17 @@
+Implementation completed: 2026-07-14
+
+Summary:
+- Created PrismaConversionRepository implementing ConversionRepository (create, findById, update, syncStatus, listJobIds, appendLog, delete)
+- Created PrismaJobRepository implementing ConversionJobRepository (create, findById, update, delete, appendLog, withConversion)
+- Updated composer to return Prisma adapters when REPO_BACKEND=prisma
+- Updated conversion-job.worker.ts: branch on isPrismaBackend() for repo selection; cancel detection via interface
+- Updated cancel-conversion.use-case.ts: branch on isPrismaBackend() for DB updates vs filesystem writes
+- Fixed helper functions (writeComicInfoXml, applyCover) to accept interface types instead of FilesystemJobRepository
+- Created 15 unit tests (9 conversion + 6 job) using real PostgreSQL
+- All 365/366 tests pass (1 pre-existing failure in cancel-conversion.use-case.test.ts)
+
+Notes:
+- Tests require --no-file-parallelism when run together (shared PostgreSQL)
+- appendLog() continues writing to filesystem in both modes for coexistence
+- withConversion() in Prisma mode returns new scoped instance (not no-op)
+- create() methods are NOT transactional together (Conversion and Jobs created separately, matching use-case flow)
