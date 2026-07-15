@@ -220,7 +220,7 @@ Conversão pedida pelo usuário. Representa a intenção: "quero converter os ca
 - N:1 → `User` (CASCADE: deletar usuário deleta conversões)
 - 1:N → `ConversionJob` (CASCADE: deletar conversão deleta jobs)
 
-**Índices**: `(user_id, created_at DESC)`, `status`
+**Índices**: `(user_id, created_at DESC)`, `status`, `source_id`
 
 ---
 
