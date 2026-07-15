@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { readJson, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { getSourceRepository } from '../../../shared/database/repositories'
 import { createConversionId, createJobId } from '../../../shared/utils/id-generator'
 import { devices } from '../config/devices'
 import { formats } from '../config/formats'
@@ -26,10 +26,6 @@ import {
   ChapterNotFoundError,
 } from '../errors/conversion.errors'
 
-interface SourceMetadata {
-  chapters: Array<{ id: string }>
-}
-
 /**
  * Conversion Planner.
  *
@@ -40,7 +36,7 @@ interface SourceMetadata {
  *  - gera 1 Job para cada Book;
  *  - define as flags internas do KCC (batchSplit, fileFusion) — responsabilidade
  *    exclusiva do Planner, nunca exposta pela API pública;
- *  - persiste a Conversion e cada Job em disco;
+ *  - persiste a Conversion e cada Job via repositório;
  *  - enfileira cada Job no BullMQ;
  *  - emite evento `conversion.created`.
  */
@@ -67,11 +63,8 @@ export class CreateConversionUseCase {
     }
 
     // ── Valida existência da source e capítulos ─────────────────────
-    const sourceMetaPath = join(env.STORAGE_PATH, 'sources', request.sourceId, 'metadata.json')
-    if (!(await pathExists(sourceMetaPath))) {
-      throw new SourceNotFoundError(request.sourceId)
-    }
-    const sourceMeta = await readJson<SourceMetadata>(sourceMetaPath)
+    const sourceRepo = getSourceRepository()
+    const sourceMeta = await sourceRepo.load(request.sourceId)
     if (!sourceMeta?.chapters) {
       throw new SourceNotFoundError(request.sourceId)
     }

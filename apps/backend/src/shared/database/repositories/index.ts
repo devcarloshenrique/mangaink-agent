@@ -8,6 +8,8 @@ import { FilesystemSourceRepository } from '../../../modules/scraping/repositori
 import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
 import { FilesystemConversionRepository } from '../../../modules/conversion/repositories/filesystem-conversion.repository'
 import { FilesystemJobRepository } from '../../../modules/conversion/repositories/filesystem-job.repository'
+import { PrismaConversionRepository } from '../../../modules/conversion/repositories/prisma-conversion.repository'
+import { PrismaJobRepository } from '../../../modules/conversion/repositories/prisma-job.repository'
 
 export function getSourceRepository(): SourceCacheRepository {
   if (isPrismaBackend()) {
@@ -19,9 +21,7 @@ export function getSourceRepository(): SourceCacheRepository {
 
 export function getConversionRepository(): ConversionRepository {
   if (isPrismaBackend()) {
-    throw new Error(
-      'Prisma adapter for ConversionRepository not implemented yet — implement in subsequent change',
-    )
+    return new PrismaConversionRepository()
   }
 
   return new FilesystemConversionRepository()
@@ -29,9 +29,7 @@ export function getConversionRepository(): ConversionRepository {
 
 export function getConversionJobRepository(): ConversionJobRepository {
   if (isPrismaBackend()) {
-    throw new Error(
-      'Prisma adapter for ConversionJobRepository not implemented yet — implement in subsequent change',
-    )
+    return new PrismaJobRepository()
   }
 
   return new FilesystemJobRepository()

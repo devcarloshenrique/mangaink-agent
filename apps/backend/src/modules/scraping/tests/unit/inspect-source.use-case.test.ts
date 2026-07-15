@@ -12,6 +12,8 @@ const sharedInstances = vi.hoisted(() => {
       if (current) this.store.set(id, { ...current, cache: { ...current.cache, ...patch } })
     }
     async delete(id: string) { this.store.delete(id) }
+    async getPlaceholderIndices(_sourceId: string, _chapterId: string) { return [] }
+    async updatePlaceholderIndices(_sourceId: string, _chapterId: string, _indices: number[]) {}
   }
 
   class MockLock {
@@ -94,6 +96,12 @@ vi.mock('../../providers/provider-resolver', () => ({
 
 vi.mock('../../repositories/filesystem-source.repository', () => ({
   FilesystemSourceRepository: vi.fn(() => sharedInstances.repo),
+}))
+
+vi.mock('../../../../shared/database/repositories', () => ({
+  getSourceRepository: vi.fn(() => sharedInstances.repo),
+  getConversionRepository: vi.fn(),
+  getConversionJobRepository: vi.fn(),
 }))
 
 vi.mock('../../services/redis-lock.service', () => ({

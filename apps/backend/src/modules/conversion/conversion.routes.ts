@@ -8,11 +8,10 @@ import { cancelConversionHandler } from './controllers/cancel-conversion.control
 import { CreateConversionUseCase } from './use-cases/create-conversion.use-case'
 import { GetConversionUseCase } from './use-cases/get-conversion.use-case'
 import { CancelConversionUseCase } from './use-cases/cancel-conversion.use-case'
-import { FilesystemConversionRepository } from './repositories/filesystem-conversion.repository'
-import { FilesystemJobRepository } from './repositories/filesystem-job.repository'
 import { ConversionQueueService } from './services/conversion-queue.service'
 import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
+import { getConversionRepository, getConversionJobRepository } from '../../shared/database/repositories'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
@@ -22,8 +21,8 @@ import { conversionOptionsResponseSchema } from './dtos/conversion-options.dto'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 
 // ── Instâncias compartilhadas ──────────────────────────────────────────
-const conversions = new FilesystemConversionRepository()
-const jobRepository = new FilesystemJobRepository()
+const conversions = getConversionRepository()
+const jobRepository = getConversionJobRepository()
 const queue = new ConversionQueueService()
 const pubsub = new ConversionPubSubService()
 const events = new ConversionEventsService(pubsub)

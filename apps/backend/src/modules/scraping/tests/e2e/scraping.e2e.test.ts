@@ -12,6 +12,8 @@ const mockRepo = vi.hoisted(() => {
       if (current) store.set(id, { ...current, cache: { ...current.cache, ...patch } })
     },
     delete: async (id: string) => { store.delete(id) },
+    getPlaceholderIndices: async () => [],
+    updatePlaceholderIndices: async () => {},
   }
 })
 
@@ -49,9 +51,13 @@ const mockPubSub = vi.hoisted(() => {
   }
 })
 
-vi.mock('../../repositories/filesystem-source.repository', () => ({
-  FilesystemSourceRepository: vi.fn(() => mockRepo),
-}))
+vi.mock('../../../../shared/database/repositories', async () => {
+  const actual = await vi.importActual<typeof import('../../../../shared/database/repositories')>('../../../../shared/database/repositories')
+  return {
+    ...actual,
+    getSourceRepository: vi.fn(() => mockRepo),
+  }
+})
 
 vi.mock('../../services/redis-lock.service', () => ({
   RedisLockService: vi.fn(() => mockLockService),

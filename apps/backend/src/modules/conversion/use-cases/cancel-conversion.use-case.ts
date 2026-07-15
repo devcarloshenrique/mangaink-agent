@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import { readJson, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { isPrismaBackend } from '../../../shared/config/repo-mode'
+import { getConversionJobRepository } from '../../../shared/database/repositories'
 import type { ConversionRepository } from '../repositories/conversion.repository'
 import type { ConversionQueueService } from '../services/conversion-queue.service'
 import type { ConversionEventsService } from '../services/conversion-events.service'
@@ -42,42 +44,69 @@ export class CancelConversionUseCase {
     }
 
     const jobIds = await this.conversions.listJobIds(conversionId)
-    const pathJoin = join
 
-    for (const jobId of jobIds) {
-      const statusPath = pathJoin(
-        env.CONVERSIONS_STORAGE_PATH,
-        conversionId,
-        'jobs',
-        jobId,
-        'status.json',
-      )
-      if (!(await pathExists(statusPath))) continue
-      const jobStatus = await readJson<{ status: string }>(statusPath)
-      const isInQueue = jobStatus?.status === 'queued'
-      const isActive = ['preparing', 'downloading', 'converting', 'packaging'].includes(
-        jobStatus?.status ?? '',
-      )
+    if (isPrismaBackend()) {
+      const jobRepo = getConversionJobRepository()
 
-      if (isInQueue) {
-        try {
-          await this.queue.remove(jobId)
-        } catch {
-          // melhor-esforço
+      for (const jobId of jobIds) {
+        const job = await jobRepo.findById(jobId)
+        if (!job) continue
+
+        const isInQueue = job.status === 'queued'
+        const isActive = ['preparing', 'downloading', 'converting', 'packaging'].includes(job.status)
+
+        if (isInQueue) {
+          try {
+            await this.queue.remove(jobId)
+          } catch {
+            // melhor-esforço
+          }
         }
-      }
 
-      if (isInQueue || isActive) {
-        // Atualiza status.json do job diretamente.
-        const { writeJson } = await import('../../../shared/utils/filesystem')
-        const existing = await readJson<Record<string, unknown>>(statusPath)
-        if (existing) {
-          await writeJson(statusPath, {
-            ...existing,
+        if (isInQueue || isActive) {
+          await jobRepo.update(jobId, {
             status: 'cancelled',
             currentStep: 'Cancelled',
-            updatedAt: new Date().toISOString(),
           })
+        }
+      }
+    } else {
+      const pathJoin = join
+
+      for (const jobId of jobIds) {
+        const statusPath = pathJoin(
+          env.CONVERSIONS_STORAGE_PATH,
+          conversionId,
+          'jobs',
+          jobId,
+          'status.json',
+        )
+        if (!(await pathExists(statusPath))) continue
+        const jobStatus = await readJson<{ status: string }>(statusPath)
+        const isInQueue = jobStatus?.status === 'queued'
+        const isActive = ['preparing', 'downloading', 'converting', 'packaging'].includes(
+          jobStatus?.status ?? '',
+        )
+
+        if (isInQueue) {
+          try {
+            await this.queue.remove(jobId)
+          } catch {
+            // melhor-esforço
+          }
+        }
+
+        if (isInQueue || isActive) {
+          const { writeJson } = await import('../../../shared/utils/filesystem')
+          const existing = await readJson<Record<string, unknown>>(statusPath)
+          if (existing) {
+            await writeJson(statusPath, {
+              ...existing,
+              status: 'cancelled',
+              currentStep: 'Cancelled',
+              updatedAt: new Date().toISOString(),
+            })
+          }
         }
       }
     }

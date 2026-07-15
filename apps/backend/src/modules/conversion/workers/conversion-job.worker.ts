@@ -10,7 +10,8 @@ import { ConversionEventsService } from '../services/conversion-events.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
 import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
-import { getSourceRepository } from '../../../shared/database/repositories'
+import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
+import { isPrismaBackend } from '../../../shared/config/repo-mode'
 import type { ConversionJobData, ErrorHandlingStrategy } from '../types/conversion.types'
 
 const pubsub = new ConversionPubSubService()
@@ -22,8 +23,13 @@ const worker = new Worker<ConversionJobData>(
     const { conversionId, jobId, sourceId, chapters, cover, output, metadata, options, storagePath } = job.data
 
     // Repositórios escopados por conversionId (Jobs em storage/conversions/{conv}/jobs/{jobId}).
-    const repository = new FilesystemJobRepository(conversionId)
-    const conversions = new FilesystemConversionRepository()
+    const isPrisma = isPrismaBackend()
+    const repository = isPrisma
+      ? getConversionJobRepository().withConversion(conversionId)
+      : new FilesystemJobRepository(conversionId)
+    const conversions = isPrisma
+      ? getConversionRepository()
+      : new FilesystemConversionRepository()
     const sourceRepo = getSourceRepository()
     const downloader = new ImageDownloaderService(events, repository, sourceRepo)
     const kccRunner = new KccRunnerService(events)
@@ -334,8 +340,12 @@ worker.on('failed', async (job, error) => {
   const conversionId = job?.data?.conversionId
   console.error(`[ConversionWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
   if (jobId && conversionId) {
-    const failedRepo = new FilesystemJobRepository(conversionId)
-    const convRepo = new FilesystemConversionRepository()
+    const failedRepo = isPrismaBackend()
+      ? getConversionJobRepository().withConversion(conversionId)
+      : new FilesystemJobRepository(conversionId)
+    const convRepo = isPrismaBackend()
+      ? getConversionRepository()
+      : new FilesystemConversionRepository()
     await failedRepo.update(jobId, {
       status: 'failed',
       error: error.message.slice(0, 500),
@@ -380,11 +390,7 @@ async function readSourceMetadata(sourceId: string): Promise<{
   description: string | null
   genres: string[]
 }> {
-  const { readJson } = await import('../../../shared/utils/filesystem')
-  const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
-  const source = await readJson<{
-    metadata?: { author?: string; description?: string; genres?: string[] }
-  }>(sourcePath)
+  const source = await getSourceRepository().load(sourceId)
   if (!source?.metadata) return { author: null, description: null, genres: [] }
   return {
     author: source.metadata.author ?? null,
@@ -401,7 +407,7 @@ async function readSourceMetadata(sourceId: string): Promise<{
  * nome do diretório (ex: "input") e usa "KCC" como autor padrão.
  */
 async function writeComicInfoXml(
-  repository: FilesystemJobRepository,
+  repository: { appendLog: (jobId: string, message: string) => Promise<void> },
   jobId: string,
   inputDir: string,
   metadata: { title: string; author?: string },
@@ -452,12 +458,7 @@ async function getChapterImageUrls(
   sourceId: string,
   chapterId: string,
 ): Promise<string[]> {
-  const { readJson } = await import('../../../shared/utils/filesystem')
-  const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
-  const source = await readJson<{
-    provider: { slug: string }
-    chapters: Array<{ id: string; url: string }>
-  }>(sourcePath)
+  const source = await getSourceRepository().load(sourceId)
   if (!source || !provider) return []
 
   const chapter = source.chapters.find((c) => c.id === chapterId)
@@ -478,11 +479,7 @@ async function getChapterImageUrls(
  * Resolve o provider correto para o sourceId com rate limiter injetado.
  */
 async function resolveProvider(sourceId: string): Promise<import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null> {
-  const { readJson } = await import('../../../shared/utils/filesystem')
-  const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
-  const source = await readJson<{
-    chapters: Array<{ id: string; url: string }>
-  }>(sourcePath)
+  const source = await getSourceRepository().load(sourceId)
   if (!source) return null
 
   const firstChapter = source.chapters[0]
@@ -501,7 +498,7 @@ async function resolveProvider(sourceId: string): Promise<import('../../scraping
  * 2. Fallback: Ordem alfabética (cover.* vem antes de chap_*)
  */
 async function applyCover(
-  repository: FilesystemJobRepository,
+  repository: { appendLog: (jobId: string, message: string) => Promise<void> },
   jobId: string,
   sourceId: string,
   cover: { kind: string; coverId?: string; uploadId?: string; name?: string },
@@ -514,14 +511,10 @@ async function applyCover(
       return
     }
 
-    const { readJson } = await import('../../../shared/utils/filesystem')
-    const sourcePath = join(env.STORAGE_PATH, 'sources', sourceId, 'metadata.json')
-    const source = await readJson<{
-      covers?: Array<{ id: string; type: string; imageUrl: string }>
-    }>(sourcePath)
+    const source = await getSourceRepository().load(sourceId)
 
     if (!source?.covers || source.covers.length === 0) {
-      await repository.appendLog(jobId, 'Nenhuma capa encontrada no metadata.json')
+      await repository.appendLog(jobId, 'Nenhuma capa encontrada')
       return
     }
 
