@@ -76,6 +76,7 @@ function makeJobState(jobId: string, convId: string, index: number, config: Conv
 }
 
 const USER_ID = '00000000-0000-0000-0000-000000000001'
+const OTHER_USER_ID = '00000000-0000-0000-0000-000000000002'
 
 describe('PrismaConversionRepository', () => {
   const repo = new PrismaConversionRepository()
@@ -84,6 +85,11 @@ describe('PrismaConversionRepository', () => {
     await prisma.user.upsert({
       where: { id: USER_ID },
       create: { id: USER_ID, username: 'testuser_conv', email: 'test-conv@test.com', passwordHash: 'hashed' },
+      update: {},
+    })
+    await prisma.user.upsert({
+      where: { id: OTHER_USER_ID },
+      create: { id: OTHER_USER_ID, username: 'testuser_conv2', email: 'test-conv2@test.com', passwordHash: 'hashed' },
       update: {},
     })
   })
@@ -224,6 +230,113 @@ describe('PrismaConversionRepository', () => {
 
       const jobsCount = await prisma.conversionJob.count({ where: { jobId: `job_${convId}_001` } })
       expect(jobsCount).toBe(0)
+    })
+  })
+
+  describe('listByUser', () => {
+    it('lista apenas conversões do usuário (não vê as de outro)', async () => {
+      const sourceId = nextId('src-list-owner')
+      const ids = {
+        a1: nextId('conv-list-a1'),
+        a2: nextId('conv-list-a2'),
+        b1: nextId('conv-list-b1'),
+      }
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, ids.a1, { status: 'completed' } as any))
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, ids.a2, { status: 'queued' } as any))
+      await repo.create(makeConversionState({ ...makeConfig(OTHER_USER_ID), sourceId }, ids.b1, { status: 'completed' } as any))
+
+      const result = await repo.listByUser(USER_ID, {}, { page: 1, limit: 50 })
+
+      expect(result.total).toBeGreaterThanOrEqual(2)
+      expect(result.items.map((i) => i.conversionId)).toContain(ids.a1)
+      expect(result.items.map((i) => i.conversionId)).toContain(ids.a2)
+      expect(result.items.map((i) => i.conversionId)).not.toContain(ids.b1)
+    })
+
+    it('filtra por status', async () => {
+      const sourceId = nextId('src-list-status')
+      const cCompleted = nextId('conv-list-completed')
+      const cQueued = nextId('conv-list-queued')
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, cCompleted, { status: 'completed' } as any))
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, cQueued, { status: 'queued' } as any))
+
+      const result = await repo.listByUser(USER_ID, { status: 'completed' }, { page: 1, limit: 50 })
+
+      expect(result.items.every((i) => i.status === 'completed')).toBe(true)
+      expect(result.items.map((i) => i.conversionId)).toContain(cCompleted)
+      expect(result.items.map((i) => i.conversionId)).not.toContain(cQueued)
+    })
+
+    it('filtra por sourceId', async () => {
+      const sourceX = nextId('src-list-x')
+      const sourceY = nextId('src-list-y')
+      const cX = nextId('conv-list-x')
+      const cY = nextId('conv-list-y')
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId: sourceX }, cX))
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId: sourceY }, cY))
+
+      const result = await repo.listByUser(USER_ID, { sourceId: sourceX }, { page: 1, limit: 50 })
+
+      expect(result.items.every((i) => i.sourceId === sourceX)).toBe(true)
+      expect(result.items.map((i) => i.conversionId)).toContain(cX)
+      expect(result.items.map((i) => i.conversionId)).not.toContain(cY)
+    })
+
+    it('pagina corretamente', async () => {
+      const sourceId = nextId('src-list-page')
+      const createdIds: string[] = []
+      for (let i = 0; i < 3; i++) {
+        const id = nextId('conv-list-page')
+        createdIds.push(id)
+        await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, id))
+      }
+
+      const page1 = await repo.listByUser(USER_ID, { sourceId }, { page: 1, limit: 2 })
+      const page2 = await repo.listByUser(USER_ID, { sourceId }, { page: 2, limit: 2 })
+
+      expect(page1.items).toHaveLength(2)
+      expect(page1.total).toBe(3)
+      expect(page1.page).toBe(1)
+      expect(page1.limit).toBe(2)
+      expect(page2.items).toHaveLength(1)
+      expect(page2.page).toBe(2)
+    })
+
+    it('items são resumo leve (sem books/options/jobs) com title extraído de metadata', async () => {
+      const sourceId = nextId('src-list-summary')
+      const convId = nextId('conv-list-summary')
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId, metadata: { title: 'Obra Especial' } }, convId))
+
+      const result = await repo.listByUser(USER_ID, { sourceId }, { page: 1, limit: 10 })
+      const item = result.items.find((i) => i.conversionId === convId)!
+
+      expect(item).toBeDefined()
+      expect(item.title).toBe('Obra Especial')
+      expect(item.sourceId).toBe(sourceId)
+      expect(item).toHaveProperty('status')
+      expect(item).toHaveProperty('progress')
+      expect(item).toHaveProperty('totalJobs')
+      expect(item).toHaveProperty('createdAt')
+      expect(item).toHaveProperty('updatedAt')
+      expect(item).not.toHaveProperty('books')
+      expect(item).not.toHaveProperty('options')
+      expect(item).not.toHaveProperty('jobs')
+      expect(item).not.toHaveProperty('config')
+    })
+
+    it('ordena por createdAt DESC', async () => {
+      const sourceId = nextId('src-list-order')
+      const oldId = nextId('conv-list-old')
+      const newId = nextId('conv-list-new')
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, oldId))
+      await new Promise((r) => setTimeout(r, 50))
+      await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, newId))
+
+      const result = await repo.listByUser(USER_ID, { sourceId }, { page: 1, limit: 50 })
+      const idxOld = result.items.findIndex((i) => i.conversionId === oldId)
+      const idxNew = result.items.findIndex((i) => i.conversionId === newId)
+
+      expect(idxNew).toBeLessThan(idxOld)
     })
   })
 })
