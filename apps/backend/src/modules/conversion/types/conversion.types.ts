@@ -99,6 +99,45 @@ export interface ConversionState extends ConversionStatusFile {
   config: ConversionConfig
 }
 
+/**
+ * Resumo leve de uma Conversion para listagem paginada.
+ * Não inclui snapshot pesado (books/options/chapters/jobs) —
+ * usar `GET /api/conversions/:id` para detalhe.
+ */
+export interface ConversionSummary {
+  conversionId: string
+  sourceId: string
+  title: string
+  status: ConversionStatus
+  progress: number
+  totalJobs: number
+  completedJobs: number
+  failedJobs: number
+  createdAt: string
+  updatedAt: string
+  finishedAt?: string
+}
+
+/** Filtros opcionais para listagem de Conversions por usuário. */
+export interface ConversionListFilters {
+  status?: ConversionStatus
+  sourceId?: string
+}
+
+/** Paginação para listagem de Conversions. */
+export interface ConversionListPagination {
+  page: number
+  limit: number
+}
+
+/** Resultado paginado de listagem de Conversions. */
+export interface ConversionListResult {
+  items: ConversionSummary[]
+  total: number
+  page: number
+  limit: number
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tipos internos de Conversion Job (uma execução do KCC)
 // ─────────────────────────────────────────────────────────────────────────

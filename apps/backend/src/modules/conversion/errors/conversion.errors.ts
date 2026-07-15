@@ -102,3 +102,10 @@ export class ForbiddenError extends ConversionError {
     this.name = 'ForbiddenError'
   }
 }
+
+export class ListingNotSupportedError extends ConversionError {
+  constructor() {
+    super('Listing requires REPO_BACKEND=prisma', 'LISTING_REQUIRES_PRISMA')
+    this.name = 'ListingNotSupportedError'
+  }
+}
