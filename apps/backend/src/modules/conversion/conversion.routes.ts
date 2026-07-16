@@ -14,6 +14,8 @@ import { ConversionQueueService } from './services/conversion-queue.service'
 import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
 import { getConversionRepository, getConversionJobRepository } from '../../shared/database/repositories'
+import { conversionLogsHandler } from './controllers/conversion-logs.controller'
+import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
@@ -34,6 +36,7 @@ const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepo
 const getConversionUseCase = new GetConversionUseCase(conversions)
 const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events)
 const listConversionsUseCase = new ListConversionsUseCase(conversions)
+const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -94,6 +97,15 @@ const listConversionsResponseSchema = z.object({
   page: z.number(),
   limit: z.number(),
 })
+
+const sseEventSchema = z.object({
+  type: z.string(),
+  data: z.record(z.unknown()),
+  timestamp: z.string(),
+  id: z.number().optional(),
+})
+
+const conversionLogsResponseSchema = z.array(sseEventSchema)
 
 export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
   // GET /api/conversions/options
@@ -256,5 +268,28 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     cancelConversionHandler(cancelConversionUseCase),
+  )
+
+  // GET /api/conversions/:conversionId/logs
+  app.get(
+    '/api/conversions/:conversionId/logs',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Logs de eventos de uma Conversion',
+        description:
+          'Retorna todos os eventos do journal (SSE) persistidos no Redis para cada Job da Conversion. ' +
+          'Permite ao frontend recuperar o histórico de logs após recarregar a página.',
+        security: [{ bearerAuth: [] }],
+        params: conversionParamsSchema,
+        response: {
+          200: conversionLogsResponseSchema,
+          404: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+        },
+      },
+    },
+    conversionLogsHandler(getConversionLogsUseCase),
   )
 }
