@@ -229,7 +229,7 @@ function WizardPage() {
       setVisited((v) => Math.max(v, 1));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scraping.state.status, scraping.state.sourceId]);
+  }, [scraping.state.status, scraping.state.sourceId, scraping.state.metadata]);
 
   const toggleChapter = (id: string) => {
     setData((d) => {
@@ -514,15 +514,19 @@ function StepChapters({
   onVolumeMode: (m: VolumeMode) => void;
   onVolumeSizes: (v: number[]) => void;
 }) {
+  const sorted = useMemo(
+    () => [...chapters].sort((a, b) => parseFloat(a.number) - parseFloat(b.number)),
+    [chapters],
+  )
   const effectiveChapters =
-    selected.size > 0 ? chapters.filter((c) => selected.has(c.id)) : chapters;
+    selected.size > 0 ? sorted.filter((c) => selected.has(c.id)) : sorted;
   const effectiveTotal = effectiveChapters.length;
 
   const calculateVolume = (chapterId: string): number => {
     const idx = effectiveChapters.findIndex((c) => c.id === chapterId);
     if (idx === -1) {
       // fallback: full list index
-      const fallbackIdx = chapters.findIndex((c) => c.id === chapterId);
+      const fallbackIdx = sorted.findIndex((c) => c.id === chapterId);
       if (fallbackIdx === -1) return 1;
       if (volumeMode === "fixed") return Math.floor(fallbackIdx / volumeSize) + 1;
       let fi = fallbackIdx;
@@ -555,7 +559,7 @@ function StepChapters({
       <SectionHeader
         icon={<BookOpen />}
         title="Quais capítulos?"
-        subtitle={`${selected.size} de ${chapters.length} selecionados`}
+        subtitle={`${selected.size} de ${sorted.length} selecionados`}
       />
 
       {/* Volume config */}
@@ -675,7 +679,7 @@ function StepChapters({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-auto pr-1">
-        {chapters.map((c) => {
+        {sorted.map((c) => {
           const checked = selected.has(c.id);
           const vol = calculateVolume(c.id);
           return (
