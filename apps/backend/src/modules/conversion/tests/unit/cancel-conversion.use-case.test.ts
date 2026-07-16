@@ -157,7 +157,10 @@ describe('CancelConversionUseCase', () => {
   })
 
   it('deve chamar syncStatus apos cancelar os jobs', async () => {
-    const state = mockState()
+    const state = mockState({
+      createdAt: '2020-01-01T00:00:00.000Z',
+      updatedAt: '2020-01-01T00:00:00.000Z',
+    })
     const createdAt = state.updatedAt
     await conversions.create(state)
 
