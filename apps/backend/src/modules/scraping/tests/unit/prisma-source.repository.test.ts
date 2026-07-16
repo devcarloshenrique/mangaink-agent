@@ -129,6 +129,31 @@ describe('PrismaSourceRepository', () => {
       expect(loaded!.chapters[0].id).toBe('ch_test_001')
       expect(loaded!.covers).toHaveLength(0)
     })
+
+    it('deve salvar e carregar 35 chapters sem perda (regressao createMany)', async () => {
+      const base = makeSourcePayload('src-test-many-chapters')
+      base.chapters = Array.from({ length: 35 }, (_, i) => {
+        const num = String(i + 1)
+        return {
+          id: `chap_${num.padStart(4, '0')}`,
+          number: num,
+          title: `Capitulo ${num}`,
+          url: `https://example.com/manga/test/capitulo-${num}/`,
+          pages: 20,
+          volume: 1,
+        }
+      })
+      base.statistics = { chapters: 35, covers: 1 }
+
+      await repository.save('src-test-many-chapters', base)
+
+      const loaded = await repository.load('src-test-many-chapters')
+      expect(loaded).not.toBeNull()
+      expect(loaded!.chapters).toHaveLength(35)
+      expect(loaded!.statistics.chapters).toBe(35)
+      expect(loaded!.chapters[0].number).toBe('1')
+      expect(loaded!.chapters[34].number).toBe('35')
+    })
   })
 
   describe('update', () => {

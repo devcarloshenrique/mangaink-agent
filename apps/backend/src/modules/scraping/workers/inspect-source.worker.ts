@@ -38,6 +38,11 @@ export const inspectSourceWorker = new Worker<SourceInspectJob>(
       const provider = resolver.resolve(url)
       const result = await provider.inspect(url)
 
+      console.log(
+        `[Worker] Scraping: ${result.chapters.length} chapters, ${result.covers.length} covers, ` +
+          `title="${result.metadata.title}", sourceId=${sourceId}`,
+      )
+
       await pubsub.publish(sourceId, {
         stage: 'chapters',
         progress: 60,

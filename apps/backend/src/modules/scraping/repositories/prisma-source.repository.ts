@@ -16,7 +16,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
     const row = await prisma.source.findUnique({
       where: { sourceId },
       include: {
-        chapters: { orderBy: { number: 'asc' } },
+        chapters: true,
         covers: true,
       },
     })
@@ -31,14 +31,16 @@ export class PrismaSourceRepository implements SourceCacheRepository {
 
     const metadata = row.metadata as unknown as MangaMetadata
 
-    const chapters: Chapter[] = row.chapters.map((ch) => ({
-      id: ch.chapterId,
-      number: ch.number,
-      title: ch.title,
-      url: ch.url,
-      pages: ch.pages,
-      volume: ch.volume,
-    }))
+    const chapters: Chapter[] = row.chapters
+      .map((ch) => ({
+        id: ch.chapterId,
+        number: ch.number,
+        title: ch.title,
+        url: ch.url,
+        pages: ch.pages,
+        volume: ch.volume,
+      }))
+      .sort((a, b) => parseFloat(a.number) - parseFloat(b.number))
 
     const covers: Cover[] = row.covers.map((cv) => ({
       id: cv.coverId,
@@ -99,63 +101,89 @@ export class PrismaSourceRepository implements SourceCacheRepository {
       ttlExpiresAt,
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.source.upsert({
-        where: { sourceId },
-        create: sourceCreate,
-        update: sourceCreate,
-      })
-
-      if (newChapterIds.length > 0) {
-        await tx.chapter.deleteMany({
-          where: {
-            sourceId,
-            chapterId: { notIn: newChapterIds },
-          },
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.source.upsert({
+          where: { sourceId },
+          create: sourceCreate,
+          update: sourceCreate,
         })
-      } else {
-        await tx.chapter.deleteMany({ where: { sourceId } })
-      }
 
-      if (newCoverIds.length > 0) {
-        await tx.cover.deleteMany({
-          where: {
-            sourceId,
-            coverId: { notIn: newCoverIds },
-          },
-        })
-      } else {
-        await tx.cover.deleteMany({ where: { sourceId } })
-      }
+        if (newChapterIds.length > 0) {
+          await tx.chapter.deleteMany({
+            where: {
+              sourceId,
+              chapterId: { notIn: newChapterIds },
+            },
+          })
+        } else {
+          await tx.chapter.deleteMany({ where: { sourceId } })
+        }
 
-      if (data.chapters.length > 0) {
-        await tx.chapter.createMany({
-          data: data.chapters.map((ch) => ({
-            chapterId: ch.id,
-            sourceId,
-            number: ch.number,
-            title: ch.title,
-            url: ch.url,
-            pages: ch.pages,
-            volume: ch.volume,
-          })),
-          skipDuplicates: true,
-        })
-      }
+        if (newCoverIds.length > 0) {
+          await tx.cover.deleteMany({
+            where: {
+              sourceId,
+              coverId: { notIn: newCoverIds },
+            },
+          })
+        } else {
+          await tx.cover.deleteMany({ where: { sourceId } })
+        }
 
-      if (data.covers.length > 0) {
-        await tx.cover.createMany({
-          data: data.covers.map((cv) => ({
-            coverId: cv.id,
-            sourceId,
-            type: cv.type,
-            label: cv.label,
-            imageUrl: cv.imageUrl,
-          })),
-          skipDuplicates: true,
-        })
-      }
-    })
+        for (const ch of data.chapters) {
+          await tx.chapter.upsert({
+            where: { chapterId: ch.id },
+            create: {
+              chapterId: ch.id,
+              sourceId,
+              number: ch.number,
+              title: ch.title,
+              url: ch.url,
+              pages: ch.pages,
+              volume: ch.volume,
+            },
+            update: {
+              number: ch.number,
+              title: ch.title,
+              url: ch.url,
+              pages: ch.pages,
+              volume: ch.volume,
+            },
+          })
+        }
+
+        for (const cv of data.covers) {
+          await tx.cover.upsert({
+            where: { coverId: cv.id },
+            create: {
+              coverId: cv.id,
+              sourceId,
+              type: cv.type,
+              label: cv.label,
+              imageUrl: cv.imageUrl,
+            },
+            update: {
+              type: cv.type,
+              label: cv.label,
+              imageUrl: cv.imageUrl,
+            },
+          })
+        }
+
+        const verifyChapters = await tx.chapter.count({ where: { sourceId } })
+        const verifyCovers = await tx.cover.count({ where: { sourceId } })
+        console.log(
+          `[PrismaSourceRepo] Save ${sourceId}: ` +
+            `${data.chapters.length} chapters enviados, ${verifyChapters} no banco | ` +
+            `${data.covers.length} covers enviados, ${verifyCovers} no banco`,
+        )
+      },
+      {
+        timeout: 30_000,
+        maxWait: 10_000,
+      },
+    )
   }
 
   async update(sourceId: string, patch: Partial<MetadataCache>): Promise<void> {
