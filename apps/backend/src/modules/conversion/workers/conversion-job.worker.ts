@@ -12,7 +12,8 @@ import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
 import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
 import { isPrismaBackend } from '../../../shared/config/repo-mode'
-import type { ConversionJobData, ErrorHandlingStrategy } from '../types/conversion.types'
+import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
+import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 
 const pubsub = new ConversionPubSubService()
 const events = new ConversionEventsService(pubsub)
@@ -33,9 +34,22 @@ const worker = new Worker<ConversionJobData>(
     const sourceRepo = getSourceRepository()
     const downloader = new ImageDownloaderService(events, repository, sourceRepo)
     const kccRunner = new KccRunnerService(events)
+    const jobLiveStatusStore = isPrisma ? new JobLiveStatusStore() : null
 
     /** Recomputa o status.json da Conversion após cada fase do Job. */
     const sync = () => conversions.syncStatus(conversionId).catch(() => {})
+
+    const setLiveStatus = (status: JobStatus, currentStep: string) => {
+      if (isPrisma && jobLiveStatusStore) {
+        return jobLiveStatusStore.set(jobId, {
+          status,
+          currentStep,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {})
+      } else {
+        return repository.update(jobId, { status, currentStep })
+      }
+    }
 
     const tempDir = join(storagePath, 'temp')
     const tempInputDir = join(tempDir, 'input')
@@ -45,19 +59,13 @@ const worker = new Worker<ConversionJobData>(
     await mkdir(outputPath, { recursive: true })
 
     // ── Job started ─────────────────────────────────────────────────
-    await repository.update(jobId, {
-      status: 'preparing',
-      currentStep: 'Preparing conversion...',
-    })
+    await setLiveStatus('preparing', 'Preparing conversion...')
     await sync()
     await repository.appendLog(jobId, `Job iniciado — ${chapters.length} capítulos selecionados`)
     await events.emit(jobId, events.createEvent('job.started', { jobId }))
 
     // ── Fase 1: Download de imagens ──────────────────────────────────
-    await repository.update(jobId, {
-      status: 'downloading',
-      currentStep: 'Downloading images...',
-    })
+    await setLiveStatus('downloading', 'Downloading images...')
     await sync()
     await events.emit(jobId, events.createEvent('download.started', {
       jobId,
@@ -67,6 +75,7 @@ const worker = new Worker<ConversionJobData>(
     let totalDownloaded = 0
     let totalErrors = 0
     let totalCorrupt = 0
+    let cumulativeTotalImages = 0
     const skippedChapters: string[] = []
     const successfulChapters: string[] = []
 
@@ -79,8 +88,10 @@ const worker = new Worker<ConversionJobData>(
     }
 
     for (const chapterId of chapters) {
-      const currentJob = await repository.findById(jobId)
-      if (currentJob?.status === 'cancelled') {
+      const cancelled = isPrisma && jobLiveStatusStore
+        ? (await jobLiveStatusStore.get(jobId))?.status === 'cancelled'
+        : (await repository.findById(jobId))?.status === 'cancelled'
+      if (cancelled) {
         await repository.appendLog(jobId, 'Job cancelado durante download')
         return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
       }
@@ -97,6 +108,7 @@ const worker = new Worker<ConversionJobData>(
 
       totalDownloaded += result.downloadedImages
       totalErrors += result.errors
+      cumulativeTotalImages += result.totalImages
 
       if (result.corruptPages.length > 0) {
         totalCorrupt += result.corruptPages.length
@@ -114,6 +126,13 @@ const worker = new Worker<ConversionJobData>(
           await repository.appendLog(jobId,
             `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`)
           skippedChapters.push(chapterId)
+          if (isPrisma && jobLiveStatusStore) {
+            await jobLiveStatusStore.set(jobId, {
+              downloadedImages: totalDownloaded,
+              totalImages: cumulativeTotalImages,
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {})
+          }
           continue
         }
 
@@ -146,8 +165,15 @@ const worker = new Worker<ConversionJobData>(
               } catch (err) {
                 await repository.appendLog(jobId,
                   `Erro ao gerar placeholder para ${chapterId} página ${cp.pageIndex}: ${err instanceof Error ? err.message : 'unknown'}`)
-              }
-            }
+      }
+      if (isPrisma && jobLiveStatusStore) {
+        await jobLiveStatusStore.set(jobId, {
+          downloadedImages: totalDownloaded,
+          totalImages: cumulativeTotalImages,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {})
+      }
+    }
             
             const placeholderIndices = result.corruptPages.map(cp => cp.pageIndex)
             await sourceRepo.updatePlaceholderIndices(sourceId, chapterId, placeholderIndices)
@@ -195,10 +221,7 @@ const worker = new Worker<ConversionJobData>(
     }
 
     // ── Fase 2: Montar temp/input/ com hard links ───────────────────
-    await repository.update(jobId, {
-      status: 'preparing',
-      currentStep: `Creating hard links from cache (${successfulChapters.length}/${chapters.length} chapters)...`,
-    })
+    await setLiveStatus('preparing', `Creating hard links from cache (${successfulChapters.length}/${chapters.length} chapters)...`)
     await sync()
     await repository.appendLog(jobId, `Montando temp/input/ com hard links do cache (${successfulChapters.length} capítulos disponíveis)`)
 
@@ -234,10 +257,7 @@ const worker = new Worker<ConversionJobData>(
     await writeComicInfoXml(repository, jobId, tempInputDir, metadata, sourceMeta)
 
     // ── Fase 3: Conversão KCC ───────────────────────────────────────
-    await repository.update(jobId, {
-      status: 'converting',
-      currentStep: 'Starting KCC conversion...',
-    })
+    await setLiveStatus('converting', 'Starting KCC conversion...')
     await sync()
     await repository.appendLog(jobId, `KCC iniciado — device=${output.deviceId}, format=${output.format}`)
 
@@ -253,10 +273,7 @@ const worker = new Worker<ConversionJobData>(
     )
 
     // ── Fase 4: Packaging — renomear output e limpar temp ───────────
-    await repository.update(jobId, {
-      status: 'packaging',
-      currentStep: 'Packaging output...',
-    })
+    await setLiveStatus('packaging', 'Packaging output...')
     await sync()
 
     // Renomeia o arquivo de saída para o nome bonito com o título real
@@ -303,11 +320,16 @@ const worker = new Worker<ConversionJobData>(
       status: 'completed',
       progress: 100,
       currentStep: 'Done',
+      downloadedImages: totalDownloaded,
+      totalImages: cumulativeTotalImages,
       completedAt: new Date().toISOString(),
       downloadUrl,
       outputFile: finalOutputFile,
       outputSize: finalOutputSize,
     })
+    if (isPrisma && jobLiveStatusStore) {
+      await jobLiveStatusStore.clear(jobId).catch(() => {})
+    }
     await sync()
 
     await repository.appendLog(jobId, `Job concluído — output: "${finalOutputFile}" (${(finalOutputSize / 1024 / 1024).toFixed(1)} MB)`)
@@ -351,6 +373,10 @@ worker.on('failed', async (job, error) => {
       error: error.message.slice(0, 500),
       currentStep: 'Failed',
     })
+    if (isPrismaBackend()) {
+      const store = new JobLiveStatusStore()
+      await store.clear(jobId).catch(() => {})
+    }
     await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
     await convRepo.syncStatus(conversionId)
     await events.emit(jobId, events.createEvent('job.failed', {

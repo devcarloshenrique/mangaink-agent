@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { readJson, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import { isPrismaBackend } from '../../../shared/config/repo-mode'
+import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import { getConversionJobRepository } from '../../../shared/database/repositories'
 import type { ConversionRepository } from '../repositories/conversion.repository'
 import type { ConversionQueueService } from '../services/conversion-queue.service'
@@ -47,6 +48,8 @@ export class CancelConversionUseCase {
 
     if (isPrismaBackend()) {
       const jobRepo = getConversionJobRepository()
+      const store = new JobLiveStatusStore()
+      const now = new Date().toISOString()
 
       for (const jobId of jobIds) {
         const job = await jobRepo.findById(jobId)
@@ -61,13 +64,22 @@ export class CancelConversionUseCase {
           } catch {
             // melhor-esforço
           }
-        }
-
-        if (isInQueue || isActive) {
+          await store.set(jobId, {
+            status: 'cancelled',
+            updatedAt: now,
+          }).catch(() => {})
           await jobRepo.update(jobId, {
             status: 'cancelled',
             currentStep: 'Cancelled',
           })
+        }
+
+        if (isActive) {
+          // Redis-first: worker detecta em próximo capítulo e faz persist terminal
+          await store.set(jobId, {
+            status: 'cancelled',
+            updatedAt: now,
+          }).catch(() => {})
         }
       }
     } else {
