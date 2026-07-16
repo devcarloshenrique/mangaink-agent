@@ -90,11 +90,10 @@ describe('PrismaJobRepository', () => {
     return { convId, config }
   }
 
-  describe('withConversion + create', () => {
-    it('deve criar job usando scoped conversionId', async () => {
+  describe('create', () => {
+    it('deve criar job usando conversionId do config', async () => {
       const { convId, config } = await setupConversion()
-      const scoped = jobRepo.withConversion(convId)
-      await scoped.create(makeJobState(convId, config))
+      await jobRepo.create(makeJobState(convId, config))
 
       const found = await jobRepo.findById(`job_${convId}`)
       expect(found).not.toBeNull()
@@ -107,8 +106,7 @@ describe('PrismaJobRepository', () => {
   describe('findById', () => {
     it('deve retornar job com config e status', async () => {
       const { convId, config } = await setupConversion()
-      const scoped = jobRepo.withConversion(convId)
-      await scoped.create(makeJobState(convId, config))
+      await jobRepo.create(makeJobState(convId, config))
 
       const found = await jobRepo.findById(`job_${convId}`)
       expect(found!.config.bookIndex).toBe(0)
@@ -125,8 +123,7 @@ describe('PrismaJobRepository', () => {
   describe('update', () => {
     it('deve atualizar status e progress', async () => {
       const { convId, config } = await setupConversion()
-      const scoped = jobRepo.withConversion(convId)
-      await scoped.create(makeJobState(convId, config))
+      await jobRepo.create(makeJobState(convId, config))
 
       await jobRepo.update(`job_${convId}`, {
         status: 'converting',
@@ -143,8 +140,7 @@ describe('PrismaJobRepository', () => {
 
     it('deve persistir output metadata ao concluir', async () => {
       const { convId, config } = await setupConversion()
-      const scoped = jobRepo.withConversion(convId)
-      await scoped.create(makeJobState(convId, config))
+      await jobRepo.create(makeJobState(convId, config))
 
       await jobRepo.update(`job_${convId}`, {
         status: 'completed',
@@ -164,11 +160,4 @@ describe('PrismaJobRepository', () => {
     })
   })
 
-  describe('withConversion', () => {
-    it('nao quebra (metodo existe por compatibilidade)', () => {
-      const scoped = jobRepo.withConversion('conv-test')
-      expect(scoped).toBeDefined()
-      expect(scoped).toBeInstanceOf(PrismaJobRepository)
-    })
-  })
 })

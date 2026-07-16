@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 
-vi.mock('../../repositories/filesystem-conversion.repository', () => ({
-  FilesystemConversionRepository: vi.fn(() => ({
+vi.mock('../../../../shared/database/repositories', () => ({
+  getConversionRepository: vi.fn(() => ({
     create: vi.fn(), findById: vi.fn(), update: vi.fn(), syncStatus: vi.fn(),
     listJobIds: vi.fn(), appendLog: vi.fn(), delete: vi.fn(),
   })),
+  getConversionJobRepository: vi.fn(),
+  getSourceRepository: vi.fn(),
 }))
 
 vi.mock('../../services/conversion-pubsub.service', () => ({

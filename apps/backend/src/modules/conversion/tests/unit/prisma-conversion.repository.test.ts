@@ -137,7 +137,7 @@ describe('PrismaConversionRepository', () => {
       const config = makeConfig(USER_ID)
       await repo.create(makeConversionState(config, convId))
 
-      const jobRepo = new PrismaJobRepository().withConversion(convId)
+      const jobRepo = new PrismaJobRepository()
       await jobRepo.create(makeJobState(`job_${convId}_001`, convId, 0, config, 0))
       await jobRepo.create(makeJobState(`job_${convId}_002`, convId, 1, config, 1))
       await jobRepo.update(`job_${convId}_001`, { status: 'downloading', progress: 40 })
@@ -155,7 +155,7 @@ describe('PrismaConversionRepository', () => {
       const config = makeConfig(USER_ID)
       await repo.create(makeConversionState(config, convId))
 
-      const jobRepo = new PrismaJobRepository().withConversion(convId)
+      const jobRepo = new PrismaJobRepository()
       await jobRepo.create(makeJobState(`job_${convId}_001`, convId, 0, config, 0))
       await jobRepo.create(makeJobState(`job_${convId}_002`, convId, 1, config, 1))
       await jobRepo.update(`job_${convId}_001`, { status: 'completed', progress: 100, outputFile: 'test.epub', outputSize: 1024 })

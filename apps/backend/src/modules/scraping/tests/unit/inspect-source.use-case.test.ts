@@ -94,10 +94,6 @@ vi.mock('../../providers/provider-resolver', () => ({
   ProviderResolver: vi.fn(() => sharedInstances.resolver),
 }))
 
-vi.mock('../../repositories/filesystem-source.repository', () => ({
-  FilesystemSourceRepository: vi.fn(() => sharedInstances.repo),
-}))
-
 vi.mock('../../../../shared/database/repositories', () => ({
   getSourceRepository: vi.fn(() => sharedInstances.repo),
   getConversionRepository: vi.fn(),

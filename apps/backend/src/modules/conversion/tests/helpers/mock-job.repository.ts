@@ -2,7 +2,7 @@ import type { ConversionJobConfig, ConversionJobStatus, ConversionJobState } fro
 import type { ConversionJobRepository } from '../../repositories/conversion-job.repository'
 
 /**
- * Job repository mock que suporta o escopo `withConversion()`.
+ * Job repository mock.
  * Registra todos os jobs criados em uma lista plana para inspeção nos testes.
  */
 export class MockJobRepository implements ConversionJobRepository {
@@ -24,10 +24,6 @@ export class MockJobRepository implements ConversionJobRepository {
   async delete(_jobId: string): Promise<void> {}
 
   async appendLog(_jobId: string, _message: string): Promise<void> {}
-
-  withConversion(_conversionId: string): ConversionJobRepository {
-    return this
-  }
 
   reset(): void {
     this.created = []

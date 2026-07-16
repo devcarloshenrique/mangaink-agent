@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { ListConversionsUseCase } from '../../use-cases/list-conversions.use-case'
 import { InMemoryConversionRepository } from '../helpers/in-memory-conversion.repository'
-import { FilesystemConversionRepository } from '../../repositories/filesystem-conversion.repository'
-import { ListingNotSupportedError } from '../../errors/conversion.errors'
 import { makeConversionConfig } from '../helpers/fixtures'
 import type { ConversionState } from '../../types/conversion.types'
 
@@ -182,28 +180,5 @@ describe('ListConversionsUseCase', () => {
 
     expect(result.total).toBe(1)
     expect(result.items[0].conversionId).toBe('conv-1')
-  })
-})
-
-describe('ListConversionsUseCase — modo filesystem', () => {
-  it('lança ListingNotSupportedError em filesystem mode', async () => {
-    const fsRepo = new FilesystemConversionRepository()
-    const fsUseCase = new ListConversionsUseCase(fsRepo)
-
-    await expect(
-      fsUseCase.execute(USER_A, { page: 1, limit: 20 }),
-    ).rejects.toThrow(ListingNotSupportedError)
-  })
-
-  it('ListingNotSupportedError tem code LISTING_REQUIRES_PRISMA', async () => {
-    const fsRepo = new FilesystemConversionRepository()
-    const fsUseCase = new ListConversionsUseCase(fsRepo)
-
-    try {
-      await fsUseCase.execute(USER_A, { page: 1, limit: 20 })
-    } catch (err) {
-      expect(err).toBeInstanceOf(ListingNotSupportedError)
-      expect((err as ListingNotSupportedError).code).toBe('LISTING_REQUIRES_PRISMA')
-    }
   })
 })

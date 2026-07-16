@@ -9,50 +9,85 @@ import {
   InvalidConversionStateError,
   ForbiddenError,
 } from '../../errors/conversion.errors'
-import type { ConversionState } from '../../types/conversion.types'
+import type { ConversionState, ConversionJobState, ConversionJobStatus } from '../../types/conversion.types'
 
 const TEST_USER = 'test-user-001'
 const OTHER_USER = 'other-user-999'
 
-const jobStatusStore = new Map<string, { status: string }>()
-const writtenStatuses = new Map<string, Record<string, unknown>>()
+const jobStore = new Map<string, ConversionJobState>()
+const updatedJobs = new Map<string, Partial<ConversionJobStatus>>()
+const storeSets: Array<{ jobId: string; data: Record<string, unknown> }> = []
+const storeGets: Array<{ jobId: string }> = []
 
-const norm = (p: string) => p.replace(/\\/g, '/')
+const store = vi.hoisted(() => {
+  function buildJob(jobId: string, status: string): ConversionJobState {
+    return {
+      jobId,
+      status: status as ConversionJobState['status'],
+      progress: 0,
+      currentStep: '',
+      downloadedImages: 0,
+      totalImages: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      config: {
+        conversionId: 'conv_test_001',
+        jobId,
+        bookIndex: 0,
+        sourceId: 'src_test',
+        chapters: [],
+        cover: { kind: 'original' },
+        output: { deviceId: 'kindle_pw5', format: 'EPUB' },
+        metadata: { title: 'Vol' },
+        options: {},
+        errorHandlingStrategy: 'ignore',
+      },
+    }
+  }
 
-const shared = vi.hoisted(() => ({
-  reset: () => {
-    jobStatusStore.clear()
-    writtenStatuses.clear()
-  },
-  setJobStatus: (key: string, status: { status: string }) => jobStatusStore.set(key, status),
-  pathExists: vi.fn(async (p: string): Promise<boolean> => {
-    return jobStatusStore.has(norm(p))
-  }),
-  readJson: vi.fn(async <T>(p: string): Promise<T | null> => {
-    const entry = jobStatusStore.get(norm(p))
-    return (entry ?? null) as T | null
-  }),
-  writeJson: vi.fn(async <T>(p: string, data: T): Promise<void> => {
-    writtenStatuses.set(norm(p), data as Record<string, unknown>)
-  }),
+  return {
+    reset: () => {
+      jobStore.clear()
+      updatedJobs.clear()
+      storeSets.length = 0
+      storeGets.length = 0
+    },
+    setJobStatus: (jobId: string, status: string) => {
+      jobStore.set(jobId, buildJob(jobId, status))
+    },
+    mockJobRepo: {
+      findById: vi.fn(async (jobId: string): Promise<ConversionJobState | null> => {
+        return jobStore.get(jobId) ?? null
+      }),
+      update: vi.fn(async (jobId: string, updates: Partial<ConversionJobStatus>): Promise<void> => {
+        updatedJobs.set(jobId, updates)
+      }),
+      create: vi.fn(),
+      delete: vi.fn(),
+      appendLog: vi.fn(),
+    },
+    mockLiveStore: {
+      set: vi.fn(async (jobId: string, data: Record<string, unknown>): Promise<void> => {
+        storeSets.push({ jobId, data })
+      }),
+      get: vi.fn(async (jobId: string): Promise<Record<string, unknown> | null> => {
+        storeGets.push({ jobId })
+        const job = jobStore.get(jobId)
+        return job ? { status: job.status } : null
+      }),
+      clear: vi.fn(async (): Promise<void> => {}),
+    },
+  }
+})
+
+vi.mock('../../../../shared/database/repositories', () => ({
+  getConversionJobRepository: vi.fn(() => store.mockJobRepo),
+  getConversionRepository: vi.fn(),
+  getSourceRepository: vi.fn(),
 }))
 
-vi.mock('../../../../shared/utils/filesystem', () => ({
-  pathExists: shared.pathExists,
-  readJson: shared.readJson,
-  writeJson: shared.writeJson,
-}))
-
-vi.mock('../../../../shared/config/env', () => ({
-  env: {
-    CONVERSIONS_STORAGE_PATH: '/test/conversions',
-    STORAGE_PATH: '/test/storage',
-    NODE_ENV: 'test',
-    PORT: 3333,
-    JWT_SECRET: 'test-secret',
-    DATABASE_URL: 'postgresql://test',
-    REDIS_URL: 'redis://test',
-  },
+vi.mock('../../../../shared/redis/job-status-store', () => ({
+  JobLiveStatusStore: vi.fn(() => store.mockLiveStore),
 }))
 
 const mockState = (overrides: Partial<ConversionState> = {}): ConversionState => {
@@ -83,7 +118,7 @@ let events: MockConversionEventsService
 let useCase: CancelConversionUseCase
 
 beforeEach(() => {
-  shared.reset()
+  store.reset()
   conversions = new InMemoryConversionRepository()
   queue = new MockConversionQueueService()
   events = new MockConversionEventsService()
@@ -95,12 +130,8 @@ describe('CancelConversionUseCase', () => {
     const state = mockState()
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'queued',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'downloading',
-    })
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'downloading')
 
     const result = await useCase.execute('conv_test_001', TEST_USER)
 
@@ -109,10 +140,15 @@ describe('CancelConversionUseCase', () => {
 
     expect(queue.removed).toContain('job_001')
 
-    const cancelledJobs = Array.from(writtenStatuses.values()).filter(
-      (s) => s.status === 'cancelled',
+    const cancelledUpdates = Array.from(updatedJobs.entries()).filter(
+      ([, u]) => u.status === 'cancelled',
     )
-    expect(cancelledJobs).toHaveLength(2)
+    expect(cancelledUpdates).toHaveLength(1)
+
+    const cancelledSets = storeSets.filter(
+      (s) => s.data.status === 'cancelled',
+    )
+    expect(cancelledSets).toHaveLength(2)
 
     const cancelledEvents = events.emitted.filter(
       (e) => e.event.type === 'conversion.cancelled',
@@ -135,22 +171,21 @@ describe('CancelConversionUseCase', () => {
     })
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'queued',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'completed',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_003/status.json', {
-      status: 'preparing',
-    })
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'completed')
+    store.setJobStatus('job_003', 'preparing')
 
     await useCase.execute('conv_test_001', TEST_USER)
 
-    const cancelledJobs = Array.from(writtenStatuses.values()).filter(
-      (s) => s.status === 'cancelled',
+    const cancelledUpdates = Array.from(updatedJobs.entries()).filter(
+      ([, u]) => u.status === 'cancelled',
     )
-    expect(cancelledJobs).toHaveLength(2)
+    expect(cancelledUpdates).toHaveLength(1)
+
+    const cancelledSets = storeSets.filter(
+      (s) => s.data.status === 'cancelled',
+    )
+    expect(cancelledSets).toHaveLength(2)
 
     expect(queue.removed).toContain('job_001')
     expect(queue.removed).not.toContain('job_002')
@@ -164,12 +199,8 @@ describe('CancelConversionUseCase', () => {
     const createdAt = state.updatedAt
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'queued',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'downloading',
-    })
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'downloading')
 
     await useCase.execute('conv_test_001', TEST_USER)
 
@@ -177,13 +208,12 @@ describe('CancelConversionUseCase', () => {
     expect(updated).not.toBeNull()
     // syncStatus foi chamado — updatedAt mudou
     expect(updated!.updatedAt).not.toBe(createdAt)
-    // updatedAt reflete que syncStatus foi executado
 
-    // Jobs foram marcados como cancelled no filesystem
-    const cancelledJobs = Array.from(writtenStatuses.values()).filter(
-      (s) => s.status === 'cancelled',
+    // store.set foi chamado para ambos os jobs
+    const cancelledSets = storeSets.filter(
+      (s) => s.data.status === 'cancelled',
     )
-    expect(cancelledJobs).toHaveLength(2)
+    expect(cancelledSets).toHaveLength(2)
   })
 
   it('deve lancar ConversionNotFoundError quando conversao nao existe', async () => {
@@ -253,12 +283,8 @@ describe('CancelConversionUseCase', () => {
     const state = mockState()
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'queued',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'queued',
-    })
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'queued')
 
     await useCase.execute('conv_test_001', TEST_USER)
 
@@ -286,12 +312,8 @@ describe('CancelConversionUseCase', () => {
     })
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'completed',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'queued',
-    })
+    store.setJobStatus('job_001', 'completed')
+    store.setJobStatus('job_002', 'queued')
 
     const result = await useCase.execute('conv_test_001', TEST_USER)
     expect(result.status).toBe('cancelled')
@@ -302,12 +324,8 @@ describe('CancelConversionUseCase', () => {
     const state = mockState()
     await conversions.create(state)
 
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_001/status.json', {
-      status: 'queued',
-    })
-    shared.setJobStatus('/test/conversions/conv_test_001/jobs/job_002/status.json', {
-      status: 'downloading',
-    })
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'downloading')
 
     await expect(useCase.execute('conv_test_001', OTHER_USER)).rejects.toThrow(ForbiddenError)
   })
