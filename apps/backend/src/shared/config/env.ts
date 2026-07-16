@@ -37,6 +37,8 @@ const envSchema = z.object({
 
   REPO_BACKEND: z.enum(['filesystem', 'prisma']).default('filesystem'),
 
+  JOB_STATUS_TTL_SEC: z.coerce.number().int().positive().default(21600),
+
   // Rate Limiting por Provider (bottleneck) — valores em ms
   RATE_LIMIT_DEFAULT_MAX_CONCURRENT: positiveMs.default(6),
   RATE_LIMIT_DEFAULT_MIN_TIME: numericMs.default(50),

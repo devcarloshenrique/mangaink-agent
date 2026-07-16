@@ -268,6 +268,7 @@ POST /inspect → cache hit? → 200 { ready }
 | `RATE_LIMIT_{SLUG}_RESERVOIR` | Teto de requisições por intervalo | (opcional) |
 | `RATE_LIMIT_{SLUG}_RESERVOIR_REFRESH_INTERVAL` | Intervalo do reservoir (ms) | (opcional) |
 | `REPO_BACKEND` | Backend de persistência — `filesystem` ou `prisma` | `filesystem` |
+| `JOB_STATUS_TTL_SEC` | TTL (segundos) do Hash Redis para status live de Jobs | `21600` (6h) |
 
 ---
 
