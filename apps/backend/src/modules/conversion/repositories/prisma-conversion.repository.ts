@@ -4,6 +4,7 @@ import { appendFile } from 'node:fs/promises'
 import { prisma } from '../../../shared/database/prisma'
 import { mkdirp } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import type { ConversionRepository } from './conversion.repository'
 import type {
   ConversionConfig,
@@ -166,17 +167,44 @@ export class PrismaConversionRepository implements ConversionRepository {
       },
     })
 
-    const summaries: ConversionJobSummary[] = jobs.map((j) => ({
-      jobId: j.jobId,
-      index: j.bookIndex,
-      title: (j.metadata as unknown as { title?: string })?.title ?? '',
-      status: j.status as ConversionJobSummary['status'],
-      progress: j.progress,
-      outputFile: j.outputFile ?? undefined,
-      outputSize: j.outputSize ? Number(j.outputSize) : undefined,
-      downloadUrl: j.downloadUrl ?? undefined,
-      error: j.error ?? undefined,
-    }))
+    const store = new JobLiveStatusStore()
+    const terminalStatuses: JobStatus[] = ['completed', 'failed', 'cancelled']
+
+    const summaries: ConversionJobSummary[] = await Promise.all(
+      jobs.map(async (j) => {
+        const isTerminal = terminalStatuses.includes(j.status as JobStatus)
+        let status = j.status as ConversionJobSummary['status']
+        let progress = j.progress
+        let outputFile = j.outputFile ?? undefined
+        let outputSizeNum = j.outputSize ? Number(j.outputSize) : undefined
+        let downloadUrl = j.downloadUrl ?? undefined
+        let error = j.error ?? undefined
+
+        if (!isTerminal) {
+          const live = await store.get(j.jobId)
+          if (live) {
+            status = live.status
+            progress = live.progress
+            outputFile = live.outputFile ?? outputFile
+            outputSizeNum = live.outputSize ?? outputSizeNum
+            downloadUrl = live.downloadUrl ?? downloadUrl
+            error = live.error ?? error
+          }
+        }
+
+        return {
+          jobId: j.jobId,
+          index: j.bookIndex,
+          title: (j.metadata as unknown as { title?: string })?.title ?? '',
+          status,
+          progress,
+          outputFile,
+          outputSize: outputSizeNum,
+          downloadUrl,
+          error,
+        }
+      }),
+    )
 
     const totalJobs = summaries.length
     const completedJobs = summaries.filter((s) => s.status === 'completed').length
@@ -191,7 +219,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       : Math.round(summaries.reduce((acc, s) => acc + s.progress, 0) / totalJobs)
 
     const now = new Date()
-    const isTerminal = ['completed', 'failed', 'cancelled'].includes(aggregateStatus)
+    const isTerminalConv = ['completed', 'failed', 'cancelled'].includes(aggregateStatus)
 
     await prisma.conversion.update({
       where: { conversionId },
@@ -203,11 +231,28 @@ export class PrismaConversionRepository implements ConversionRepository {
         failedJobs,
         runningJobs,
         pendingJobs,
-        ...(isTerminal ? { finishedAt: now } : {}),
+        ...(isTerminalConv ? { finishedAt: now } : {}),
       },
     })
 
-    return this.findById(conversionId)
+    const state = await this.findById(conversionId)
+    if (!state) return null
+
+    for (const job of state.jobs) {
+      if (!terminalStatuses.includes(job.status)) {
+        const summary = summaries.find((s) => s.jobId === job.jobId)
+        if (summary) {
+          job.status = summary.status
+          job.progress = summary.progress
+          job.outputFile = summary.outputFile ?? job.outputFile
+          job.outputSize = summary.outputSize ?? job.outputSize
+          job.downloadUrl = summary.downloadUrl ?? job.downloadUrl
+          job.error = summary.error ?? job.error
+        }
+      }
+    }
+
+    return state
   }
 
   async listJobIds(conversionId: string): Promise<string[]> {
