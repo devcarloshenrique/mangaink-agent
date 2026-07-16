@@ -181,10 +181,8 @@ export class CreateConversionUseCase {
     await this.conversions.create(conversionState)
 
     // ── Persiste cada Job (config + status) ─────────────────────────
-    // O jobs repository é scoped por conversionId para aninhar corretamente.
-    const scopedJobs = this.jobs.withConversion(conversionId)
     for (const jobState of jobStates) {
-      await scopedJobs.create(jobState)
+      await this.jobs.create(jobState)
     }
 
     // ── Enfileira cada Job no BullMQ ────────────────────────────────

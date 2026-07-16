@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { writeFile, readdir } from 'node:fs/promises'
-import { mkdirp, pathExists, writeJson, readJson } from '../../../shared/utils/filesystem'
+import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import { ConversionEventsService } from './conversion-events.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
@@ -22,12 +22,6 @@ export interface DownloadResult {
   skipped?: boolean
   corruptPages: CorruptPage[]
 }
-
-export interface ChapterImagesMeta {
-  placeholderPageIndices: number[]
-}
-
-const IMAGES_META_FILENAME = 'images.json'
 
 const IMAGE_MAGIC_BYTES: Array<{ signature: number[]; label: string }> = [
   { signature: [0xff, 0xd8, 0xff], label: 'JPEG' },
@@ -66,27 +60,11 @@ function isImageBuffer(buf: Buffer): boolean {
   return false
 }
 
-export async function readChapterImagesMeta(cacheDir: string): Promise<ChapterImagesMeta | null> {
-  const metaPath = join(cacheDir, IMAGES_META_FILENAME)
-  const exists = await pathExists(metaPath)
-  if (!exists) return null
-  try {
-    return await readJson<ChapterImagesMeta>(metaPath)
-  } catch {
-    return null
-  }
-}
-
-export async function writeChapterImagesMeta(cacheDir: string, meta: ChapterImagesMeta): Promise<void> {
-  const metaPath = join(cacheDir, IMAGES_META_FILENAME)
-  await writeJson(metaPath, meta)
-}
-
 export class ImageDownloaderService {
   constructor(
     private readonly events: ConversionEventsService,
     private readonly repository: ConversionJobRepository,
-    private readonly sourceRepo?: SourceCacheRepository,
+    private readonly sourceRepo: SourceCacheRepository,
   ) {}
 
   async downloadChapter(
@@ -105,9 +83,7 @@ export class ImageDownloaderService {
       const cachedFiles = await readdir(cacheDir)
       const imageFiles = cachedFiles.filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp|avif)$/i.test(f))
 
-      const placeholderIndices = this.sourceRepo
-        ? await this.sourceRepo.getPlaceholderIndices(sourceId, chapterId)
-        : (await readChapterImagesMeta(cacheDir))?.placeholderPageIndices ?? []
+      const placeholderIndices = await this.sourceRepo.getPlaceholderIndices(sourceId, chapterId)
 
       const corruptPages: CorruptPage[] = []
 

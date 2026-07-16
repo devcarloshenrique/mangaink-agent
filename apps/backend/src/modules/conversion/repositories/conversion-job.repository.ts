@@ -27,10 +27,4 @@ export interface ConversionJobRepository {
    */
   appendLog(jobId: string, message: string): Promise<void>
 
-  /**
-   * Retorna uma instância do repositório escopada para uma Conversion,
-   * de modo que os Jobs sejam lidos/escritos em
-   * `{CONVERSIONS_STORAGE_PATH}/{conversionId}/jobs/`.
-   */
-  withConversion(conversionId: string): ConversionJobRepository
 }

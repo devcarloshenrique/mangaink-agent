@@ -35,8 +35,6 @@ const envSchema = z.object({
   KCC_DOCKER_IMAGE: z.string().default('mangaink-kcc:10.3.0'),
   CONVERSIONS_STORAGE_PATH: z.string().default('./storage/conversions'),
 
-  REPO_BACKEND: z.enum(['filesystem', 'prisma']).default('filesystem'),
-
   JOB_STATUS_TTL_SEC: z.coerce.number().int().positive().default(21600),
 
   // Rate Limiting por Provider (bottleneck) — valores em ms

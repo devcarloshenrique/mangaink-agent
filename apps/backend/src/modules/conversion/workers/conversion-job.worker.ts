@@ -3,15 +3,12 @@ import { join, extname } from 'node:path'
 import { link, writeFile, readdir, mkdir, rm, readFile, rename, stat } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
-import { FilesystemJobRepository } from '../repositories/filesystem-job.repository'
-import { FilesystemConversionRepository } from '../repositories/filesystem-conversion.repository'
 import { ConversionPubSubService } from '../services/conversion-pubsub.service'
 import { ConversionEventsService } from '../services/conversion-events.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
 import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
 import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
-import { isPrismaBackend } from '../../../shared/config/repo-mode'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 
@@ -23,32 +20,22 @@ const worker = new Worker<ConversionJobData>(
   async (job) => {
     const { conversionId, jobId, sourceId, chapters, cover, output, metadata, options, storagePath } = job.data
 
-    // Repositórios escopados por conversionId (Jobs em storage/conversions/{conv}/jobs/{jobId}).
-    const isPrisma = isPrismaBackend()
-    const repository = isPrisma
-      ? getConversionJobRepository().withConversion(conversionId)
-      : new FilesystemJobRepository(conversionId)
-    const conversions = isPrisma
-      ? getConversionRepository()
-      : new FilesystemConversionRepository()
+    const repository = getConversionJobRepository()
+    const conversions = getConversionRepository()
     const sourceRepo = getSourceRepository()
     const downloader = new ImageDownloaderService(events, repository, sourceRepo)
     const kccRunner = new KccRunnerService(events)
-    const jobLiveStatusStore = isPrisma ? new JobLiveStatusStore() : null
+    const jobLiveStatusStore = new JobLiveStatusStore()
 
     /** Recomputa o status.json da Conversion após cada fase do Job. */
     const sync = () => conversions.syncStatus(conversionId).catch(() => {})
 
     const setLiveStatus = (status: JobStatus, currentStep: string) => {
-      if (isPrisma && jobLiveStatusStore) {
-        return jobLiveStatusStore.set(jobId, {
-          status,
-          currentStep,
-          updatedAt: new Date().toISOString(),
-        }).catch(() => {})
-      } else {
-        return repository.update(jobId, { status, currentStep })
-      }
+      return jobLiveStatusStore.set(jobId, {
+        status,
+        currentStep,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {})
     }
 
     const tempDir = join(storagePath, 'temp')
@@ -88,9 +75,7 @@ const worker = new Worker<ConversionJobData>(
     }
 
     for (const chapterId of chapters) {
-      const cancelled = isPrisma && jobLiveStatusStore
-        ? (await jobLiveStatusStore.get(jobId))?.status === 'cancelled'
-        : (await repository.findById(jobId))?.status === 'cancelled'
+      const cancelled = (await jobLiveStatusStore.get(jobId))?.status === 'cancelled'
       if (cancelled) {
         await repository.appendLog(jobId, 'Job cancelado durante download')
         return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
@@ -126,13 +111,11 @@ const worker = new Worker<ConversionJobData>(
           await repository.appendLog(jobId,
             `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`)
           skippedChapters.push(chapterId)
-          if (isPrisma && jobLiveStatusStore) {
-            await jobLiveStatusStore.set(jobId, {
-              downloadedImages: totalDownloaded,
-              totalImages: cumulativeTotalImages,
-              updatedAt: new Date().toISOString(),
-            }).catch(() => {})
-          }
+          await jobLiveStatusStore.set(jobId, {
+            downloadedImages: totalDownloaded,
+            totalImages: cumulativeTotalImages,
+            updatedAt: new Date().toISOString(),
+          }).catch(() => {})
           continue
         }
 
@@ -166,13 +149,11 @@ const worker = new Worker<ConversionJobData>(
                 await repository.appendLog(jobId,
                   `Erro ao gerar placeholder para ${chapterId} página ${cp.pageIndex}: ${err instanceof Error ? err.message : 'unknown'}`)
       }
-      if (isPrisma && jobLiveStatusStore) {
-        await jobLiveStatusStore.set(jobId, {
-          downloadedImages: totalDownloaded,
-          totalImages: cumulativeTotalImages,
-          updatedAt: new Date().toISOString(),
-        }).catch(() => {})
-      }
+      await jobLiveStatusStore.set(jobId, {
+        downloadedImages: totalDownloaded,
+        totalImages: cumulativeTotalImages,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {})
     }
             
             const placeholderIndices = result.corruptPages.map(cp => cp.pageIndex)
@@ -327,9 +308,7 @@ const worker = new Worker<ConversionJobData>(
       outputFile: finalOutputFile,
       outputSize: finalOutputSize,
     })
-    if (isPrisma && jobLiveStatusStore) {
-      await jobLiveStatusStore.clear(jobId).catch(() => {})
-    }
+    await jobLiveStatusStore.clear(jobId).catch(() => {})
     await sync()
 
     await repository.appendLog(jobId, `Job concluído — output: "${finalOutputFile}" (${(finalOutputSize / 1024 / 1024).toFixed(1)} MB)`)
@@ -362,21 +341,15 @@ worker.on('failed', async (job, error) => {
   const conversionId = job?.data?.conversionId
   console.error(`[ConversionWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
   if (jobId && conversionId) {
-    const failedRepo = isPrismaBackend()
-      ? getConversionJobRepository().withConversion(conversionId)
-      : new FilesystemJobRepository(conversionId)
-    const convRepo = isPrismaBackend()
-      ? getConversionRepository()
-      : new FilesystemConversionRepository()
+    const failedRepo = getConversionJobRepository()
+    const convRepo = getConversionRepository()
     await failedRepo.update(jobId, {
       status: 'failed',
       error: error.message.slice(0, 500),
       currentStep: 'Failed',
     })
-    if (isPrismaBackend()) {
-      const store = new JobLiveStatusStore()
-      await store.clear(jobId).catch(() => {})
-    }
+    const store = new JobLiveStatusStore()
+    await store.clear(jobId).catch(() => {})
     await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
     await convRepo.syncStatus(conversionId)
     await events.emit(jobId, events.createEvent('job.failed', {

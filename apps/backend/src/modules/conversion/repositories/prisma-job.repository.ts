@@ -16,16 +16,8 @@ import type {
 } from '../types/conversion.types'
 
 export class PrismaJobRepository implements ConversionJobRepository {
-  private scopedConversionId?: string
-
-  withConversion(conversionId: string): ConversionJobRepository {
-    const repo = new PrismaJobRepository()
-    repo.scopedConversionId = conversionId
-    return repo
-  }
-
   async create(job: ConversionJobState): Promise<void> {
-    const convId = this.scopedConversionId ?? job.config.conversionId
+    const convId = job.config.conversionId
 
     const conv = await prisma.conversion.findUnique({
       where: { conversionId: convId },
