@@ -138,3 +138,11 @@ export type ConversionSSEEventType =
   | "job.finished"
   | "job.failed"
   | "keepalive";
+
+/** Evento SSE persistido no journal do Redis */
+export interface SSEJournalEvent {
+  type: string
+  data: Record<string, unknown>
+  timestamp: string
+  id?: number
+}

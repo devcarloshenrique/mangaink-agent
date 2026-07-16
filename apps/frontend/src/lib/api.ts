@@ -9,6 +9,7 @@ import type {
   CreateConversionBody,
   CreateConversionResponse,
 } from "@/types/conversion";
+import type { SSEJournalEvent } from "@/types/conversion";
 import { createSSEStream } from "@/lib/sse";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -198,6 +199,11 @@ export const conversionsApi = {
   /** DELETE /api/conversions/:conversionId — cancela */
   async cancel(conversionId: string): Promise<{ conversionId: string; status: "cancelled" }> {
     return request(`/api/conversions/${conversionId}`, { method: "DELETE" });
+  },
+
+  /** GET /api/conversions/:conversionId/logs — eventos do journal (Redis) */
+  async getLogs(conversionId: string): Promise<SSEJournalEvent[]> {
+    return request<SSEJournalEvent[]>(`/api/conversions/${conversionId}/logs`);
   },
 
   /**
