@@ -35,6 +35,11 @@ const envSchema = z.object({
   KCC_DOCKER_IMAGE: z.string().default('mangaink-kcc:10.3.0'),
   CONVERSIONS_STORAGE_PATH: z.string().default('./storage/conversions'),
 
+  // Imagem Docker usada para extrair paginas de MOBI (preview no navegador)
+  MOBI_DOCKER_IMAGE: z.string().default('mangaink-unpack:0.4.1'),
+  // TTL (segundos) do cache de preview em /temp (default 24h)
+  MOBI_PREVIEW_TTL_SEC: z.coerce.number().int().positive().default(86400),
+
   JOB_STATUS_TTL_SEC: z.coerce.number().int().positive().default(21600),
 
   // Rate Limiting por Provider (bottleneck) — valores em ms
