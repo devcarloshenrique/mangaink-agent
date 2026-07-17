@@ -6,7 +6,7 @@ Este arquivo fornece orientações ao Claude Code ao trabalhar com este reposit�
 
 Aplicação web self-hosted que converte mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ) e os envia ao dispositivo Kindle. A UI está em **Português Brasileiro** com design temático de quadrinhos pop-art.
 
-> **Dependência de infraestrutura:** O KCC é executado em um container Docker dedicado. Antes da primeira conversão, instale o Docker e construa a imagem: `pnpm kcc:build`. Formato KFX foi removido (requer Kindle Previewer, fora de escopo).
+> **Dependência de infraestrutura:** O KCC é executado em um container Docker dedicado. Antes da primeira conversão, instale o Docker e construa a imagem: `pnpm kcc:build`. Para o preview de MOBI no navegador (extração de paginas), construa também: `pnpm mobi:build`. Formato KFX foi removido (requer Kindle Previewer, fora de escopo).
 
 ---
 
@@ -156,6 +156,7 @@ pnpm storybook     # Storybook em http://localhost:6006
 pnpm docker:up     # docker compose up -d (PostgreSQL + Redis)
 pnpm docker:down   # docker compose down
 pnpm kcc:build     # Build da imagem Docker do KCC (mangaink-kcc:10.3.0)
+pnpm mobi:build     # Build da imagem Docker do extrator de MOBI (mangaink-unpack:0.4.1)
 ```
 
 ### Dentro de `apps/frontend`
@@ -249,6 +250,19 @@ POST /inspect → cache hit? → 200 { ready }
 - `GET /api/conversions/:conversionId/events` — SSE fan-in de todos os Jobs
 - `DELETE /api/conversions/:conversionId` + `POST .../cancel` — Cancelamento
 
+### Preview de MOBI no Navegador
+
+Leitura de volumes `.mobi` no navegador via extração assincrona de paginas em `/temp/` (TTL 24h), preservando os índices (ordem do spine) do MOBI original. As imagens sao extraídas por um container dedicado (`mangaink-unpack:0.4.1`) seguindo o mesmo padrão do KCC — backend fica em Node; apenas a extração roda em `docker run --rm`.
+
+- `POST /api/conversions/:conversionId/jobs/:jobId/preview` — Inicia extração (idempotente)
+  - `200` se cache /temp/ válido: `{ status: "ready", totalPages, cached: true }`
+  - `202` se job enfileirado: `{ status: "processing", cached: false }`
+- `GET /api/conversions/:conversionId/jobs/:jobId/preview` — Status agregado para poll
+  - Response: `{ status: "queued"|"extracting"|"ready"|"failed", totalPages, readyPages, cacheUntil, error? }`
+- `GET /api/conversions/:conversionId/jobs/:jobId/preview/pages/:index` — Stream da página
+  - `200` com `image/*` (`Cache-Control: public, max-age=86400, immutable`)
+  - `425` se a página ainda não foi escrita em disco: `{ error, readyPages, totalPages }`
+
 ---
 
 ## Variáveis de Ambiente
@@ -263,6 +277,8 @@ POST /inspect → cache hit? → 200 { ready }
 | `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
 | `KCC_DOCKER_IMAGE` | Imagem Docker do KCC (executada via `docker run`) | `mangaink-kcc:10.3.0` |
 | `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
+| `MOBI_DOCKER_IMAGE` | Imagem Docker do extrator de MOBI (preview no navegador) | `mangaink-unpack:0.4.1` |
+| `MOBI_PREVIEW_TTL_SEC` | TTL (segundos) do cache de preview MOBI em /temp/ | `86400` (24h) |
 | `RATE_LIMIT_{SLUG}_MAX_CONCURRENT` | Máximo de requisições simultâneas por provider | `6` (default) |
 | `RATE_LIMIT_{SLUG}_MIN_TIME` | Intervalo mínimo entre requisições (ms) | `50` (default) |
 | `RATE_LIMIT_{SLUG}_RESERVOIR` | Teto de requisições por intervalo | (opcional) |
@@ -363,24 +379,26 @@ Cada módulo segue uma **arquitetura em camadas**:
 
 - **`conversion/`** — Conversão de mangás para formatos e-reader via KCC (Kindle Comic Converter)
   - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
-  - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`
-  - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`
-  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC via `docker run mangaink-kcc:10.3.0` — bind mounts `/input:ro` e `/output`, paths do container nas flags KCC; `--user` aplicado apenas em Linux)
+  - `mobi-preview.routes.ts` — 3 endpoints do preview MOBI: POST /preview (idempotente), GET /preview (status), GET /preview/pages/:index (stream)
+  - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`, `mobi-preview.controller.ts` (start/status/page do preview MOBI)
+  - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`, `mobi-preview.use-case.ts` (StartMobiPreviewUseCase, GetMobiPreviewStatusUseCase, GetMobiPreviewPageUseCase + interface `MobiPreviewQueue`)
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC via `docker run mangaink-kcc:10.3.0` — bind mounts `/input:ro` e `/output`, paths do container nas flags KCC; `--user` aplicado apenas em Linux), `mobi-preview.service.ts` (resolução paths /temp/<file-base>/, TTL `MOBI_PREVIEW_TTL_SEC` por mtime do index.json, leitura/contagem de paginas), `mobi-unpack-runner.service.ts` (spawn `docker run mangaink-unpack:0.4.1` — bind mounts `/input.mobi:ro` e `/output`, poll images/ a cada 250ms chamando onTick), `mobi-preview-queue.service.ts` (fila BullMQ `mobi-preview`)
   - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
-  - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging)
+  - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging), `mobi-preview.worker.ts` (BullMQ: clearTemp → status extracting → runner.run + onTick → ready/failed; `processMobiPreviewJob` isolado para testes; `startMobiPreviewWorker` instancia o Worker com deps de produção)
   - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)
-  - `types/` — `conversion.types.ts` (ConversionConfig, Book, JobMetadata, ConversionJobSummary, etc.)
-  - `errors/` — `conversion.errors.ts` (ConversionNotFoundError, InvalidConversionStateError, DuplicateChapterError, ForbiddenError, KccExecutionError, DownloadFailedError, etc.)
-  - `dtos/` — `create-conversion.dto.ts`, `conversion-options.dto.ts`, `conversion-params.dto.ts`
+  - `types/` — `conversion.types.ts` (ConversionConfig, Book, JobMetadata, ConversionJobSummary, etc.), `mobi-preview.types.ts` (MobiPreviewLiveStatus, MobiPreviewIndex, MobiPreviewPage, …)
+  - `errors/` — `conversion.errors.ts` (ConversionNotFoundError, InvalidConversionStateError, DuplicateChapterError, ForbiddenError, KccExecutionError, DownloadFailedError, etc.), `mobi-preview.errors.ts` (PreviewNotReadyError, InvalidPageIndexError, NotAMobiJobError, MobiFileNotFoundError, MobiExtractionError)
+  - `dtos/` — `create-conversion.dto.ts`, `conversion-options.dto.ts`, `conversion-params.dto.ts`, `mobi-preview.dto.ts` (params + page params + response schemas)
   - `tests/` — testes (unit + E2E + helpers: in-memory repo, mock queue, mock events, mock job, fixtures)
+  - `shared/redis/mobi-preview-status-store.ts` — Redis Hash para estado live do preview MOBI (reusa `JOB_STATUS_TTL_SEC`)
 
   **Convenções importantes do módulo de conversão:**
   - `batchSplit` e `fileFusion` são internos do Planner — NUNCA expostos na API pública
   - O Worker escreve `ComicInfo.xml` no diretório de input do KCC com título, autor, série e gêneros do scraping para metadados corretos no EPUB
   - `metadataTitle: 'metadataOnly'` é forçado no Worker quando ComicInfo.xml está presente
   - URLs de capa têm sufixo de resolução WordPress (`-WxH`) removido via `stripResolutionSuffix()` no parser — `mangalivre.parser.test.ts`
-  - Tratamento de erros é centralizado no error handler global do Fastify (`server.ts`): erros de domínio (`ConversionError`) são mapeados por `error.code` → HTTP status (403/404/409/400/500). Controllers **não** usam try/catch para erros de domínio.
-  - Toda conversão tem `userId` em `ConversionConfig` (salvo em `config.json`). Use-cases validam ownership antes de acessar qualquer conversão.
+  - Tratamento de erros é centralizado no error handler global do Fastify (`server.ts`): erros de domínio (`ConversionError`) são mapeados por `error.code` → HTTP status (403/404/409/400/425/500). Controllers **não** usam try/catch para erros de domínio.
+  - Toda conversão tem `userId` em `ConversionConfig` (salvo em `config.json`). Use-cases validam ownership antes de acessar qualquer conversão. Isso vale também para os endpoints de preview MOBI.
   - Eventos SSE são persistidos em Redis List (`conversion-journal:{jobId}`) com ID monotônico (`INCR`). O `connectConversionToSSE()` faz replay automático do journal para clientes que conectam tardiamente.
   - Imagens baixadas são validadas via magic bytes (JPEG, PNG, WEBP, GIF, BMP). Páginas corrompidas são detectadas e tratadas conforme `errorHandlingStrategy`:
     - `ignore`: substitui por placeholder (PNG gerado via sharp na resolução do dispositivo)
@@ -388,6 +406,7 @@ Cada módulo segue uma **arquitetura em camadas**:
     - `abort`: cancela o job
   - Metadados de placeholders são persistidos em `images.json` no diretório de cache do capítulo para reportar páginas faltantes mesmo em cache hits.
   - Progresso de conversão persiste entre navegações: ao re-navegar, `processedChapters` é computado a partir dos jobs completed via GET + SSE journal replay.
+  - Preview MOBI no navegador: cache em `/temp/<file-base>/` ao lado do MOBI, TTL por `MOBI_PREVIEW_TTL_SEC` (24h) medido pelo mtime do `index.json`. Extracao roda em container dedicado `mangaink-unpack`. `PREVIEW_NOT_READY` → HTTP 425 com `{ readyPages, totalPages }` para o cliente refazer o fetch. Plan-first: o script Python escreve `index.json` antes das imagens para o Node worker anunciar totalPages cedo (primeira página disponível já libera o frontend).
 
 ---
 
