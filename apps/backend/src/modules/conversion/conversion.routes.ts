@@ -16,6 +16,9 @@ import { ConversionEventsService } from './services/conversion-events.service'
 import { getConversionRepository, getConversionJobRepository } from '../../shared/database/repositories'
 import { conversionLogsHandler } from './controllers/conversion-logs.controller'
 import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
+import { downloadJobHandler } from './controllers/download-job.controller'
+import { DownloadJobUseCase } from './use-cases/download-job.use-case'
+import { downloadJobParamsSchema } from './dtos/download-job.dto'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
@@ -38,6 +41,7 @@ const getConversionUseCase = new GetConversionUseCase(conversions)
 const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events)
 const listConversionsUseCase = new ListConversionsUseCase(conversions)
 const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
+const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -270,6 +274,26 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     cancelConversionHandler(cancelConversionUseCase),
+  )
+
+  // GET /api/conversions/:conversionId/jobs/:jobId/download
+  app.get(
+    '/api/conversions/:conversionId/jobs/:jobId/download',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Download do arquivo de saida de um Job',
+        description: 'Retorna o arquivo EPUB/MOBI/CBZ/PDF gerado pelo KCC para o Job especificado.',
+        security: [{ bearerAuth: [] }],
+        params: downloadJobParamsSchema,
+        response: {
+          404: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+        },
+      },
+    },
+    downloadJobHandler(downloadJobUseCase),
   )
 
   // GET /api/conversions/:conversionId/logs
