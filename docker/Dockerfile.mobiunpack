@@ -1,0 +1,26 @@
+# Imagem dedicada para extrair paginas de arquivos MOBI gerados pelo KCC.
+#
+# O backend continua rodando nativamente — apenas a extracao do MOBI e feita
+# via `docker run mangaink-unpack:0.4.1 /app/extract_mobi.py /input.mobi /output`.
+#
+# Build:  pnpm mobi:build
+# Teste:  docker run --rm -v "$(pwd)/sample.mobi:/input.mobi:ro" -v "$(pwd)/out:/output" \
+#           mangaink-unpack:0.4.1 /app/extract_mobi.py /input.mobi /output
+#
+# Usa a lib Python `mobi` (fork mantido do KindleUnpack, versao 0.4.1) que
+# preserva a ordem de leitura (spine) do MOBI original ao converter para EPUB.
+
+FROM python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir mobi==0.4.1
+
+COPY docker/extract_mobi.py /app/extract_mobi.py
+
+WORKDIR /tmp
+ENV HOME=/tmp
+
+ENTRYPOINT ["python3", "/app/extract_mobi.py"]

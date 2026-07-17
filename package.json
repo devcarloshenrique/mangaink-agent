@@ -17,6 +17,7 @@
     "db:studio": "pnpm --filter @mangaink/backend db:studio",
     "test": "pnpm --filter @mangaink/backend test",
     "kcc:build": "docker build -f docker/Dockerfile.kcc -t mangaink-kcc:10.3.0 .",
+    "mobi:build": "docker build -f docker/Dockerfile.mobiunpack -t mangaink-unpack:0.4.1 .",
     "docker:up": "docker compose -f apps/backend/docker-compose.yml up -d",
     "docker:down": "docker compose -f apps/backend/docker-compose.yml down"
   },
