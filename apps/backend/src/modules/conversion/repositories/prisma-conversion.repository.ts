@@ -71,8 +71,8 @@ export class PrismaConversionRepository implements ConversionRepository {
   ): Promise<ConversionListResult> {
     const where: Prisma.ConversionWhereInput = { userId }
 
-    if (filters.status) {
-      where.status = filters.status
+    if (filters.status && filters.status.length > 0) {
+      where.status = { in: filters.status }
     }
     if (filters.sourceId) {
       where.sourceId = filters.sourceId
@@ -91,6 +91,7 @@ export class PrismaConversionRepository implements ConversionRepository {
           conversionId: true,
           sourceId: true,
           metadata: true,
+          cover: true,
           status: true,
           progress: true,
           totalJobs: true,
@@ -108,6 +109,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       conversionId: row.conversionId,
       sourceId: row.sourceId,
       title: (row.metadata as unknown as { title?: string })?.title ?? '',
+      cover: (row.cover ?? undefined) as CoverRef | undefined,
       status: row.status as ConversionStatus,
       progress: row.progress,
       totalJobs: row.totalJobs,

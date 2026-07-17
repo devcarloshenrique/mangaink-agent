@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const coverSchema = z.discriminatedUnion('kind', [
+export const coverSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('original') }),
   z.object({ kind: z.literal('gallery'), coverId: z.string().min(1) }),
   z.object({ kind: z.literal('upload'), uploadId: z.string().min(1), name: z.string().min(1) }),

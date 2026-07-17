@@ -5,7 +5,15 @@ export const listConversionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z
-    .enum(['queued', 'processing', 'completed', 'failed', 'cancelled', 'partial'])
+    .preprocess(
+      (val) => {
+        if (typeof val === 'string') return val.split(',')
+        return val
+      },
+      z.array(
+        z.enum(['queued', 'processing', 'completed', 'failed', 'cancelled', 'partial']),
+      ),
+    )
     .optional(),
   sourceId: z.string().min(1).optional(),
 })

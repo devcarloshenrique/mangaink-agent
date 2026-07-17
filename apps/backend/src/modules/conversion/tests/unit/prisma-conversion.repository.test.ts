@@ -260,7 +260,7 @@ describe('PrismaConversionRepository', () => {
       await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, cCompleted, { status: 'completed' } as any))
       await repo.create(makeConversionState({ ...makeConfig(USER_ID), sourceId }, cQueued, { status: 'queued' } as any))
 
-      const result = await repo.listByUser(USER_ID, { status: 'completed' }, { page: 1, limit: 50 })
+      const result = await repo.listByUser(USER_ID, { status: ['completed'] }, { page: 1, limit: 50 })
 
       expect(result.items.every((i) => i.status === 'completed')).toBe(true)
       expect(result.items.map((i) => i.conversionId)).toContain(cCompleted)

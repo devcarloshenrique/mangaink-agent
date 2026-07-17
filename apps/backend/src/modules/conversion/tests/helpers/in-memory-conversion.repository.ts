@@ -99,7 +99,7 @@ export class InMemoryConversionRepository implements ConversionRepository {
     let items = [...this.store.values()].filter((s) => s.config.userId === userId)
 
     if (filters.status) {
-      items = items.filter((s) => s.status === filters.status)
+      items = items.filter((s) => filters.status!.includes(s.status))
     }
     if (filters.sourceId) {
       items = items.filter((s) => s.config.sourceId === filters.sourceId)

@@ -64,7 +64,7 @@ describe('ListConversionsUseCase', () => {
       makeState('conv-3', USER_A, SRC_X, { status: 'completed', completedJobs: 1, pendingJobs: 0 }),
     )
 
-    const result = await useCase.execute(USER_A, { page: 1, limit: 20, status: 'completed' })
+    const result = await useCase.execute(USER_A, { page: 1, limit: 20, status: ['completed'] })
 
     expect(result.total).toBe(2)
     expect(result.items.every((i) => i.status === 'completed')).toBe(true)
@@ -174,11 +174,32 @@ describe('ListConversionsUseCase', () => {
     const result = await useCase.execute(USER_A, {
       page: 1,
       limit: 20,
-      status: 'completed',
+      status: ['completed'],
       sourceId: SRC_X,
     })
 
     expect(result.total).toBe(1)
     expect(result.items[0].conversionId).toBe('conv-1')
+  })
+
+  it('filtra por múltiplos status (array)', async () => {
+    await conversions.create(makeState('conv-q', USER_A, SRC_X, { status: 'queued', pendingJobs: 1, runningJobs: 0 }))
+    await conversions.create(makeState('conv-p', USER_A, SRC_X, { status: 'processing', runningJobs: 1, pendingJobs: 0 }))
+    await conversions.create(makeState('conv-c', USER_A, SRC_X, { status: 'completed', completedJobs: 1, pendingJobs: 0 }))
+
+    const result = await useCase.execute(USER_A, { page: 1, limit: 20, status: ['queued', 'processing'] })
+
+    expect(result.total).toBe(2)
+    expect(result.items.map((i) => i.conversionId).sort()).toEqual(['conv-p', 'conv-q'])
+  })
+
+  it('filtro sem status retorna todos', async () => {
+    await conversions.create(makeState('conv-1', USER_A, SRC_X))
+    await conversions.create(makeState('conv-2', USER_A, SRC_X, { status: 'completed', completedJobs: 1, pendingJobs: 0 }))
+    await conversions.create(makeState('conv-3', USER_A, SRC_X, { status: 'failed', failedJobs: 1, pendingJobs: 0 }))
+
+    const result = await useCase.execute(USER_A, { page: 1, limit: 20 })
+
+    expect(result.total).toBe(3)
   })
 })

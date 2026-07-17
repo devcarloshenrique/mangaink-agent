@@ -26,7 +26,7 @@ const mockConvRepo = vi.hoisted(() => {
     // simula listByUser: filtra por userId + filtros opcionais
     listByUser: async (userId: string, filters: any, pagination: any) => {
       let items = (store.get(userId) ?? []).slice()
-      if (filters.status) items = items.filter((i) => i.status === filters.status)
+      if (filters.status) items = items.filter((i) => (filters.status as string[]).includes(i.status))
       if (filters.sourceId) items = items.filter((i) => i.sourceId === filters.sourceId)
       items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       const total = items.length
@@ -270,6 +270,29 @@ describe('GET /api/conversions — Ownership (E2E)', () => {
     const bodyB = resB.json()
     expect(bodyB.total).toBe(1)
     expect(bodyB.items[0].conversionId).toBe('conv-b1')
+  })
+
+  it('filtra por múltiplos status via ?status=queued,processing', async () => {
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { Authorization: `Bearer ${tokenA}` },
+    })
+    const userIdA = meRes.json().id
+
+    seedItem(userIdA, 'conv-q', 'src-x', { status: 'queued' })
+    seedItem(userIdA, 'conv-p', 'src-x', { status: 'processing' })
+    seedItem(userIdA, 'conv-c', 'src-x', { status: 'completed' })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/conversions?status=queued,processing',
+      headers: { Authorization: `Bearer ${tokenA}` },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.total).toBe(2)
+    expect(body.items.map((i: any) => i.status).sort()).toEqual(['processing', 'queued'])
   })
 })
 

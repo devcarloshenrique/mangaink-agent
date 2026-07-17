@@ -116,11 +116,12 @@ export interface ConversionSummary {
   createdAt: string
   updatedAt: string
   finishedAt?: string
+  cover?: CoverRef
 }
 
 /** Filtros opcionais para listagem de Conversions por usuário. */
 export interface ConversionListFilters {
-  status?: ConversionStatus
+  status?: ConversionStatus[]
   sourceId?: string
 }
 
