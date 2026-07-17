@@ -2,6 +2,8 @@ packages:
   - 'apps/*'
 allowBuilds:
   '@prisma/engines': true
+  core-js: false
+  es5-ext: false
   esbuild: true
   msgpackr-extract: true
   prisma: true
