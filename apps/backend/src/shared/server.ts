@@ -15,10 +15,12 @@ import { healthRoutes } from '../modules/health/health.routes'
 import { authRoutes } from '../modules/auth/auth.routes'
 import { scrapingRoutes } from '../modules/scraping/scraping.routes'
 import { conversionRoutes } from '../modules/conversion/conversion.routes'
+import { mobiPreviewRoutes } from '../modules/conversion/mobi-preview.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import '../modules/scraping/workers/inspect-source.worker'
 import '../modules/conversion/workers/conversion-job.worker'
+import { startMobiPreviewWorker } from '../modules/conversion/workers/mobi-preview.worker'
 
 export async function createServer() {
   const app = Fastify({
@@ -114,12 +116,21 @@ export async function createServer() {
         INVALID_JOB_STATE: 409,
         KCC_EXECUTION_ERROR: 500,
         DOWNLOAD_FAILED: 500,
+        PREVIEW_NOT_READY: 425,
         LISTING_REQUIRES_PRISMA: 501,
       }
       const status = statusMap[error.code] ?? 500
       if (error.code === 'LISTING_REQUIRES_PRISMA') {
         return reply.code(status).send({
           error: { code: error.code, message: error.message },
+        })
+      }
+      if (error.code === 'PREVIEW_NOT_READY') {
+        const e = error as { readyCount?: number; totalCount?: number }
+        return reply.code(status).send({
+          error: error.message,
+          readyPages: e.readyCount ?? 0,
+          totalPages: e.totalCount ?? 0,
         })
       }
       return reply.code(status).send({ error: error.message })
@@ -139,6 +150,12 @@ export async function createServer() {
   await app.register(authRoutes)
   await app.register(scrapingRoutes)
   await app.register(conversionRoutes)
+  await app.register(mobiPreviewRoutes)
+
+  // Inicia o worker BullMQ de extracao de preview MOBI (substrato do reader)
+  if (env.NODE_ENV !== 'test') {
+    startMobiPreviewWorker()
+  }
 
   return app
 }

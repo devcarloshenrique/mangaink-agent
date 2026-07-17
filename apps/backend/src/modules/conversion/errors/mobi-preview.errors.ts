@@ -10,9 +10,13 @@ export class MobiFileNotFoundError extends ConversionError {
 
 /** Preview ainda nao esta pronto — extracao em curso. */
 export class PreviewNotReadyError extends ConversionError {
-  constructor(jobId: string, readyPages: number, totalPages: number) {
+  constructor(
+    jobId: string,
+    public readonly readyCount: number,
+    public readonly totalCount: number,
+  ) {
     super(
-      `Preview do job ${jobId} ainda não está pronto — ${readyPages}/${totalPages} página(s) extraída(s)`,
+      `Preview do job ${jobId} ainda não está pronto — ${readyCount}/${totalCount} página(s) extraída(s)`,
       'PREVIEW_NOT_READY',
     )
     this.name = 'PreviewNotReadyError'
