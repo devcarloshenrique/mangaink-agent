@@ -153,7 +153,8 @@ export function parseChapters($: CheerioAPI, base: string, canonicalUrl: string)
     // Pula elementos que são botões de ação (btn-read-first/last), não capítulos reais
     const elClass = $(el).attr('class') ?? ''
     const elId = $(el).attr('id') ?? ''
-    if (elClass.includes('c-btn') || elId.startsWith('btn-read-')) return
+    const classTokens = elClass.split(/\s+/)
+    if (classTokens.includes('c-btn') || elId.startsWith('btn-read-')) return
 
     const href = $(el).attr('href')
     const chapterNumber = href ? extractChapterNumber(href, base, mangaSlug) : null
