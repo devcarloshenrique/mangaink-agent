@@ -170,15 +170,14 @@ def extract_epub_images(epub_path: str, out_images_dir: str) -> list[dict]:
                         (it for it in manifest.values() if it['path'] == target),
                         None,
                     )
-                    if target_item is None:
-                        # Tenta Path-matching relativo (com case-insensitive util)
-                        target_item = next(
-                            (
-                                it for it in manifest.values()
-                                if os.path.normpath(it['path']).lower() == target.lower()
-                            ),
-                            None,
-                        )
+                    # Tenta Path-matching relativo (com case-insensitive util)
+                    target_item = next(
+                        (
+                            it for it in manifest.values()
+                            if os.path.normpath(it['path']).lower() == target.lower()
+                        ),
+                        None,
+                    )
                     if target_item is None or target_item['path'] not in z.namelist():
                         continue
                     seen_paths.add(target_item['path'])
@@ -191,6 +190,78 @@ def extract_epub_images(epub_path: str, out_images_dir: str) -> list[dict]:
                         'index': page_index,
                         'filename': filename,
                         'contentType': f'image/{ext}' if ext in ('png', 'gif', 'webp', 'bmp', 'avif') else 'image/jpeg',
+                    })
+                    page_index += 1
+    return pages
+
+
+def plan_epub_pages(epub_path: str) -> list[dict]:
+    """Mesma ordem do spine de extract_epub_images, mas so le os metadados.
+    Permite escrever index.json ANTES de copiar as imagens, permitindo que o
+    Node worker anuncie totalPages cedo.
+    """
+    pages: list[dict] = []
+    seen_paths: set[str] = set()
+    page_index = 0
+
+    with zipfile.ZipFile(epub_path, 'r') as z:
+        opf_path, opf_dir = _find_opf_path(z)
+        manifest, spine = _parse_opf(z, opf_path, opf_dir)
+
+        for idref in spine:
+            item = manifest.get(idref)
+            if item is None:
+                continue
+            media_type = item['media_type']
+            item_path = item['path']
+
+            if media_type.startswith('image/'):
+                if item_path in seen_paths or item_path not in z.namelist():
+                    continue
+                seen_paths.add(item_path)
+                ext = _mime_to_ext(media_type) or _ext_from_filename(item_path)
+                pages.append({
+                    'index': page_index,
+                    'filename': f'{page_index:05d}.{ext}',
+                    'contentType': f'image/{ext}' if ext in ('png', 'gif', 'webp', 'bmp', 'avif') else 'image/jpeg',
+                    '_source_path': item_path,
+                })
+                page_index += 1
+                continue
+
+            if media_type in ('application/xhtml+xml', 'text/html', 'text/html; charset=utf-8'):
+                if item_path not in z.namelist():
+                    continue
+                try:
+                    xhtml = _zip_text(z.read(item_path))
+                except KeyError:
+                    continue
+                for m in _IMG_TAG_RE.finditer(xhtml):
+                    href = m.group(1)
+                    target = _resolve_href(item_path, href)
+                    if not target or target in seen_paths:
+                        continue
+                    target_item = next(
+                        (it for it in manifest.values() if it['path'] == target),
+                        None,
+                    )
+                    if target_item is None:
+                        target_item = next(
+                            (
+                                it for it in manifest.values()
+                                if os.path.normpath(it['path']).lower() == target.lower()
+                            ),
+                            None,
+                        )
+                    if target_item is None or target_item['path'] not in z.namelist():
+                        continue
+                    seen_paths.add(target_item['path'])
+                    ext = _mime_to_ext(target_item['media_type']) or _ext_from_filename(target_item['path'])
+                    pages.append({
+                        'index': page_index,
+                        'filename': f'{page_index:05d}.{ext}',
+                        'contentType': f'image/{ext}' if ext in ('png', 'gif', 'webp', 'bmp', 'avif') else 'image/jpeg',
+                        '_source_path': target_item['path'],
                     })
                     page_index += 1
     return pages
@@ -244,11 +315,30 @@ def main() -> int:
 
     try:
         ext = os.path.splitext(filepath)[1].lower()
-        pages: list[dict]
+
         if ext == '.epub':
-            pages = extract_epub_images(filepath, images_dir)
+            # Plan primeiro (le apenas metadados): escreve index.json ANTES
+            # de copiar imagens, permitindo que o Node worker anuncie totalPages.
+            plan = plan_epub_pages(filepath)
+            _write_index(output_dir, input_path, plan)
+            print(f'[extract_mobi] index.json escrito: {len(plan)} pagina(s) previstas', flush=True)
+
+            # Agora copia cada imagem seqüencialmente
+            pages: list[dict] = []
+            with zipfile.ZipFile(filepath, 'r') as z:
+                for entry in plan:
+                    src = entry['_source_path']
+                    data = z.read(src)
+                    dest = os.path.join(images_dir, entry['filename'])
+                    with open(dest, 'wb') as f:
+                        f.write(data)
+                    # Remove campo interno antes de registrar
+                    public = {k: v for k, v in entry.items() if not k.startswith('_')}
+                    pages.append(public)
+            _rewrite_index(output_dir, input_path, pages)
         elif ext == '.pdf':
             pages = extract_pdf_images(filepath, images_dir)
+            _rewrite_index(output_dir, input_path, pages)
         else:
             # HTML: varre diretorio de extracao por imagens
             pages = []
@@ -268,17 +358,10 @@ def main() -> int:
                             'contentType': f'image/{img_ext}' if img_ext in ('png', 'gif', 'webp', 'bmp', 'avif') else 'image/jpeg',
                         })
                         idx += 1
+            _rewrite_index(output_dir, input_path, pages)
 
         if not pages:
             print('[extract_mobi] AVISO: nenhuma imagem encontrada no MOBI', file=sys.stderr)
-
-        index_path = os.path.join(output_dir, 'index.json')
-        with open(index_path, 'w', encoding='utf-8') as f:
-            json.dump({
-                'sourceMobi': os.path.basename(input_path),
-                'extractedAt': datetime.now(timezone.utc).isoformat(),
-                'pages': pages,
-            }, f, ensure_ascii=False, indent=2)
 
         # Sinal atomico de conclusao
         ready_path = os.path.join(output_dir, 'READY')
@@ -292,6 +375,26 @@ def main() -> int:
             shutil.rmtree(tempdir)
         except OSError:
             pass
+
+
+def _write_index(output_dir: str, input_path: str, pages: list[dict]) -> None:
+    """Escreve index.json (versao plan, antes das imagens serem copiadas)."""
+    public_pages = [
+        {k: v for k, v in p.items() if not k.startswith('_')}
+        for p in pages
+    ]
+    index_path = os.path.join(output_dir, 'index.json')
+    with open(index_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'sourceMobi': os.path.basename(input_path),
+            'extractedAt': datetime.now(timezone.utc).isoformat(),
+            'pages': public_pages,
+        }, f, ensure_ascii=False, indent=2)
+
+
+def _rewrite_index(output_dir: str, input_path: str, pages: list[dict]) -> None:
+    """Reescreve index.json apos copia (mesma estrutura; valida consistencia)."""
+    _write_index(output_dir, input_path, pages)
 
 
 if __name__ == '__main__':
