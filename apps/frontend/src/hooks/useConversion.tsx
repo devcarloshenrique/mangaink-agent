@@ -1,3 +1,5 @@
+// DEPRECATED: Simulação mock de conversão. Substituído pelo backend real (POST/GET /api/conversions + SSE).
+// ConversionProvider nunca foi montado — código morto. Mantido como referência.
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";

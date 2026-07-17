@@ -8,6 +8,8 @@ import type {
   ConversionState,
   CreateConversionBody,
   CreateConversionResponse,
+  ConversionListResult,
+  ConversionStatus,
 } from "@/types/conversion";
 import type { SSEJournalEvent } from "@/types/conversion";
 import { createSSEStream } from "@/lib/sse";
@@ -196,9 +198,43 @@ export const conversionsApi = {
     return request<ConversionState>(`/api/conversions/${conversionId}`);
   },
 
-  /** DELETE /api/conversions/:conversionId — cancela */
-  async cancel(conversionId: string): Promise<{ conversionId: string; status: "cancelled" }> {
-    return request(`/api/conversions/${conversionId}`, { method: "DELETE" });
+  /** GET /api/conversions/source/:sourceId/covers/:coverId — serve cover image bytes */
+  coverUrl(sourceId: string, cover: { kind: string; coverId?: string }): string | null {
+    if (cover.kind === "original") {
+      return `/api/conversions/source/${sourceId}/covers/original`;
+    }
+    if (cover.kind === "gallery" && cover.coverId) {
+      return `/api/conversions/source/${sourceId}/covers/${cover.coverId}`;
+    }
+    return null;
+  },
+
+  /** GET /api/conversions — listagem paginada por usuário */
+  async list(params?: {
+    page?: number;
+    limit?: number;
+    status?: ConversionStatus[];
+    sourceId?: string;
+  }): Promise<ConversionListResult> {
+    const search = new URLSearchParams();
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.sourceId) search.set("sourceId", params.sourceId);
+    if (params?.status && params.status.length > 0) {
+      search.set("status", params.status.join(","));
+    }
+    const qs = search.toString();
+    return request<ConversionListResult>(`/api/conversions${qs ? `?${qs}` : ""}`);
+  },
+
+  /** DELETE /api/conversions/:conversionId — remove permanentemente */
+  async remove(conversionId: string): Promise<{ conversionId: string; status: 'deleted' }> {
+    return request(`/api/conversions/${conversionId}`, { method: 'DELETE' });
+  },
+
+  /** POST /api/conversions/:conversionId/cancel — cancela sem remover */
+  async cancel(conversionId: string): Promise<{ conversionId: string; status: 'cancelled' }> {
+    return request(`/api/conversions/${conversionId}/cancel`, { method: 'POST' });
   },
 
   /** GET /api/conversions/:conversionId/logs — eventos do journal (Redis) */

@@ -1,3 +1,5 @@
+// DEPRECATED: Substituído por useConversionsList + useConversionActions (conexão real com backend).
+// Mantido como referência.
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import {
   INITIAL_SERIES,

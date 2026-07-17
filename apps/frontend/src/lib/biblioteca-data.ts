@@ -1,3 +1,5 @@
+// DEPRECATED: Dados mock de fixtures. Substituído pela API real GET /api/conversions.
+// Mantido como referência.
 export type ConversionStatus = "completed" | "pending" | "error" | "converting";
 
 export interface Chapter {

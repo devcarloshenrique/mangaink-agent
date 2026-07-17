@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -21,8 +22,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useScraping } from "@/hooks/useScraping";
 import { useConversionOptions } from "@/hooks/useConversionOptions";
 import { conversionsApi } from "@/lib/api";
+import { scrapingApi } from "@/lib/api";
 import type { SourceInspectResponse, Chapter } from "@/types/scraping";
-import type { Book, CoverRef } from "@/types/conversion";
+import type { Book, CoverRef, ConversionConfig } from "@/types/conversion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -50,8 +52,14 @@ import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
 import { cn } from "@/lib/utils";
 import { authGuard } from "./-authGuard";
 
+const wizardSearchSchema = z.object({
+  sourceId: z.string().optional(),
+  conversionId: z.string().optional(),
+})
+
 export const Route = createFileRoute("/wizard")({
   beforeLoad: authGuard,
+  validateSearch: wizardSearchSchema,
   component: WizardPage,
 });
 
@@ -145,6 +153,7 @@ function computeVolumes(
 function WizardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const search = Route.useSearch();
   const scraping = useScraping();
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
@@ -230,6 +239,60 @@ function WizardPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scraping.state.status, scraping.state.sourceId, scraping.state.metadata]);
+
+  // Pre-fill wizard data from reconvert (search params)
+  useEffect(() => {
+    if (!search.sourceId) return;
+    let cancelled = false;
+
+    async function prefill() {
+      try {
+        const source = await scrapingApi.getSource(search.sourceId);
+        if (cancelled) return;
+
+        setData((d) => ({
+          ...d,
+          url: source.source.url,
+          sourceId: source.sourceId,
+          inspectData: source,
+          meta: {
+            title: source.metadata.title,
+            author: source.metadata.author ?? "",
+          },
+        }));
+
+        if (search.conversionId) {
+          const conv = await conversionsApi.get(search.conversionId);
+          const config = conv.config as ConversionConfig;
+          if (!cancelled) {
+            setData((d) => ({
+              ...d,
+              sourceId: config.sourceId,
+              selectedChapters: new Set(config.books.flatMap((b) => b.chapters)),
+              coverMode: config.books.length === 1 ? "single" : "per-volume",
+              volumeMode: "fixed",
+              volumeSize: config.books[0]?.chapters.length ?? 10,
+              device: config.output.deviceId,
+              format: config.output.format,
+              fieldOptions: config.options as Record<string, string | number | boolean>,
+              meta: { title: config.metadata.title ?? source.metadata.title, author: config.metadata.author ?? source.metadata.author ?? "" },
+              errorHandlingStrategy: config.errorHandlingStrategy ?? "ignore",
+              cover: config.cover,
+            }));
+          }
+        }
+
+        setStep(1);
+        setVisited(1);
+      } catch {
+        toast.error("Erro ao carregar dados para reconversão");
+      }
+    }
+
+    prefill();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.sourceId, search.conversionId]);
 
   const toggleChapter = (id: string) => {
     setData((d) => {

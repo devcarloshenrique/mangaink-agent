@@ -104,6 +104,42 @@ export interface ConversionState {
   config: unknown;
 }
 
+/** Resumo leve de uma Conversion para listagem paginada */
+export interface ConversionSummary {
+  conversionId: string;
+  sourceId: string;
+  title: string;
+  status: ConversionStatus;
+  progress: number;
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+  cover?: CoverRef;
+}
+
+/** Resultado paginado GET /api/conversions */
+export interface ConversionListResult {
+  items: ConversionSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** Snapshot imutável da requisição (config) */
+export interface ConversionConfig {
+  sourceId: string;
+  cover: CoverRef;
+  output: { deviceId: string; format: string };
+  metadata: { title?: string; author?: string };
+  books: Book[];
+  options: Record<string, string | number | boolean | undefined>;
+  errorHandlingStrategy?: "ignore" | "skip_chapter" | "abort";
+  userId: string;
+}
+
 /** Resposta do POST /api/conversions */
 export interface CreateConversionResponse {
   conversionId: string;

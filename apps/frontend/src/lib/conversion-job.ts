@@ -1,3 +1,5 @@
+// DEPRECATED: Tipos mock de simulação de job. Substituído por tipos reais em @/types/conversion.ts.
+// Mantido como referência.
 export type JobStage = "downloading" | "converting" | "generating" | "sending";
 
 export type JobStatus = "queued" | "running" | "completed" | "error";

@@ -1,7 +1,6 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
-import { BibliotecaProvider } from "@/hooks/useBiblioteca";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ComicIntensityProvider } from "@/hooks/useComicIntensity";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,10 +60,8 @@ function RootComponent() {
       <ThemeProvider>
         <ComicIntensityProvider>
           <AuthProvider>
-            <BibliotecaProvider>
               <AppShell />
-            </BibliotecaProvider>
-          </AuthProvider>
+            </AuthProvider>
         </ComicIntensityProvider>
       </ThemeProvider>
     </QueryClientProvider>

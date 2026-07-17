@@ -19,7 +19,8 @@ import { Route as BibliotecaRouteImport } from './routes/biblioteca'
 import { Route as AgendamentosRouteImport } from './routes/agendamentos'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BibliotecaIndexRouteImport } from './routes/biblioteca.index'
-import { Route as BibliotecaSlugRouteImport } from './routes/biblioteca.$slug'
+import { Route as BibliotecaSourceIdRouteImport } from './routes/biblioteca.$sourceId'
+import { Route as BibliotecaReaderConversionIdRouteImport } from './routes/biblioteca.reader.$conversionId'
 import { Route as BibliotecaConverterJobIdRouteImport } from './routes/biblioteca.converter.$jobId'
 
 const WizardRoute = WizardRouteImport.update({
@@ -72,11 +73,17 @@ const BibliotecaIndexRoute = BibliotecaIndexRouteImport.update({
   path: '/',
   getParentRoute: () => BibliotecaRoute,
 } as any)
-const BibliotecaSlugRoute = BibliotecaSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
+const BibliotecaSourceIdRoute = BibliotecaSourceIdRouteImport.update({
+  id: '/$sourceId',
+  path: '/$sourceId',
   getParentRoute: () => BibliotecaRoute,
 } as any)
+const BibliotecaReaderConversionIdRoute =
+  BibliotecaReaderConversionIdRouteImport.update({
+    id: '/reader/$conversionId',
+    path: '/reader/$conversionId',
+    getParentRoute: () => BibliotecaRoute,
+  } as any)
 const BibliotecaConverterJobIdRoute =
   BibliotecaConverterJobIdRouteImport.update({
     id: '/converter/$jobId',
@@ -94,9 +101,10 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
-  '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca/$sourceId': typeof BibliotecaSourceIdRoute
   '/biblioteca/': typeof BibliotecaIndexRoute
   '/biblioteca/converter/$jobId': typeof BibliotecaConverterJobIdRoute
+  '/biblioteca/reader/$conversionId': typeof BibliotecaReaderConversionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -107,9 +115,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
-  '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca/$sourceId': typeof BibliotecaSourceIdRoute
   '/biblioteca': typeof BibliotecaIndexRoute
   '/biblioteca/converter/$jobId': typeof BibliotecaConverterJobIdRoute
+  '/biblioteca/reader/$conversionId': typeof BibliotecaReaderConversionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,9 +131,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/wizard': typeof WizardRoute
-  '/biblioteca/$slug': typeof BibliotecaSlugRoute
+  '/biblioteca/$sourceId': typeof BibliotecaSourceIdRoute
   '/biblioteca/': typeof BibliotecaIndexRoute
   '/biblioteca/converter/$jobId': typeof BibliotecaConverterJobIdRoute
+  '/biblioteca/reader/$conversionId': typeof BibliotecaReaderConversionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,9 +148,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/wizard'
-    | '/biblioteca/$slug'
+    | '/biblioteca/$sourceId'
     | '/biblioteca/'
     | '/biblioteca/converter/$jobId'
+    | '/biblioteca/reader/$conversionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -151,9 +162,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/wizard'
-    | '/biblioteca/$slug'
+    | '/biblioteca/$sourceId'
     | '/biblioteca'
     | '/biblioteca/converter/$jobId'
+    | '/biblioteca/reader/$conversionId'
   id:
     | '__root__'
     | '/'
@@ -165,9 +177,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/wizard'
-    | '/biblioteca/$slug'
+    | '/biblioteca/$sourceId'
     | '/biblioteca/'
     | '/biblioteca/converter/$jobId'
+    | '/biblioteca/reader/$conversionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -254,11 +267,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaIndexRouteImport
       parentRoute: typeof BibliotecaRoute
     }
-    '/biblioteca/$slug': {
-      id: '/biblioteca/$slug'
-      path: '/$slug'
-      fullPath: '/biblioteca/$slug'
-      preLoaderRoute: typeof BibliotecaSlugRouteImport
+    '/biblioteca/$sourceId': {
+      id: '/biblioteca/$sourceId'
+      path: '/$sourceId'
+      fullPath: '/biblioteca/$sourceId'
+      preLoaderRoute: typeof BibliotecaSourceIdRouteImport
+      parentRoute: typeof BibliotecaRoute
+    }
+    '/biblioteca/reader/$conversionId': {
+      id: '/biblioteca/reader/$conversionId'
+      path: '/reader/$conversionId'
+      fullPath: '/biblioteca/reader/$conversionId'
+      preLoaderRoute: typeof BibliotecaReaderConversionIdRouteImport
       parentRoute: typeof BibliotecaRoute
     }
     '/biblioteca/converter/$jobId': {
@@ -272,15 +292,17 @@ declare module '@tanstack/react-router' {
 }
 
 interface BibliotecaRouteChildren {
-  BibliotecaSlugRoute: typeof BibliotecaSlugRoute
+  BibliotecaSourceIdRoute: typeof BibliotecaSourceIdRoute
   BibliotecaIndexRoute: typeof BibliotecaIndexRoute
   BibliotecaConverterJobIdRoute: typeof BibliotecaConverterJobIdRoute
+  BibliotecaReaderConversionIdRoute: typeof BibliotecaReaderConversionIdRoute
 }
 
 const BibliotecaRouteChildren: BibliotecaRouteChildren = {
-  BibliotecaSlugRoute: BibliotecaSlugRoute,
+  BibliotecaSourceIdRoute: BibliotecaSourceIdRoute,
   BibliotecaIndexRoute: BibliotecaIndexRoute,
   BibliotecaConverterJobIdRoute: BibliotecaConverterJobIdRoute,
+  BibliotecaReaderConversionIdRoute: BibliotecaReaderConversionIdRoute,
 }
 
 const BibliotecaRouteWithChildren = BibliotecaRoute._addFileChildren(
