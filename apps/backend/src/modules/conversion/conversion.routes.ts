@@ -13,12 +13,15 @@ import { ListConversionsUseCase } from './use-cases/list-conversions.use-case'
 import { ConversionQueueService } from './services/conversion-queue.service'
 import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
-import { getConversionRepository, getConversionJobRepository } from '../../shared/database/repositories'
+import { getConversionRepository, getConversionJobRepository, getSourceRepository } from '../../shared/database/repositories'
 import { conversionLogsHandler } from './controllers/conversion-logs.controller'
 import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
 import { downloadJobHandler } from './controllers/download-job.controller'
 import { DownloadJobUseCase } from './use-cases/download-job.use-case'
 import { downloadJobParamsSchema } from './dtos/download-job.dto'
+import { serveCoverHandler } from './controllers/serve-cover.controller'
+import { ServeCoverUseCase } from './use-cases/serve-cover.use-case'
+import { coverParamsSchema } from './dtos/cover-params.dto'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
@@ -42,6 +45,7 @@ const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, 
 const listConversionsUseCase = new ListConversionsUseCase(conversions)
 const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
 const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
+const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -296,7 +300,24 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
     downloadJobHandler(downloadJobUseCase),
   )
 
-  // GET /api/conversions/:conversionId/logs
+  // GET /api/conversions/source/:sourceId/covers/:coverId — publico
+  app.get(
+    '/api/conversions/source/:sourceId/covers/:coverId',
+    {
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Imagem de capa cacheada de uma Source',
+        description: 'Retorna a imagem de capa do cache local. Se nao existir, baixa do provider e cacheia.',
+        params: coverParamsSchema,
+        response: {
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    serveCoverHandler(serveCoverUseCase),
+  )
+
+  // GET /api/conversions/:conversionId/logs'
   app.get(
     '/api/conversions/:conversionId/logs',
     {
