@@ -5,6 +5,7 @@ import { createConversionHandler } from './controllers/create-conversion.control
 import { getConversionHandler } from './controllers/get-conversion.controller'
 import { conversionEventsHandler } from './controllers/conversion-events.controller'
 import { cancelConversionHandler } from './controllers/cancel-conversion.controller'
+import { deleteConversionHandler } from './controllers/delete-conversion.controller'
 import { listConversionsHandler } from './controllers/list-conversions.controller'
 import { CreateConversionUseCase } from './use-cases/create-conversion.use-case'
 import { GetConversionUseCase } from './use-cases/get-conversion.use-case'
@@ -18,6 +19,7 @@ import { conversionLogsHandler } from './controllers/conversion-logs.controller'
 import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
 import { downloadJobHandler } from './controllers/download-job.controller'
 import { DownloadJobUseCase } from './use-cases/download-job.use-case'
+import { DeleteConversionUseCase } from './use-cases/delete-conversion.use-case'
 import { downloadJobParamsSchema } from './dtos/download-job.dto'
 import { serveCoverHandler } from './controllers/serve-cover.controller'
 import { ServeCoverUseCase } from './use-cases/serve-cover.use-case'
@@ -46,6 +48,7 @@ const listConversionsUseCase = new ListConversionsUseCase(conversions)
 const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
 const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
 const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
+const deleteConversionUseCase = new DeleteConversionUseCase(conversions)
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -236,24 +239,22 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
       preHandler: verifyJwt,
       schema: {
         tags: ['Conversion'],
-        summary: 'Cancela uma Conversion',
+        summary: 'Remove permanentemente uma Conversion',
         description:
-          'Cancela todos os Jobs ainda pendentes ou em andamento da Conversion. ' +
-          'Conversions em estado terminal (completed/failed/cancelled) não podem ser canceladas.',
+          'Remove a Conversion do banco de dados. Para cancelar sem remover, use POST /.../cancel.',
         security: [{ bearerAuth: [] }],
         params: conversionParamsSchema,
         response: {
           200: z.object({
             conversionId: z.string(),
-            status: z.literal('cancelled'),
+            status: z.literal('deleted'),
           }),
           404: z.object({ error: z.string() }),
-          409: z.object({ error: z.string() }),
           403: z.object({ error: z.string() }),
         },
       },
     },
-    cancelConversionHandler(cancelConversionUseCase),
+    deleteConversionHandler(deleteConversionUseCase),
   )
 
   // Alias: POST /api/conversions/:conversionId/cancel (compat de estilo REST)
