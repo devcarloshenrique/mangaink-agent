@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
-import { prisma } from '../../../../shared/database/prisma'
+import { getPrisma } from '../../../../shared/database/prisma'
 import { PrismaConversionRepository } from '../../repositories/prisma-conversion.repository'
 import { PrismaJobRepository } from '../../repositories/prisma-job.repository'
 import type { ConversionState, ConversionConfig, ConversionJobState } from '../../types/conversion.types'
@@ -82,12 +82,12 @@ describe('PrismaConversionRepository', () => {
   const repo = new PrismaConversionRepository()
 
   beforeAll(async () => {
-    await prisma.user.upsert({
+    await getPrisma().user.upsert({
       where: { id: USER_ID },
       create: { id: USER_ID, username: 'testuser_conv', email: 'test-conv@test.com', passwordHash: 'hashed' },
       update: {},
     })
-    await prisma.user.upsert({
+    await getPrisma().user.upsert({
       where: { id: OTHER_USER_ID },
       create: { id: OTHER_USER_ID, username: 'testuser_conv2', email: 'test-conv2@test.com', passwordHash: 'hashed' },
       update: {},
@@ -95,7 +95,7 @@ describe('PrismaConversionRepository', () => {
   })
 
   afterAll(async () => {
-    await prisma.$disconnect()
+    await getPrisma().$disconnect()
   })
 
   describe('create + findById', () => {
@@ -172,8 +172,8 @@ describe('PrismaConversionRepository', () => {
       const config = makeConfig(USER_ID)
       await repo.create(makeConversionState(config, convId, { totalJobs: 3, pendingJobs: 3 }))
 
-      const conv = await prisma.conversion.findUnique({ where: { conversionId: convId } })
-      await prisma.conversionJob.createMany({
+      const conv = await getPrisma().conversion.findUnique({ where: { conversionId: convId } })
+      await getPrisma().conversionJob.createMany({
         data: [
           { jobId: `job_${convId}_001`, conversionId: conv!.id, sourceId: config.sourceId, bookIndex: 0, chapters: [], cover: {} as any, output: {} as any, metadata: { title: 'Vol 1' } as any, options: {} as any, status: 'completed', progress: 100, currentStep: 'Done', downloadedImages: 0, totalImages: 0 },
           { jobId: `job_${convId}_002`, conversionId: conv!.id, sourceId: config.sourceId, bookIndex: 1, chapters: [], cover: {} as any, output: {} as any, metadata: { title: 'Vol 2' } as any, options: {} as any, status: 'completed', progress: 100, currentStep: 'Done', downloadedImages: 0, totalImages: 0 },
@@ -194,8 +194,8 @@ describe('PrismaConversionRepository', () => {
       const config = makeConfig(USER_ID)
       await repo.create(makeConversionState(config, convId))
 
-      const conv = await prisma.conversion.findUnique({ where: { conversionId: convId } })
-      await prisma.conversionJob.createMany({
+      const conv = await getPrisma().conversion.findUnique({ where: { conversionId: convId } })
+      await getPrisma().conversionJob.createMany({
         data: [
           { jobId: `job_${convId}_001`, conversionId: conv!.id, sourceId: config.sourceId, bookIndex: 0, chapters: [], cover: {} as any, output: {} as any, metadata: {} as any, options: {} as any, status: 'queued', progress: 0, currentStep: '', downloadedImages: 0, totalImages: 0 },
           { jobId: `job_${convId}_002`, conversionId: conv!.id, sourceId: config.sourceId, bookIndex: 1, chapters: [], cover: {} as any, output: {} as any, metadata: {} as any, options: {} as any, status: 'queued', progress: 0, currentStep: '', downloadedImages: 0, totalImages: 0 },
@@ -218,8 +218,8 @@ describe('PrismaConversionRepository', () => {
       const config = makeConfig(USER_ID)
       await repo.create(makeConversionState(config, convId))
 
-      const conv = await prisma.conversion.findUnique({ where: { conversionId: convId } })
-      await prisma.conversionJob.create({
+      const conv = await getPrisma().conversion.findUnique({ where: { conversionId: convId } })
+      await getPrisma().conversionJob.create({
         data: { jobId: `job_${convId}_001`, conversionId: conv!.id, sourceId: config.sourceId, bookIndex: 0, chapters: [], cover: {} as any, output: {} as any, metadata: {} as any, options: {} as any, status: 'queued', progress: 0, currentStep: '', downloadedImages: 0, totalImages: 0 },
       })
 
@@ -228,7 +228,7 @@ describe('PrismaConversionRepository', () => {
       const found = await repo.findById(convId)
       expect(found).toBeNull()
 
-      const jobsCount = await prisma.conversionJob.count({ where: { jobId: `job_${convId}_001` } })
+      const jobsCount = await getPrisma().conversionJob.count({ where: { jobId: `job_${convId}_001` } })
       expect(jobsCount).toBe(0)
     })
   })

@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { join } from 'node:path'
 import { appendFile } from 'node:fs/promises'
-import { prisma } from '../../../shared/database/prisma'
+import { getPrisma } from '../../../shared/database/prisma'
 import { mkdirp } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
@@ -26,7 +26,7 @@ import type {
 
 export class PrismaConversionRepository implements ConversionRepository {
   async create(state: ConversionState): Promise<void> {
-    await prisma.conversion.create({
+    await getPrisma().conversion.create({
       data: {
         conversionId: state.conversionId,
         userId: state.config.userId,
@@ -52,7 +52,7 @@ export class PrismaConversionRepository implements ConversionRepository {
   }
 
   async findById(conversionId: string): Promise<ConversionState | null> {
-    const row = await prisma.conversion.findUnique({
+    const row = await getPrisma().conversion.findUnique({
       where: { conversionId },
       include: {
         jobs: { orderBy: { bookIndex: 'asc' } },
@@ -82,7 +82,7 @@ export class PrismaConversionRepository implements ConversionRepository {
     const skip = (page - 1) * limit
 
     const [rows, total] = await Promise.all([
-      prisma.conversion.findMany({
+      getPrisma().conversion.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
@@ -102,7 +102,7 @@ export class PrismaConversionRepository implements ConversionRepository {
           finishedAt: true,
         },
       }),
-      prisma.conversion.count({ where }),
+      getPrisma().conversion.count({ where }),
     ])
 
     const items: ConversionSummary[] = rows.map((row) => ({
@@ -139,21 +139,21 @@ export class PrismaConversionRepository implements ConversionRepository {
 
     if (Object.keys(data).length === 0) return
 
-    await prisma.conversion.update({
+    await getPrisma().conversion.update({
       where: { conversionId },
       data,
     })
   }
 
   async syncStatus(conversionId: string): Promise<ConversionState | null> {
-    const conv = await prisma.conversion.findUnique({
+    const conv = await getPrisma().conversion.findUnique({
       where: { conversionId },
       select: { id: true, conversionId: true },
     })
 
     if (!conv) return null
 
-    const jobs = await prisma.conversionJob.findMany({
+    const jobs = await getPrisma().conversionJob.findMany({
       where: { conversionId: conv.id },
       orderBy: { bookIndex: 'asc' },
       select: {
@@ -223,7 +223,7 @@ export class PrismaConversionRepository implements ConversionRepository {
     const now = new Date()
     const isTerminalConv = ['completed', 'failed', 'cancelled'].includes(aggregateStatus)
 
-    await prisma.conversion.update({
+    await getPrisma().conversion.update({
       where: { conversionId },
       data: {
         status: aggregateStatus,
@@ -258,14 +258,14 @@ export class PrismaConversionRepository implements ConversionRepository {
   }
 
   async listJobIds(conversionId: string): Promise<string[]> {
-    const conv = await prisma.conversion.findUnique({
+    const conv = await getPrisma().conversion.findUnique({
       where: { conversionId },
       select: { id: true },
     })
 
     if (!conv) return []
 
-    const jobs = await prisma.conversionJob.findMany({
+    const jobs = await getPrisma().conversionJob.findMany({
       where: { conversionId: conv.id },
       select: { jobId: true },
     })
@@ -290,7 +290,7 @@ export class PrismaConversionRepository implements ConversionRepository {
 
   async delete(conversionId: string): Promise<void> {
     try {
-      await prisma.conversion.delete({ where: { conversionId } })
+      await getPrisma().conversion.delete({ where: { conversionId } })
     } catch {
       // Silently ignore se já deletado (cascade nos Jobs)
     }

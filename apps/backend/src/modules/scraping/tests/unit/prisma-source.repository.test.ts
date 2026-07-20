@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterAll } from 'vitest'
-import { prisma } from '../../../../shared/database/prisma'
+import { getPrisma } from '../../../../shared/database/prisma'
 import { PrismaSourceRepository } from '../../repositories/prisma-source.repository'
 import type { SourceMetadataFile } from '../../types/metadata.types'
 
@@ -39,17 +39,17 @@ describe('PrismaSourceRepository', () => {
   let repository: PrismaSourceRepository
 
   beforeEach(async () => {
-    await prisma.chapter.deleteMany()
-    await prisma.cover.deleteMany()
-    await prisma.source.deleteMany()
+    await getPrisma().chapter.deleteMany()
+    await getPrisma().cover.deleteMany()
+    await getPrisma().source.deleteMany()
     repository = new PrismaSourceRepository()
   })
 
   afterAll(async () => {
-    await prisma.chapter.deleteMany()
-    await prisma.cover.deleteMany()
-    await prisma.source.deleteMany()
-    await prisma.$disconnect()
+    await getPrisma().chapter.deleteMany()
+    await getPrisma().cover.deleteMany()
+    await getPrisma().source.deleteMany()
+    await getPrisma().$disconnect()
   })
 
   describe('exists', () => {
@@ -184,10 +184,10 @@ describe('PrismaSourceRepository', () => {
       await repository.delete('src-test-delete')
       expect(await repository.exists('src-test-delete')).toBe(false)
 
-      const chaptersCount = await prisma.chapter.count({ where: { sourceId: 'src-test-delete' } })
+      const chaptersCount = await getPrisma().chapter.count({ where: { sourceId: 'src-test-delete' } })
       expect(chaptersCount).toBe(0)
 
-      const coversCount = await prisma.cover.count({ where: { sourceId: 'src-test-delete' } })
+      const coversCount = await getPrisma().cover.count({ where: { sourceId: 'src-test-delete' } })
       expect(coversCount).toBe(0)
     })
 

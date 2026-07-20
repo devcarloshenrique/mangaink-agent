@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
-import { prisma } from '../../../../shared/database/prisma'
+import { getPrisma } from '../../../../shared/database/prisma'
 import { PrismaConversionRepository } from '../../repositories/prisma-conversion.repository'
 import { PrismaJobRepository } from '../../repositories/prisma-job.repository'
 import type { ConversionState, ConversionConfig, ConversionJobState, ConversionJobStatus } from '../../types/conversion.types'
@@ -72,7 +72,7 @@ describe('PrismaJobRepository', () => {
   const jobRepo = new PrismaJobRepository()
 
   beforeAll(async () => {
-    await prisma.user.upsert({
+    await getPrisma().user.upsert({
       where: { id: USER_ID },
       create: { id: USER_ID, username: 'testuser_job', email: 'test-job@test.com', passwordHash: 'hashed' },
       update: {},
@@ -80,7 +80,7 @@ describe('PrismaJobRepository', () => {
   })
 
   afterAll(async () => {
-    await prisma.$disconnect()
+    await getPrisma().$disconnect()
   })
 
   async function setupConversion(): Promise<{ convId: string; config: ConversionConfig }> {

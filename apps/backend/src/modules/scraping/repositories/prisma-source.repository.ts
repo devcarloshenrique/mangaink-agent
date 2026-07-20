@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '../../../shared/database/prisma'
+import { getPrisma } from '../../../shared/database/prisma'
 import type { SourceCacheRepository } from './source-cache.repository'
 import type { SourceMetadataFile } from '../types/metadata.types'
 import type { MetadataCache } from '../types/metadata.types'
@@ -8,12 +8,12 @@ import type { ProviderInfo } from '../types/provider.types'
 
 export class PrismaSourceRepository implements SourceCacheRepository {
   async exists(sourceId: string): Promise<boolean> {
-    const count = await prisma.source.count({ where: { sourceId } })
+    const count = await getPrisma().source.count({ where: { sourceId } })
     return count > 0
   }
 
   async load(sourceId: string): Promise<SourceMetadataFile | null> {
-    const row = await prisma.source.findUnique({
+    const row = await getPrisma().source.findUnique({
       where: { sourceId },
       include: {
         chapters: true,
@@ -101,7 +101,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
       ttlExpiresAt,
     }
 
-    await prisma.$transaction(
+    await getPrisma().$transaction(
       async (tx) => {
         await tx.source.upsert({
           where: { sourceId },
@@ -187,7 +187,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
   }
 
   async update(sourceId: string, patch: Partial<MetadataCache>): Promise<void> {
-    const current = await prisma.source.findUnique({
+    const current = await getPrisma().source.findUnique({
       where: { sourceId },
       select: { updatedAt: true },
     })
@@ -216,7 +216,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
 
     if (Object.keys(data).length === 0) return
 
-    await prisma.source.update({
+    await getPrisma().source.update({
       where: { sourceId },
       data,
     })
@@ -224,14 +224,14 @@ export class PrismaSourceRepository implements SourceCacheRepository {
 
   async delete(sourceId: string): Promise<void> {
     try {
-      await prisma.source.delete({ where: { sourceId } })
+      await getPrisma().source.delete({ where: { sourceId } })
     } catch {
       // Silently ignore if already deleted (cascade handles children)
     }
   }
 
   async getPlaceholderIndices(sourceId: string, chapterId: string): Promise<number[]> {
-    const chapter = await prisma.chapter.findFirst({
+    const chapter = await getPrisma().chapter.findFirst({
       where: { sourceId, chapterId },
       select: { placeholderPageIndices: true },
     })
@@ -244,7 +244,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
     chapterId: string,
     indices: number[],
   ): Promise<void> {
-    await prisma.chapter.updateMany({
+    await getPrisma().chapter.updateMany({
       where: { sourceId, chapterId },
       data: { placeholderPageIndices: indices as Prisma.InputJsonValue },
     })

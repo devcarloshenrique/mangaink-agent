@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { join } from 'node:path'
 import { appendFile } from 'node:fs/promises'
-import { prisma } from '../../../shared/database/prisma'
+import { getPrisma } from '../../../shared/database/prisma'
 import { mkdirp } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import type { ConversionJobRepository } from './conversion-job.repository'
@@ -19,7 +19,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
   async create(job: ConversionJobState): Promise<void> {
     const convId = job.config.conversionId
 
-    const conv = await prisma.conversion.findUnique({
+    const conv = await getPrisma().conversion.findUnique({
       where: { conversionId: convId },
       select: { id: true },
     })
@@ -31,7 +31,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
 
     const config = job.config
 
-    await prisma.conversionJob.create({
+    await getPrisma().conversionJob.create({
       data: {
         jobId: job.jobId,
         conversionId: conv.id,
@@ -55,7 +55,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
   }
 
   async findById(jobId: string): Promise<ConversionJobState | null> {
-    const row = await prisma.conversionJob.findUnique({
+    const row = await getPrisma().conversionJob.findUnique({
       where: { jobId },
       include: {
         conversion: { select: { conversionId: true } },
@@ -83,7 +83,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
 
     if (Object.keys(data).length === 0) return
 
-    await prisma.conversionJob.update({
+    await getPrisma().conversionJob.update({
       where: { jobId },
       data,
     })
@@ -91,7 +91,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
 
   async delete(jobId: string): Promise<void> {
     try {
-      await prisma.conversionJob.delete({ where: { jobId } })
+      await getPrisma().conversionJob.delete({ where: { jobId } })
     } catch {
       // melhor-esforço
     }
@@ -99,7 +99,7 @@ export class PrismaJobRepository implements ConversionJobRepository {
 
   async appendLog(jobId: string, message: string): Promise<void> {
     try {
-      const row = await prisma.conversionJob.findUnique({
+      const row = await getPrisma().conversionJob.findUnique({
         where: { jobId },
         select: {
           conversion: { select: { conversionId: true } },
