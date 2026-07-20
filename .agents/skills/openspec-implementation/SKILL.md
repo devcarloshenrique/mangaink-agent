@@ -206,8 +206,8 @@ echo "Implementation completed: $(date)" > docs/openspec/changes/{change-id}/IMP
 **Tasks completed**: {count}
 **Tests**: All passing
 
-**Next step**: Archive this change to merge spec deltas into living documentation.
-Say "openspec archive {change-id}" or "archive this change" when ready.
+**Next step**: Use a skill `change-completion` para finalizar a change com qualidade: revisão, validação, arquivamento e commits atômicos.
+Diga "finalizar change {change-id}" ou "encerrar implementação" quando estiver pronto.
 ```
 
 ## Boas Práticas
