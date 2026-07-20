@@ -13,18 +13,32 @@ Esta skill complementa `openspec-implementation` — ela começa onde a implemen
 
 ## Princípios
 
-Estes fundamentos guiam cada decisão no fluxo de encerramento. Quando houver dúvida, retorne a eles.
+Estes fundamentos guiam cada decisão. Quando houver dúvida, retorne a eles.
 
 | # | Princípio | Significado |
 |---|-----------|-------------|
-| P1 | **Uma responsabilidade por commit** | Cada commit comunica uma única mudança. O tamanho é consequência da responsabilidade, não um objetivo. |
-| P2 | **Revertibilidade** | Qualquer commit pode ser revertido sem quebrar compilação, testes ou dependências entre commits. |
-| P3 | **Build verde em cada ponto** | O projeto compila e testa em qualquer commit do histórico. |
-| P4 | **Separação por natureza** | Feature, refactor, test, docs e chore vão em commits distintos. |
-| P5 | **Ferramentas do projeto** | Toda validação usa os comandos oficiais do projeto (`package.json`, `Makefile`, `Taskfile`, scripts), nunca suposições. |
-| P6 | **Problema encontrado = problema corrigido** | Nenhum TODO, debug log ou código morto sobrevive ao encerramento. Não documente para "depois" — corrija agora. |
-| P7 | **Histórico narra o raciocínio** | A sequência de commits conta uma história lógica, não cronológica: infraestrutura → refatoração → feature → testes → documentação. |
-| P8 | **Archive é ponto de inflexão** | Depois do arquivamento, qualquer alteração futura é uma nova change. Tudo deve estar correto antes. |
+| P1 | **Correctness** | A implementação funciona corretamente em todos os cenários. Nenhum TODO, debug log, código morto ou workaround sobrevive ao encerramento. |
+| P2 | **Specification Fidelity** | O código implementado corresponde exatamente ao que a spec descreve. Divergências são bugs ou dívida documental. |
+| P3 | **Single Responsibility** | Cada commit comunica uma única mudança. Feature, refactor, test e docs vão em commits distintos. O tamanho é consequência da responsabilidade, não um objetivo. |
+| P4 | **Revertibility** | Qualquer commit pode ser revertido sem quebrar compilação, testes ou dependências entre commits. |
+| P5 | **Build Green** | O projeto compila e testa em qualquer ponto do histórico. |
+| P6 | **Project Conventions** | Toda validação usa os comandos oficiais do projeto, nunca suposições sobre ferramentas. |
+| P7 | **Narrative History** | A sequência de commits conta uma história lógica: infraestrutura → refatoração → feature → testes → documentação. |
+| P8 | **Archive Finality** | Depois do arquivamento, qualquer alteração futura é uma nova change. Tudo deve estar correto antes. |
+
+---
+
+## Failure Policy
+
+**Quando qualquer etapa falhar, o comportamento é imutável:**
+
+1. Interrompa o fluxo imediatamente
+2. Explique claramente o que falhou e por quê
+3. Corrija o problema
+4. Re-execute a etapa
+5. Só prossiga quando passar
+
+Nunca ignore falhas. Nunca "siga em frente". Nunca documente para corrigir depois. Uma change com validações quebradas é pior que uma change não finalizada.
 
 ---
 
@@ -47,8 +61,6 @@ Garantir que nenhuma change seja considerada concluída sem passar por todas as 
 
 ## Pré-condições (Gate)
 
-Antes de iniciar QUALQUER etapa deste fluxo, verifique:
-
 ```
 [ ] Existe uma change OpenSpec ativa em docs/openspec/changes/{change-id}/
 [ ] O arquivo tasks.md existe e todas as tasks estão marcadas [x]
@@ -56,31 +68,53 @@ Antes de iniciar QUALQUER etapa deste fluxo, verifique:
 [ ] Não há bloqueios ou pendências conhecidas
 ```
 
-Se QUALQUER pré-condição falhar, **interrompa o fluxo** e informe o usuário. Uma change incompleta jamais deve ser arquivada.
+Se QUALQUER pré-condição falhar, **interrompa o fluxo**. Uma change incompleta jamais deve ser arquivada.
 
 ---
 
 ## Fluxo de Trabalho
 
 ```
-Gate (Pré-condições)
-  → Passo 1: Revisão Final da Implementação
-  → Passo 2: Validação Cruzada
-  → Passo 3: Revisão de Escopo
-  → Passo 4: Revisão Arquitetural
-  → Passo 5: Análise de Impacto
-  → Passo 6: Arquivamento da Change
-  → Passo 7: Atomic Boundary Analysis
-  → Passo 8: Commits Atômicos
-  → Passo 9: Revisão do Histórico
+Gate
+  → 1. Descoberta do Projeto
+  → 2. Revisão Final da Implementação
+  → 3. Validação Cruzada
+  → 4. Revisão de Escopo
+  → 5. Revisão Arquitetural
+  → 6. Risk Scan
+  → 7. Análise de Impacto
+  → 8. Specification Review
+  → 9. Evidence Review
+  → 10. Arquivamento
+  → 11. Atomic Boundary Analysis
+  → 12. Commits Atômicos
+  → 13. Revisão do Histórico
+  → 14. Release Readiness
   → Definition of Done
 ```
 
 ---
 
-### Passo 1: Revisão Final da Implementação
+### 1. Descoberta do Projeto
 
-Execute uma varredura crítica no código alterado. Os padrões de busca variam conforme a linguagem do projeto — adapte as expressões ao ecossistema (ex: `.ts`, `.py`, `.go`, `.rs`, `.java`).
+Antes de qualquer validação, identifique o ferramental do projeto. Inspecione a raiz do repositório por:
+
+| Categoria | O que procurar |
+|-----------|---------------|
+| Package manager | `package.json` (npm/pnpm/yarn/bun), `requirements.txt`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle` |
+| Workspace/monorepo | `pnpm-workspace.yaml`, `turbo.json`, `nx.json`, `rush.json`, `moon.yml`, `lerna.json` |
+| Task runner | `Makefile`, `Taskfile.yml`, `Justfile`, scripts em `package.json` |
+| Build system | `tsconfig.json`, `vite.config.*`, `webpack.config.*`, `esbuild.config.*`, `CMakeLists.txt` |
+| CI config | `.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`, `circleci/config.yml` |
+| Contributing docs | `CONTRIBUTING.md`, `README.md`, `DEVELOPMENT.md`, `HACKING.md` |
+
+**Resultado esperado**: uma lista clara dos comandos de validação oficiais (lint, test, typecheck, build). Use esses comandos em todo o fluxo — nunca suponha `npm test` se o projeto usa `cargo test`.
+
+---
+
+### 2. Revisão Final da Implementação
+
+Varredura crítica no código alterado. Adapte os padrões de busca à linguagem do projeto.
 
 | Problema | O que buscar |
 |----------|-------------|
@@ -93,80 +127,59 @@ Execute uma varredura crítica no código alterado. Os padrões de busca variam 
 | Consistência OpenSpec | O código implementado corresponde ao que a spec descreve |
 | Alterações parciais | Stubs incompletos, branches de feature pela metade |
 
-**Ação**: corrija os problemas encontrados ANTES de prosseguir. Cada correção é um commit separado do corpo principal da change.
+**Ação**: corrija os problemas encontrados ANTES de prosseguir. Cada correção é um commit separado.
 
-> **Regra**: Se encontrar um problema, corrija-o. Não documente para "fazer depois".
+> **Regra**: Problema encontrado = problema corrigido agora. Não documente para "depois".
 
 ---
 
-### Passo 2: Validação Cruzada
+### 3. Validação Cruzada
 
-**Descubra os comandos de validação do projeto** antes de executar qualquer coisa. Procure por:
+Execute todas as validações oficiais do projeto (descobertas no Passo 1). **Nenhuma falha é aceitável.**
 
-- Scripts em `package.json` (campo `scripts`)
-- Targets em `Makefile`
-- Tasks em `Taskfile.yml` ou `Taskfile.yaml`
-- Comandos em `Justfile`
-- Scripts shell em `scripts/` ou `bin/`
-- Documentação de contribuição (`CONTRIBUTING.md`, `README.md`)
-- Configurações de CI (`.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`)
-
-**Validações comuns — descubra o comando específico do projeto:**
-
-| Validação | Como descobrir |
-|-----------|---------------|
-| OpenSpec | `openspec validate --all --strict` (padrão) |
-| Lint | Procure por `lint`, `eslint`, `ruff`, `clippy`, `golangci-lint`, `checkstyle` nos scripts |
+| Validação | Como descobrir o comando |
+|-----------|-------------------------|
+| OpenSpec | `openspec validate --all --strict` |
+| Lint | Procure por `lint`, `eslint`, `ruff`, `clippy`, `golangci-lint` nos scripts |
 | Checagem de tipos | Procure por `typecheck`, `tsc`, `mypy`, `pyright`, `cargo check` |
 | Testes unitários | Procure por `test`, `test:unit`, `vitest`, `jest`, `pytest`, `cargo test` |
 | Testes de integração | Procure por `test:e2e`, `test:integration`, `test:full` |
 | Build | Procure por `build`, `compile`, `dist` |
 | Smoke tests | Procure por `smoke`, `health`, `check` |
 
-Execute todas as validações encontradas. **Nenhuma falha é aceitável nesta etapa.**
+Executar. Falhou? → Corrija → Re-execute → Prossiga só quando tudo passar.
 
-**Para cada falha:**
-1. Identifique a causa raiz
-2. Corrija
-3. Re-execute a validação
-4. Só prossiga quando tudo passar
-
-> **Regra**: Uma change jamais deve ser arquivada com validações quebradas. Se um lint pré-existente falha em arquivos não relacionados à change, documente explicitamente — mas nunca ignore sem entender.
+> Se um lint pré-existente falha em arquivos não relacionados à change, documente — mas nunca ignore sem entender.
 
 ---
 
-### Passo 3: Revisão de Escopo
+### 4. Revisão de Escopo
 
-Verifique se todas as alterações pertencem à change. Mudanças fora de escopo poluem o histórico e dificultam revisão.
-
-**Checklist de escopo:**
+Verifique se todas as alterações pertencem à change.
 
 - [ ] Existem alterações que não pertencem à change?
 - [ ] Existe código oportunista ("já aproveitei e fiz X também")?
 - [ ] Existem refatorações que deveriam ser uma change separada?
 - [ ] Existem mudanças de formatação em arquivos não relacionados?
 
-**Ação para cada item fora de escopo encontrado:**
-1. Extraia a mudança para um branch ou stash separado
-2. Se for valiosa, crie uma nova change para ela
-3. Se for cosmética (formatação), reverta
+**Ação**: extraia mudanças fora de escopo para stash/branch separado. Se forem valiosas, crie uma nova change. Se forem cosméticas, reverta.
 
 > **Regra**: Cada change entrega exatamente o que sua spec descreve. Nada a mais, nada a menos.
 
 ---
 
-### Passo 4: Revisão Arquitetural
+### 5. Revisão Arquitetural
 
-Execute uma revisão de alto nível orientada por princípios de design.
+Revisão de alto nível orientada por princípios de design.
 
 **Verificações estruturais:**
 
-- [ ] O design implementado corresponde ao `design.md` da change
+- [ ] O design implementado corresponde ao `design.md`
 - [ ] A solução é a mais simples possível (navalha de Occam)
-- [ ] Responsabilidades estão bem separadas (Single Responsibility Principle)
+- [ ] Responsabilidades estão bem separadas (SRP)
 - [ ] Interfaces e contratos estão estáveis
 
-**Verificações de qualidade de código:**
+**Verificações de qualidade:**
 
 - [ ] Não há duplicação de lógica entre módulos
 - [ ] Não há acoplamento desnecessário entre camadas
@@ -174,50 +187,97 @@ Execute uma revisão de alto nível orientada por princípios de design.
 - [ ] Não há violações de SOLID evidentes
 - [ ] Código temporário, scaffolding e workarounds foram removidos
 
-**Verificações de simplificação:**
+**Simplificações bem-vindas:** renomear variáveis ambíguas, extrair funções duplicadas, simplificar condicionais.
 
-Identifique pequenas oportunidades de melhoria:
-- Variáveis com nomes ambíguos
-- Funções que podem ser extraídas para reduzir duplicação
-- Condicionais que podem ser simplificados
-- Comentários que explicam "o quê" em vez de "por quê"
-
-**O que NÃO fazer nesta etapa:**
-- Grandes refatorações estruturais (merecem uma change própria)
-- Reescrita de módulos
-- Mudanças de arquitetura que afetam outras changes
-- Alterações de contrato de API pública
+**Não faça:** grandes refatorações, reescrita de módulos, mudanças de contrato público.
 
 ---
 
-### Passo 5: Análise de Impacto
+### 6. Risk Scan
 
-Verifique se a implementação alterou superfícies que exigem documentação ou comunicação adicional.
+Procure ativamente por riscos remanescentes no código. Estes itens são armadilhas comuns que sobrevivem a revisões superficiais.
+
+| Risco | Exemplos |
+|-------|---------|
+| Feature flags esquecidas | `if (FEATURE_X)` que nunca será removido |
+| Código experimental | Blocos `try { ... } catch { /* experimental */ }` |
+| Fallbacks temporários | `return data || mockData` |
+| Timeouts hardcoded | `setTimeout(fn, 5000)` sem constante nomeada |
+| Caminhos absolutos | `/home/user/project/src/file.ts` |
+| Credenciais | API keys, tokens, senhas em código fonte |
+| Comportamento env-dependent | `if (process.env.NODE_ENV === 'dev')` como lógica de negócio |
+| Retries infinitos | `while(true) { try { ... } catch { continue } }` |
+| Workarounds temporários | `// FIXME: remove after migration` de 6 meses atrás |
+
+**Ação**: cada risco encontrado deve ser eliminado ou, se for intencional e bem justificado, documentado explicitamente no `design.md` da change.
+
+---
+
+### 7. Análise de Impacto
+
+Verifique superfícies alteradas e seus efeitos em consumidores.
+
+**Superfícies internas:**
 
 | Superfície | O que verificar |
 |-----------|----------------|
 | APIs públicas | Rotas, endpoints, schemas de request/response |
 | Contratos | Interfaces, tipos exportados, DTOs |
 | Banco de dados | Schema, migrations, índices, constraints |
-| Configurações | Variáveis de ambiente, arquivos de config (.env, .yaml, .toml) |
+| Configurações | Variáveis de ambiente, arquivos de config |
 | Permissões | Roles, scopes, políticas de acesso |
-| CLI | Flags, argumentos, comandos, comportamento de saída |
-| Dependências | Novas libs, upgrades de versão, remoção de dependências |
-| Breaking changes | Incompatibilidades com versões anteriores |
+| Dependências | Novas libs, upgrades, remoções |
 
-**Para cada superfície impactada, verifique:**
+**Superfícies externas — responda explicitamente:**
 
-- [ ] A documentação correspondente foi atualizada
-- [ ] Schemas compartilhados refletem as mudanças
-- [ ] Changelogs ou release notes mencionam o impacto
-- [ ] Migrations são reversíveis (se aplicável)
-- [ ] Variáveis de ambiente têm valores padrão documentados
+- [ ] Existe breaking change?
+- [ ] APIs públicas ou contratos mudaram?
+- [ ] Eventos, webhooks ou mensageria mudaram?
+- [ ] CLI, flags ou argumentos mudaram?
+- [ ] SDKs ou clientes externos serão afetados?
+- [ ] Consumidores externos precisam de adaptação?
+
+**Para cada superfície impactada:** verifique se a documentação, schemas compartilhados, changelogs e release notes foram atualizados.
 
 > **Regra**: Código sem documentação atualizada é código incompleto.
 
 ---
 
-### Passo 6: Arquivamento da Change
+### 8. Specification Review
+
+**Antes do arquivamento**, verifique a consistência entre implementação e documentação OpenSpec.
+
+| Documento | Verificação |
+|-----------|------------|
+| `proposal.md` | O problema descrito foi resolvido? O escopo está correto? |
+| `design.md` | As decisões de design refletem o código atual? Nenhuma decisão ficou desatualizada? |
+| `specs/*.md` | Os cenários descrevem o comportamento real? Nenhum requisito foi omitido? |
+| `tasks.md` | Todas as tasks concluídas? Nenhuma task foi pulada? As descrições correspondem ao trabalho real? |
+
+**Ação**: se houver divergência entre implementação e documentação, atualize a documentação antes de arquivar. O arquivo final deve permitir que qualquer pessoa entenda a change apenas lendo a pasta.
+
+---
+
+### 9. Evidence Review
+
+Revise artefatos auxiliares que demonstram o comportamento da funcionalidade.
+
+Quando existirem, verifique se continuam válidos:
+
+- [ ] `README` — instruções de uso ainda funcionam?
+- [ ] Exemplos de código — compilam e executam?
+- [ ] Exemplos de API request/response — schemas ainda batem?
+- [ ] Exemplos JSON — estrutura corresponde ao schema atual?
+- [ ] Diagramas — refletem a arquitetura implementada?
+- [ ] Screenshots — UI corresponde ao estado atual?
+- [ ] Fixtures de teste — dados de exemplo são representativos?
+- [ ] Documentação de integração — endpoints e contratos estão corretos?
+
+> Artefatos desatualizados são piores que artefatos ausentes — eles enganam o leitor.
+
+---
+
+### 10. Arquivamento
 
 Execute o arquivamento via CLI do OpenSpec:
 
@@ -225,83 +285,66 @@ Execute o arquivamento via CLI do OpenSpec:
 cd docs/openspec && npx openspec archive {change-id} --yes
 ```
 
-**Flags importantes:**
-- `--yes`: pula confirmação interativa (tasks incompletas ainda geram warning)
-- `--skip-specs`: pula mesclagem de specs (use para changes de infraestrutura que não alteram specs de funcionalidade)
-- `--dry-run`: preview sem alterar arquivos (útil para revisão prévia)
+**Flags relevantes:**
+- `--yes`: pula confirmação interativa
+- `--skip-specs`: pula mesclagem de specs (changes de infraestrutura)
+- `--dry-run`: preview sem alterar arquivos
 
-**Pós-arquivamento, verifique:**
+**Pós-arquivamento:**
 
 - [ ] A change foi removida de `docs/openspec/changes/`
-- [ ] A change foi movida para `docs/openspec/archive/{change-id}/`
-- [ ] Os arquivos base permanecem íntegros: `.openspec.yaml`, `README.md`, `proposal.md`, `design.md`, `tasks.md`, `specs/`
-- [ ] O repositório está consistente (sem referências quebradas entre arquivos)
+- [ ] A change está em `docs/openspec/archive/{change-id}/`
+- [ ] Arquivos base íntegros: `.openspec.yaml`, `README.md`, `proposal.md`, `design.md`, `tasks.md`, `specs/`
+- [ ] Repositório consistente (sem referências quebradas)
 
-> **Nota**: o `openspec archive` pode colocar o arquivo em `changes/archive/`. Se o projeto usar `archive/` na raiz do openspec, mova manualmente após o comando.
+> O comando pode colocar em `changes/archive/`. Se o projeto usar `archive/` na raiz, mova manualmente.
 
 ---
 
-### Passo 7: Atomic Boundary Analysis
+### 11. Atomic Boundary Analysis
 
-**Antes de criar commits**, identifique e apresente todas as responsabilidades contidas nas alterações.
-
-Execute `git status` e para cada grupo de arquivos, classifique por responsabilidade:
+Identifique e apresente todas as responsabilidades contidas nas alterações ANTES de criar commits.
 
 ```
-Para cada responsabilidade identificada, apresente:
+Para cada responsabilidade:
 
   1. Objetivo: o que essa mudança entrega (1 frase)
-  2. Arquivos: lista dos paths envolvidos
+  2. Arquivos: paths envolvidos
   3. Tipo: feat | fix | refactor | test | docs | chore | style
-  4. Mensagem sugerida: Conventional Commit completo
+  4. Mensagem: Conventional Commit completo
 
 Exemplo:
 
-  Responsabilidade A:
-    Objetivo: Isolar storage de testes em diretório temporário
-    Arquivos:
-      - vitest.globalSetup.ts (novo)
-      - vitest.config.ts (modificado)
-    Tipo: test
-    Mensagem: test: add isolated test storage with global setup/teardown
+  A. Objetivo: Isolar storage de testes em diretório temporário
+     Arquivos: vitest.globalSetup.ts (novo), vitest.config.ts (modificado)
+     Tipo: test
+     Mensagem: test: add isolated test storage with global setup/teardown
 
-  Responsabilidade B:
-    Objetivo: Tornar prisma client lazy para evitar conexão no import
-    Arquivos:
-      - src/shared/database/prisma.ts
-      - src/modules/user/repositories/prisma-user.repository.ts
-      - src/modules/scraping/repositories/prisma-source.repository.ts
-      - src/modules/conversion/repositories/prisma-conversion.repository.ts
-      - src/modules/conversion/repositories/prisma-job.repository.ts
-      - src/modules/scraping/tests/unit/prisma-source.repository.test.ts
-      - src/modules/conversion/tests/unit/prisma-conversion.repository.test.ts
-      - src/modules/conversion/tests/unit/prisma-job.repository.test.ts
-    Tipo: refactor
-    Mensagem: refactor: make prisma client lazy to avoid import-time connection
+  B. Objetivo: Tornar prisma client lazy para evitar conexão no import
+     Arquivos: src/shared/database/prisma.ts, src/modules/*/repositories/prisma-*.ts
+     Tipo: refactor
+     Mensagem: refactor: make prisma client lazy to avoid import-time connection
 ```
 
-**Valide a análise com o usuário** antes de criar os commits. Pergunte:
-- As responsabilidades estão bem separadas?
-- Algum grupo deveria ser dividido ou unido?
-- Os tipos e mensagens fazem sentido?
+**Regra de interrupção**: só solicite confirmação do usuário se houver ambiguidade real na separação. Se as responsabilidades estão claras e bem delimitadas, prossiga automaticamente para os commits.
 
-> **Por que isso importa**: Commits misturados são o erro mais comum em históricos Git. A análise prévia elimina retrabalho.
+> **Por que isso importa**: Commits misturados são o erro mais comum. A análise prévia elimina retrabalho.
 
 ---
 
-### Passo 8: Commits Atômicos
+### 12. Commits Atômicos
 
-Revise cuidadosamente quais arquivos pertencem a cada commit e adicione-os seletivamente ao índice.
+Revise cuidadosamente cada arquivo antes de adicioná-lo ao índice. Use staging seletivo.
 
-**Formato da mensagem (Conventional Commits):**
+**Formato Conventional Commits:**
 
 ```
 {tipo}({escopo}): {descrição imperativa}
 
-{corpo opcional com o "porquê" da mudança}
+{corpo opcional com o "porquê"}
 ```
 
-**Tipos e seus propósitos:**
+**Tipos e propósitos:**
 
 | Tipo | Quando usar |
 |------|-----------|
@@ -311,9 +354,9 @@ Revise cuidadosamente quais arquivos pertencem a cada commit e adicione-os selet
 | `test:` | Apenas arquivos de teste |
 | `docs:` | Apenas documentação |
 | `chore:` | Build, CI, dependências, configurações |
-| `style:` | Formatação, espaçamento (sem mudança de lógica) |
+| `style:` | Formatação (sem mudança de lógica) |
 
-**Exemplos de mensagens bem escritas:**
+**Exemplos:**
 
 ```
 feat(auth): add refresh token rotation
@@ -324,57 +367,52 @@ docs: document preview MOBI extraction flow
 chore: update test runner to v3
 ```
 
-**Exemplo de fluxo de staging:**
-
-```
-# Responsabilidade A: test infra
-git add vitest.globalSetup.ts vitest.config.ts
-git commit -m "test: add isolated test storage with global setup/teardown"
-
-# Responsabilidade B: refactor prisma
-git add src/shared/database/prisma.ts src/modules/*/repositories/prisma-*.repository.ts src/modules/*/tests/unit/prisma-*.repository.test.ts
-git commit -m "refactor: make prisma client lazy to avoid import-time connection"
-```
-
-> **Princípio > Proibição**: A qualidade dos commits vem da revisão cuidadosa do índice, não da proibição de comandos. Revise sempre `git status` e `git diff --staged` antes de commitar.
+> A qualidade dos commits vem da revisão cuidadosa do índice. Revise sempre `git status` e `git diff --staged` antes de commitar.
 
 ---
 
-### Passo 9: Revisão do Histórico
+### 13. Revisão do Histórico
 
-Após criar os commits, revise o histórico completo:
-
-```bash
-git log --oneline -N    # últimos N commits
-git status              # working tree deve estar limpo
-git diff main..HEAD     # confirme que tudo pertence à change
-```
-
-**Checklist de revisão:**
+Após criar os commits, revise o histórico completo.
 
 - [ ] Ordem lógica (infraestrutura → refatoração → feature → testes → docs)
 - [ ] Todas as mensagens seguem Conventional Commits
 - [ ] Cada commit encapsula exatamente uma responsabilidade
 - [ ] Cada commit pode ser revertido sem efeitos colaterais
-- [ ] Nenhum arquivo esquecido (`git status` limpo, exceto artefatos de line-ending)
+- [ ] Nenhum arquivo esquecido (`git status` limpo)
 - [ ] `git diff main..HEAD` contém apenas alterações da change
 
-**Se precisar reorganizar:**
+Se precisar reorganizar: `git rebase -i HEAD~N`. Só faça se os commits ainda não foram pushados.
 
-```bash
-git rebase -i HEAD~N   # reordene, squash, edite mensagens
-```
+---
 
-> **Atenção**: só faça rebase se os commits ainda não foram pushados.
+### 14. Release Readiness
+
+Verifique se a change está realmente pronta para entrega — não apenas "implementada", mas pronta para produção.
+
+**Checklist de produção:**
+
+- [ ] Existe migração de dados necessária? Ela é reversível?
+- [ ] Existe rollback documentado e testado?
+- [ ] Existe breaking change comunicado?
+- [ ] Existe documentação suficiente para o próximo desenvolvedor?
+- [ ] Existe configuração adicional necessária (env vars, secrets, permissões)?
+- [ ] Existe feature flag que precisa ser ativada/removida?
+- [ ] Existe monitoramento ou alerta necessário?
+- [ ] Outros times ou serviços precisam ser comunicados?
+- [ ] O deploy pode ser feito de forma independente?
+
+> **Regra**: Se qualquer item de produção não puder ser respondido, a change não está pronta para entrega. Documente o que falta.
 
 ---
 
 ## Definition of Done
 
-A change só pode ser considerada **concluída** quando todos os itens estiverem marcados:
+A change só está **concluída** quando todos os itens estiverem marcados:
 
 ```
 [ ] Todas as tasks concluídas (tasks.md com todos [x])
+[ ] Projeto descoberto (comandos de validação identificados)
 [ ] Revisão de código finalizada (sem TODOs, debug, código morto)
 [ ] OpenSpec validado (validate --all --strict)
 [ ] Lint aprovado (0 erros nos arquivos alterados)
@@ -383,15 +421,19 @@ A change só pode ser considerada **concluída** quando todos os itens estiverem
 [ ] Build aprovado (produção compila)
 [ ] Revisão de escopo concluída (sem código oportunista)
 [ ] Revisão arquitetural concluída (sem duplicação, acoplamento, violações)
-[ ] Análise de impacto concluída (documentação atualizada onde necessário)
+[ ] Risk scan concluído (sem riscos remanescentes)
+[ ] Análise de impacto concluída (consumidores considerados, docs atualizadas)
+[ ] Specification review concluída (docs OpenSpec consistentes)
+[ ] Evidence review concluída (artefatos atualizados)
 [ ] Change arquivada (saiu de changes/, entrou em archive/)
-[ ] Atomic Boundary Analysis apresentada e validada
+[ ] Atomic Boundary Analysis apresentada
 [ ] Commits atômicos criados (uma responsabilidade por commit)
 [ ] Histórico Git revisado (ordem lógica, mensagens claras)
+[ ] Release readiness confirmada (pronto para produção)
 [ ] Working tree limpo (apenas artefatos de line-ending ignoráveis)
 ```
 
-**Se qualquer item falhar, a change NÃO está concluída.** Volte ao passo correspondente.
+**Se qualquer item falhar, a change NÃO está concluída.** Volte ao passo correspondente via Failure Policy.
 
 ---
 
@@ -403,23 +445,25 @@ A change só pode ser considerada **concluída** quando todos os itens estiverem
 - Commitar sem revisar `git diff --staged`
 - Ignorar validação quebrada ("o lint já estava assim antes")
 - Arquivar uma change com testes falhando
-- Deixar TODOs para "resolver depois"
+- Deixar TODOs, fallbacks ou workarounds para "resolver depois"
 - Fazer grandes refatorações durante o encerramento
 - Incluir código oportunista ("já aproveitei e fiz X")
 - Assumir comandos de validação sem verificar os scripts do projeto
-- Criar commits sem antes apresentar a Atomic Boundary Analysis
-- Pular a revisão do histórico ("os commits estão bons, confia")
+- Pular a Atomic Boundary Analysis
+- Arquivar com documentação desatualizada
+- Avançar após falha sem corrigir
 
 **Faça:**
 
 - Separar cada responsabilidade em seu próprio commit
-- Descobrir os comandos de validação oficiais do projeto
+- Descobrir os comandos oficiais do projeto no Passo 1
 - Abortar o fluxo se as pré-condições falharem
-- Corrigir problemas encontrados, não documentá-los
-- Revisar cada commit individualmente antes de prosseguir
-- Apresentar a análise de responsabilidades antes de commitar
-- Verificar se documentação e schemas foram atualizados quando APIs mudam
-- Manter a DoD como checklist viva durante todo o processo
+- Corrigir problemas, não documentá-los
+- Revisar cada commit antes de prosseguir
+- Apresentar a Atomic Boundary Analysis; pedir confirmação só se houver ambiguidade
+- Atualizar documentação quando APIs ou contratos mudarem
+- Verificar riscos, evidências e readiness antes de declarar concluído
+- Seguir a Failure Policy em cada falha
 
 ---
 
@@ -430,32 +474,28 @@ Usuário: "finalizei a implementação de fix-testes. Pode finalizar?"
 
 Agente:
   1. Gate: change existe, tasks [x], sem bloqueios ✓
-  2. Passo 1: varredura de TODOs/logs → limpo ✓
-  3. Passo 2: descobre comandos do projeto → package.json scripts →
-     openspec validate --all --strict ✓
-     pnpm lint ✓
-     pnpm test ✓
-     tsc --noEmit ✓
-  4. Passo 3: revisão de escopo → sem código oportunista ✓
-  5. Passo 4: revisão arquitetural → sem duplicação ou acoplamento ✓
-  6. Passo 5: análise de impacto → sem breaking changes, docs atualizadas ✓
-  7. Passo 6: openspec archive fix-testes --yes → archive/ ✓
-  8. Passo 7: Atomic Boundary Analysis → 5 responsabilidades:
-     A: test: globalSetup/Teardown
-     B: refactor: prisma lazy
-     C: test: cross-platform paths
-     D: docs: TDD skill
-     E: docs: openspec archive
-     → usuário aprova divisão ✓
-  9. Passo 8: 5 commits atômicos criados ✓
-  10. Passo 9: git log --oneline revisado → ordem lógica ✓
-  11. DoD: todos os 15 itens marcados ✓
+  2. Passo 1: descoberta → package.json + pnpm-workspace.yaml → monorepo pnpm ✓
+  3. Passo 2: varredura de TODOs/logs → limpo ✓
+  4. Passo 3: validação → pnpm lint/test + openspec validate → tudo passando ✓
+  5. Passo 4: escopo → sem código oportunista ✓
+  6. Passo 5: arquitetural → sem duplicação, acoplamento ou violações ✓
+  7. Passo 6: risk scan → sem credenciais, timeouts, fallbacks ✓
+  8. Passo 7: impacto → sem breaking changes; docs de env vars atualizadas ✓
+  9. Passo 8: specification review → design.md, tasks.md consistentes ✓
+  10. Passo 9: evidence review → fixtures e exemplos válidos ✓
+  11. Passo 10: openspec archive fix-testes --yes → archive/ ✓
+  12. Passo 11: Atomic Boundary Analysis → 5 responsabilidades claras →
+      prossegue automaticamente ✓
+  13. Passo 12: 5 commits atômicos criados ✓
+  14. Passo 13: git log revisado → ordem lógica, mensagens claras ✓
+  15. Passo 14: release readiness → sem migração, sem breaking change, deploy independente ✓
+  16. DoD: 20 itens marcados ✓
 
-Agente: "Change fix-testes concluída com 5 commits atômicos."
+Agente: "Change fix-testes concluída. 5 commits, pronta para produção."
 ```
 
 ---
 
-**Orçamento de tokens**: Aproximadamente 430 linhas, dentro do limite de 500.
+**Orçamento de tokens**: ≈500 linhas, dentro do limite.
 
-**Complementa**: `openspec-implementation` (implementação da change), `test-driven-development` (ciclo TDD por tarefa).
+**Complementa**: `openspec-implementation` (implementação), `test-driven-development` (ciclo TDD).
