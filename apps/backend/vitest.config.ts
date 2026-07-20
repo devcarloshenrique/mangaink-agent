@@ -7,6 +7,7 @@ export default defineConfig({
       NODE_ENV: 'test',
     },
     envFile: '.env.test',
+    globalSetup: './vitest.globalSetup.ts',
     pool: 'forks',
     coverage: {
       provider: 'v8',
