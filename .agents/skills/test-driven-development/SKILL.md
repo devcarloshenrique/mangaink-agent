@@ -203,6 +203,60 @@ Próximo teste falhando para a próxima funcionalidade.
 | **Claro** | Nome descreve comportamento | `test('teste1')` |
 | **Mostra intenção** | Demonstra a API desejada | Obscurece o que o código deveria fazer |
 
+## Compatibilidade Cross-Platform
+
+Testes devem passar em qualquer sistema operacional sem modificação.
+
+**Paths de sistema de arquivos:**
+- Construa caminhos com APIs da plataforma (`path.join`, `path.resolve`). Nunca concatene com `/` ou `\`.
+- ❌ `const p = basePath + '/covers/' + filename`
+- ✅ `const p = path.join(basePath, 'covers', filename)`
+
+**Asserções de path:**
+- Não compare strings de caminho com separadores fixos.
+- ❌ `expect(result.filePath).toContain('/covers/')`
+- ✅ `expect(result.filePath).toContain(path.join('sources', id, 'covers'))`
+
+**Mocks de I/O de arquivos:**
+- Mocks que armazenam paths como chaves (ex.: `Map<string, ...>`) devem usar a mesma convenção de path do código testado. Normalize separadores com `replace(/\\/g, '/')` para buscas por prefixo.
+
+## Isolamento de Recursos
+
+Testes não devem deixar rastros no ambiente.
+
+**Diretórios temporários:**
+- Use `os.tmpdir()` + sufixo aleatório para storage de teste. Nunca escreva em paths de desenvolvimento/produção.
+- Remova diretórios temporários ao final (`afterAll` ou `globalTeardown`).
+
+**Banco de dados:**
+- Testes de integração usam banco de dados dedicado (ex.: `_test_db`), nunca o banco de desenvolvimento.
+- Limpe registros entre testes (`beforeEach deleteMany`).
+
+**Limpeza automática:**
+- Todo recurso criado por um teste (arquivo, diretório, registro de BD) deve ser removido ao final, independentemente de o teste passar ou falhar.
+
+## Singletons e Efeitos Colaterais de Módulo
+
+A mera importação de um módulo não deve causar efeitos colaterais que impeçam a execução de testes.
+
+**Conexões e clients:**
+- Evite inicializar conexões de banco, Redis ou HTTP no `import` do módulo. Prefira factories ou inicialização lazy.
+- ❌ `export const prisma = new PrismaClient()` no nível do módulo
+- ✅ `let _client: PrismaClient; export function getClient() { ... }` com inicialização sob demanda
+
+**Variáveis de ambiente:**
+- O arquivo de ambiente de teste (`.env.test`) deve definir todas as variáveis obrigatórias (sem valor default no schema).
+- Um `safeParse` que crasha no `import` impede qualquer teste de executar.
+
+## Execução Paralela
+
+Se a suíte executa testes em paralelo (`fileParallelism > 1`), garanta que recursos compartilhados não causem conflitos.
+
+**Recursos por worker:**
+- Cada worker deve usar diretórios, portas e namespaces de banco independentes.
+- Use `pool: 'forks'` para isolamento de memória entre workers.
+- Considere desabilitar paralelismo quando os testes compartilham estado global.
+
 ## Por Que a Ordem Importa
 
 **"Vou escrever os testes depois para verificar se funciona"**
