@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import { ServeCoverUseCase } from '../../use-cases/serve-cover.use-case'
-import type { SourceCacheRepository } from '../../../scraping/repositories/source-cache.repository'
-import type { SourceMetadataFile } from '../../../scraping/types/metadata.types'
+
+const hoisted = vi.hoisted(() => {
+  const { tmpdir } = require('node:os')
+  const { randomUUID } = require('node:crypto')
+  const { join } = require('node:path')
+  const STORAGE_BASE = join(tmpdir(), 'mangaink-test-cover', randomUUID())
+  return { STORAGE_BASE, join }
+})
 
 vi.mock('../../../../shared/utils/filesystem', () => ({
   pathExists: vi.fn(async () => true),
@@ -12,8 +17,8 @@ vi.mock('../../../../shared/utils/filesystem', () => ({
 
 vi.mock('../../../../shared/config/env', () => ({
   env: {
-    STORAGE_PATH: '/test/storage',
-    CONVERSIONS_STORAGE_PATH: '/test/storage/conversions',
+    STORAGE_PATH: hoisted.STORAGE_BASE,
+    CONVERSIONS_STORAGE_PATH: hoisted.join(hoisted.STORAGE_BASE, 'conversions'),
     NODE_ENV: 'test',
     PORT: 3333,
     JWT_SECRET: 'test',
@@ -22,6 +27,10 @@ vi.mock('../../../../shared/config/env', () => ({
     KCC_DOCKER_IMAGE: 'kcc:test',
   },
 }))
+
+import { ServeCoverUseCase } from '../../use-cases/serve-cover.use-case'
+import type { SourceCacheRepository } from '../../../scraping/repositories/source-cache.repository'
+import type { SourceMetadataFile } from '../../../scraping/types/metadata.types'
 
 function makeSource(overrides: Partial<SourceMetadataFile> = {}): SourceMetadataFile {
   return {
@@ -52,11 +61,12 @@ describe('ServeCoverUseCase', () => {
 
     const result = await useCase.execute('src-test-001', 'cover_001')
 
-    expect(result.filePath).toContain('/covers/')
+    const expectedPath = hoisted.join(hoisted.STORAGE_BASE, 'sources', 'src-test-001', 'covers', 'cover_001.jpg')
+    expect(result.filePath).toBe(expectedPath)
     expect(result.contentType).toMatch(/image\/(jpeg|png|webp)/)
   })
 
-  it('lança erro para source inexistente', async () => {
+  it('lanca erro para source inexistente', async () => {
     const repo = {
       load: vi.fn(async () => null),
     } as unknown as SourceCacheRepository
@@ -64,10 +74,10 @@ describe('ServeCoverUseCase', () => {
 
     await expect(
       useCase.execute('src-nonexistent', 'cover_001'),
-    ).rejects.toThrow('não encontrada')
+    ).rejects.toThrow('encontrada')
   })
 
-  it('lança erro para cover não encontrado', async () => {
+  it('lanca erro para cover nao encontrado', async () => {
     const source = makeSource()
     const repo = {
       load: vi.fn(async () => source),
@@ -76,6 +86,6 @@ describe('ServeCoverUseCase', () => {
 
     await expect(
       useCase.execute('src-test-001', 'cover_999'),
-    ).rejects.toThrow('não encontrada')
+    ).rejects.toThrow('encontrada')
   })
 })
