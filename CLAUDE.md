@@ -360,7 +360,7 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `use-cases/` — `inspect-source.use-case.ts` (fluxo: normalizar URL → resolver provider → gerar sourceId → cache check → lock → enfileirar), `get-source.use-case.ts`
   - `services/` — `cache.service.ts` (TTL de 24h), `inspect-queue.service.ts` (BullMQ), `redis-lock.service.ts` (lock distribuído via Redis SET NX EX), `redis-pubsub.service.ts` (Pub/Sub para SSE), `source-events.service.ts` (bridge Redis → SSE)
   - `interfaces/` — `provider-strategy.interface.ts` (interface `IProviderStrategy` com `inspect()`, `getChapterImages()`, `downloadImage()`, `rateLimiter`)
-  - `providers/` — `provider.interface.ts` (deprecated re-export `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL + injeta `RateLimiter`), `mangalivre/` (implementação Cheerio: `MangaLivreStrategy`, parser com `parseChapterImages()` + `stripResolutionSuffix()`, selectors)
+  - `providers/` — `provider.interface.ts` (deprecated re-export `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL + injeta `RateLimiter`), `mangalivre/` (implementação Cheerio: `MangaLivreStrategy`, parser com `parseChapterImages()` + `stripResolutionSuffix()`, selectors), `imperiodabritannia/` (implementação API: `ImperioDaBritanniaStrategy`, mapper com `mapObraToInspectResponse()` + `mapCapituloToImageUrls()`, tipos da API externa)
   - `rate-limit/` — `types.ts` (`RateLimiterConfig`, `RateLimiter`), `rate-limiter.ts` (`createRateLimiter()` factory Bottleneck), `rate-limit-registry.ts` (lê `RATE_LIMIT_*` env vars, `Map<slug, config>` com fallback `default`)
   - `repositories/` — `source-cache.repository.ts` (interface), `filesystem-source.repository.ts` (implementação filesystem com `storage/sources/{sourceId}/metadata.json`)
   - `workers/` — `inspect-source.worker.ts` (BullMQ worker: scraping → Pub/Sub progress → salva metadata.json)
@@ -375,7 +375,8 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `downloadImage()` encapsula chamadas HTTP de download com rate limiting. O `ImageDownloaderService` chama `provider.downloadImage()` em vez de `httpClient.get()`.
   - Rate limits são configuráveis por provider via env vars `RATE_LIMIT_{SLUG}_{PARAM}`. Providers sem config específica usam `RATE_LIMIT_DEFAULT_*`.
   - O `ProviderResolver` injeta automaticamente o `RateLimiter` no constructor do provider (Composition Root).
-  - Adicionar novo provider: criar classe `implements IProviderStrategy` + registrar no array do `ProviderResolver` + (opicional) configurar env vars.
+  - Adicionar novo provider: criar classe `implements IProviderStrategy` + registrar no array do `ProviderResolver` + (opcional) configurar env vars.
+  - **Providers disponíveis:** `mangalivre` (engine `cheerio`, HTML parsing), `imperiodabritannia` (engine `api`, API REST direta com headers `x-noencryptionbritta` e `X-API-Token`)
 
 - **`conversion/`** — Conversão de mangás para formatos e-reader via KCC (Kindle Comic Converter)
   - `conversion.routes.ts` — 6 endpoints: GET /options, POST / (create), GET /:id, GET /:id/events (SSE fan-in), DELETE /:id e POST /:id/cancel
