@@ -1,5 +1,6 @@
 import type { IProviderStrategy } from '../interfaces/provider-strategy.interface'
 import { MangaLivreStrategy } from './mangalivre/mangalivre.provider'
+import { ImperioDaBritanniaStrategy } from './imperiodabritannia/imperiodabritannia.provider'
 import { ProviderNotFoundError, InvalidUrlError } from '../errors/scraping.errors'
 import { RateLimitRegistry } from '../rate-limit/rate-limit-registry'
 import { createRateLimiter } from '../rate-limit/rate-limiter'
@@ -25,7 +26,14 @@ export class ProviderResolver {
   private initProviders(): void {
     const mangalivreConfig = this.registry.get('mangalivre')
     const mangalivreLimiter = createRateLimiter(mangalivreConfig)
-    this.providers = [new MangaLivreStrategy(mangalivreLimiter)]
+
+    const britanniaConfig = this.registry.get('imperiodabritannia')
+    const britanniaLimiter = createRateLimiter(britanniaConfig)
+
+    this.providers = [
+      new MangaLivreStrategy(mangalivreLimiter),
+      new ImperioDaBritanniaStrategy(britanniaLimiter),
+    ]
   }
 
   /**

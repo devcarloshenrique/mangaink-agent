@@ -47,6 +47,8 @@ const envSchema = z.object({
   RATE_LIMIT_DEFAULT_MIN_TIME: numericMs.default(50),
   RATE_LIMIT_MANGALIVRE_MAX_CONCURRENT: positiveMs.default(8),
   RATE_LIMIT_MANGALIVRE_MIN_TIME: numericMs.default(0),
+  RATE_LIMIT_IMPERIODABRITANNIA_MAX_CONCURRENT: positiveMs.default(2),
+  RATE_LIMIT_IMPERIODABRITANNIA_MIN_TIME: numericMs.default(500),
 })
 
 const _env = envSchema.safeParse(process.env)

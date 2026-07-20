@@ -42,13 +42,27 @@ describe('ProviderResolver', () => {
       const provider = resolver.resolve('https://MANGALIVRE.to/manga/test/')
       expect(provider.slug).toBe('mangalivre')
     })
+
+    it('deve resolver provider para URL do ImperioDaBritannia', () => {
+      const provider = resolver.resolve('https://imperiodabritannia.net/manga/meu-manga/')
+      expect(provider.slug).toBe('imperiodabritannia')
+      expect(provider.name).toBe('Imperio da Britannia')
+      expect(provider.engine).toBe('api')
+    })
+
+    it('deve resolver provider para URL do ImperioDaBritannia sem barra final', () => {
+      const provider = resolver.resolve('https://imperiodabritannia.net/manga/meu-manga')
+      expect(provider.slug).toBe('imperiodabritannia')
+    })
   })
 
   describe('listAll', () => {
     it('deve listar todos os providers disponíveis', () => {
       const providers = resolver.listAll()
-      expect(providers).toHaveLength(1)
-      expect(providers[0].slug).toBe('mangalivre')
+      expect(providers).toHaveLength(2)
+      const slugs = providers.map((p) => p.slug)
+      expect(slugs).toContain('mangalivre')
+      expect(slugs).toContain('imperiodabritannia')
     })
 
     it('deve retornar providers com informações completas', () => {
