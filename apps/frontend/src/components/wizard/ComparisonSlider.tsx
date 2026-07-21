@@ -63,6 +63,7 @@ export function ComparisonSlider({
         value={pos}
         onChange={(e) => setPos(Number(e.target.value))}
         className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30"
+        aria-label="Comparação original vs convertido"
       />
     </div>
   );

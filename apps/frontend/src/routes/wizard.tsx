@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
@@ -46,16 +46,21 @@ import {
   Split,
   Loader2,
   AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { MockPage } from "@/components/comic/MockPage";
 import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
+import { ConversionFieldGroup } from "@/components/wizard/ConversionFieldGroup";
+import { Accordion } from "@/components/ui/accordion";
+import type { ConversionField, ConversionPreset, FieldGroupId } from "@/types/conversion";
+import { FIELD_CONFLICTS } from "@/types/conversion";
 import { cn } from "@/lib/utils";
 import { authGuard } from "./-authGuard";
 
 const wizardSearchSchema = z.object({
   sourceId: z.string().optional(),
   conversionId: z.string().optional(),
-})
+});
 
 export const Route = createFileRoute("/wizard")({
   beforeLoad: authGuard,
@@ -237,7 +242,6 @@ function WizardPage() {
       }));
       setVisited((v) => Math.max(v, 1));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scraping.state.status, scraping.state.sourceId, scraping.state.metadata]);
 
   // Pre-fill wizard data from reconvert (search params)
@@ -275,7 +279,10 @@ function WizardPage() {
               device: config.output.deviceId,
               format: config.output.format,
               fieldOptions: config.options as Record<string, string | number | boolean>,
-              meta: { title: config.metadata.title ?? source.metadata.title, author: config.metadata.author ?? source.metadata.author ?? "" },
+              meta: {
+                title: config.metadata.title ?? source.metadata.title,
+                author: config.metadata.author ?? source.metadata.author ?? "",
+              },
               errorHandlingStrategy: config.errorHandlingStrategy ?? "ignore",
               cover: config.cover,
             }));
@@ -290,8 +297,9 @@ function WizardPage() {
     }
 
     prefill();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [search.sourceId, search.conversionId]);
 
   const toggleChapter = (id: string) => {
@@ -580,9 +588,8 @@ function StepChapters({
   const sorted = useMemo(
     () => [...chapters].sort((a, b) => parseFloat(a.number) - parseFloat(b.number)),
     [chapters],
-  )
-  const effectiveChapters =
-    selected.size > 0 ? sorted.filter((c) => selected.has(c.id)) : sorted;
+  );
+  const effectiveChapters = selected.size > 0 ? sorted.filter((c) => selected.has(c.id)) : sorted;
   const effectiveTotal = effectiveChapters.length;
 
   const calculateVolume = (chapterId: string): number => {
@@ -662,16 +669,16 @@ function StepChapters({
             <Input
               type="number"
               min={1}
-               max={effectiveTotal}
-               value={volumeSize}
-               onChange={(e) => {
-                 const v = Math.max(1, Math.min(effectiveTotal, Number(e.target.value) || 1));
-                 onVolumeSize(v);
-               }}
-               className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
-             />
-             <span className="text-sm font-medium opacity-70">
-               = {Math.ceil(effectiveTotal / volumeSize)} volume(s)
+              max={effectiveTotal}
+              value={volumeSize}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(effectiveTotal, Number(e.target.value) || 1));
+                onVolumeSize(v);
+              }}
+              className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
+            />
+            <span className="text-sm font-medium opacity-70">
+              = {Math.ceil(effectiveTotal / volumeSize)} volume(s)
             </span>
           </div>
         ) : (
@@ -811,10 +818,7 @@ function StepCovers({
   const usedChapters = series.chapters.filter((c) => selectedChapters.has(c.id));
   // volumes: usar índices fixos (1..N) baseado nos capítulos disponíveis agrupados
   const volSize = 8;
-  const volumes = Array.from(
-    { length: Math.ceil(usedChapters.length / volSize) },
-    (_, i) => i + 1,
-  );
+  const volumes = Array.from({ length: Math.ceil(usedChapters.length / volSize) }, (_, i) => i + 1);
 
   const targets =
     mode === "single"
@@ -1000,6 +1004,31 @@ function describeRef(ref: CoverRef | undefined, covers: SourceInspectResponse["c
   return `Upload · ${ref.name}`;
 }
 
+function buildEffectiveState(
+  fields: ConversionField[],
+  fieldOptions: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  const base: Record<string, string | number | boolean> = {};
+  for (const f of fields) {
+    base[f.id] = fieldOptions[f.id] ?? f.default;
+  }
+  return base;
+}
+
+function isPresetMatch(
+  effectiveState: Record<string, string | number | boolean>,
+  preset: ConversionPreset,
+): boolean {
+  const presetKeys = Object.keys(preset.values);
+  if (presetKeys.length === 0) return false;
+  for (const key of presetKeys) {
+    if (effectiveState[key] !== preset.values[key]) return false;
+  }
+  return true;
+}
+
+const GROUP_ORDER: string[] = ["reading", "processing", "image", "output"];
+
 function StepConvert({
   data,
   update,
@@ -1016,14 +1045,155 @@ function StepConvert({
   const [previewDarkMode, setPreviewDarkMode] = useState(false);
   const [doublePageSplit, setDoublePageSplit] = useState(false);
 
-  // Inicializa device/format/preset com primeiro valor do catálogo, se ainda não definido
   useEffect(() => {
     if (!options) return;
     if (!data.device && options.devices.length > 0) update("device", options.devices[0].id);
     if (!data.format && options.formats.length > 0) update("format", options.formats[0].id);
-    if (!data.preset && options.presets.length > 0) update("preset", options.presets[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options]);
+
+  // --- Preset ↔ Fields sync logic ---
+  const groupedFields = useMemo(() => {
+    if (!options?.fields) return {} as Record<string, ConversionField[]>;
+    const groups: Record<string, ConversionField[]> = {};
+    for (const field of options.fields) {
+      (groups[field.group] ??= []).push(field);
+    }
+    return groups;
+  }, [options?.fields]);
+
+  const effectiveState = useMemo(() => {
+    if (!options?.fields) return {};
+    return buildEffectiveState(options.fields, data.fieldOptions);
+  }, [data.fieldOptions, options?.fields]);
+
+  const activePresetId = useMemo(() => {
+    if (!options?.presets) return null;
+    for (const preset of options.presets) {
+      if (isPresetMatch(effectiveState, preset)) return preset.id;
+    }
+    return null;
+  }, [effectiveState, options?.presets]);
+
+  const isNoProcessing = data.fieldOptions.noProcessing === true;
+
+  const handlePresetChange = useCallback(
+    (presetId: string) => {
+      if (!presetId) return;
+      const preset = options?.presets.find((p) => p.id === presetId);
+      if (!preset) return;
+
+      const previous = { ...data.fieldOptions };
+      update("preset", presetId);
+
+      if (preset.exclusive) {
+        update("fieldOptions", { ...preset.values });
+      } else {
+        update("fieldOptions", { ...data.fieldOptions, ...preset.values });
+      }
+
+      const changedKeys = Object.keys(preset.values);
+      const sameAsBefore = changedKeys.every((k) => data.fieldOptions[k] === preset.values[k]);
+      if (!sameAsBefore) {
+        const changedCount = changedKeys.filter(
+          (k) => data.fieldOptions[k] !== preset.values[k],
+        ).length;
+        toast.success(
+          `Preset "${preset.name}" — ${changedCount} opção${changedCount > 1 ? "ões" : ""} ajustada${changedCount > 1 ? "s" : ""}`,
+          {
+            action: {
+              label: "Desfazer",
+              onClick: () => update("fieldOptions", previous),
+            },
+          },
+        );
+      }
+    },
+    [options?.presets, data.fieldOptions, update],
+  );
+
+  const handleFieldChange = useCallback(
+    (id: string, value: string | number | boolean) => {
+      const next = { ...data.fieldOptions, [id]: value };
+      const isTruthy =
+        typeof value === "boolean" ? value : value !== false && value !== "" && value !== 0;
+      if (isTruthy && FIELD_CONFLICTS[id]) {
+        for (const conflictId of FIELD_CONFLICTS[id]) {
+          delete next[conflictId];
+        }
+      }
+      update("fieldOptions", next);
+    },
+    [data.fieldOptions, update],
+  );
+
+  const handleFieldReset = useCallback(
+    (id: string) => {
+      const next = { ...data.fieldOptions };
+      delete next[id];
+      update("fieldOptions", next);
+    },
+    [data.fieldOptions, update],
+  );
+
+  const handleGroupReset = useCallback(
+    (fieldIds: string[]) => {
+      const next = { ...data.fieldOptions };
+      for (const id of fieldIds) {
+        delete next[id];
+      }
+      update("fieldOptions", next);
+    },
+    [data.fieldOptions, update],
+  );
+
+  const handleResetDefaults = useCallback(() => {
+    if (Object.keys(data.fieldOptions).length > 0) {
+      if (
+        !window.confirm(
+          "Restaurar todos os campos para os valores padrão? Esta ação não pode ser desfeita.",
+        )
+      ) {
+        return;
+      }
+    }
+    update("fieldOptions", {});
+    if (options?.presets.length) {
+      update("preset", options.presets[0].id);
+    }
+  }, [options?.presets, data.fieldOptions, update]);
+
+  const conflictDisabledFields = useMemo(() => {
+    const disabled = new Set<string>();
+    for (const [sourceId, targets] of Object.entries(FIELD_CONFLICTS)) {
+      if (data.fieldOptions[sourceId] === true) {
+        for (const targetId of targets) {
+          if (!data.fieldOptions[targetId]) {
+            disabled.add(targetId);
+          }
+        }
+      }
+    }
+    return disabled;
+  }, [data.fieldOptions]);
+
+  const conflictReasons = useMemo(() => {
+    const reasons = new Map<string, string>();
+    for (const [sourceId, targets] of Object.entries(FIELD_CONFLICTS)) {
+      if (data.fieldOptions[sourceId] === true) {
+        const sourceField = options?.fields?.find((f) => f.id === sourceId);
+        const sourceLabel = sourceField?.label ?? sourceId;
+        for (const targetId of targets) {
+          if (!data.fieldOptions[targetId]) {
+            reasons.set(targetId, sourceLabel);
+          }
+        }
+      }
+    }
+    return reasons;
+  }, [data.fieldOptions, options?.fields]);
+
+  // --- End sync logic ---
 
   const presetFilter: Record<string, string> = {
     default: "contrast(1) brightness(1)",
@@ -1044,14 +1214,13 @@ function StepConvert({
     k_fire_hd: { w: 240, h: 150 },
   };
   const frame = deviceFrame[data.device] ?? deviceFrame.kpw_11;
-  const filter = presetFilter[data.preset] ?? "none";
+  const filter = data.preset ? (presetFilter[data.preset] ?? "none") : "none";
 
   const selectedChapters =
     data.inspectData?.chapters.filter((c) => data.selectedChapters.has(c.id)) ?? [];
   const currentChapter = selectedChapters.find((c) => c.id === previewChapterId);
   const maxPage = currentChapter?.pages ?? 1;
 
-  // Estimate time: ~0.5s per page total
   const totalPages = selectedChapters.reduce((s, c) => s + (c.pages ?? 20), 0);
   const estSeconds = Math.max(5, Math.round(totalPages * 0.5));
   const estMin = Math.floor(estSeconds / 60);
@@ -1074,6 +1243,34 @@ function StepConvert({
 
   const kindleLabel = options?.devices.find((d) => d.id === data.device)?.name ?? data.device ?? "";
 
+  const presetOptions = options?.presets ?? [];
+  const presetDisplayName = activePresetId
+    ? presetOptions.find((p) => p.id === activePresetId)?.name
+    : "Personalizado";
+
+  const renderGroup = (groupId: string, fields: ConversionField[]) => {
+    if (!fields || fields.length === 0) return null;
+    const groupFieldIds = fields.map((f) => f.id);
+    const groupHasOverrides = groupFieldIds.some((id) => id in data.fieldOptions);
+    const groupOverrideCount = groupFieldIds.filter((id) => id in data.fieldOptions).length;
+    return (
+      <ConversionFieldGroup
+        key={groupId}
+        groupId={groupId as FieldGroupId}
+        fields={fields}
+        values={data.fieldOptions}
+        onChange={handleFieldChange}
+        onReset={handleFieldReset}
+        onResetGroup={() => handleGroupReset(groupFieldIds)}
+        disabled={isNoProcessing}
+        disabledFieldIds={conflictDisabledFields}
+        conflictReasons={conflictReasons}
+        hasOverrides={groupHasOverrides}
+        overrideCount={groupOverrideCount}
+      />
+    );
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -1083,297 +1280,514 @@ function StepConvert({
       />
 
       {optLoading ? (
-        <div className="flex items-center gap-2 opacity-60">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="font-display text-base">Carregando opções…</span>
+        <div className="space-y-5 animate-pulse">
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <div className="h-5 w-32 bg-muted rounded border-[2px] border-ink/20" />
+              <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-5 w-28 bg-muted rounded border-[2px] border-ink/20" />
+              <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <div className="h-5 w-20 bg-muted rounded border-[2px] border-ink/20" />
+              <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-5 w-24 bg-muted rounded border-[2px] border-ink/20" />
+              <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-5 w-20 bg-muted rounded border-[2px] border-ink/20" />
+              <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+            </div>
+          </div>
+          <div className="h-11 bg-muted rounded border-[2px] border-ink/20" />
+          <div className="h-[72px] bg-muted rounded-lg border-[3px] border-ink/20" />
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="font-display text-base flex items-center gap-1">
-              <Tablet className="h-4 w-4" /> Perfil do dispositivo
-            </Label>
-            <Select value={data.device} onValueChange={(v) => update("device", v)}>
-              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-[3px] border-ink">
-                {(options?.devices ?? []).map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="font-display text-base">Formato de saída</Label>
-            <Select value={data.format} onValueChange={(v) => update("format", v)}>
-              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-[3px] border-ink">
-                {(options?.formats ?? []).map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label className="font-display text-base">Preset</Label>
-            <Select value={data.preset} onValueChange={(v) => update("preset", v)}>
-              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-[3px] border-ink">
-                {(options?.presets ?? []).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <span className="font-display mr-2">{p.name}</span>
-                    <span className="opacity-70 text-xs">— {p.description}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs font-medium opacity-70">
-              {options?.presets.find((p) => p.id === data.preset)?.description}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="font-display text-base">Título (opcional)</Label>
-            <Input
-              value={data.meta.title}
-              onChange={(e) => update("meta", { ...data.meta, title: e.target.value })}
-              className="border-[3px] border-ink h-11 shadow-comic-sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="font-display text-base">Autor (opcional)</Label>
-            <Input
-              value={data.meta.author}
-              onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
-              className="border-[3px] border-ink h-11 shadow-comic-sm"
-            />
-          </div>
-        </div>
-      )}
-
-        {/* Estratégia de páginas corrompidas */}
-        {!optLoading && (
-          <div className="space-y-2 md:col-span-2">
-            <Label className="font-display text-base flex items-center gap-1">
-              <AlertTriangle className="h-4 w-4" /> Páginas indisponíveis na origem
-            </Label>
-            <Select
-              value={data.errorHandlingStrategy}
-              onValueChange={(v) => update("errorHandlingStrategy", v as "ignore" | "skip_chapter" | "abort")}
-            >
-              <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-[3px] border-ink">
-                <SelectItem value="ignore">
-                  Ignorar e continuar (placeholder)
-                </SelectItem>
-                <SelectItem value="skip_chapter">
-                  Pular capítulo
-                </SelectItem>
-                <SelectItem value="abort">
-                  Abortar tudo
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs font-medium opacity-70">
-              {data.errorHandlingStrategy === "ignore"
-                ? "Substitui páginas corrompidas por um aviso visual e finaliza a conversão."
-                : data.errorHandlingStrategy === "skip_chapter"
-                  ? "Cancela apenas o capítulo com erro, mas continua convertendo o resto."
-                  : "Para todo o processo imediatamente ao encontrar a primeira página corrompida."}
-            </p>
-          </div>
-        )}
-
-        {/* Time estimate */}
-      <ComicPanel bg="blue" padding="md" tilt="left">
-        <div className="flex items-center gap-3">
-          <Clock className="h-6 w-6 shrink-0" />
-          <div>
-            <p className="font-display text-lg">Tempo estimado: {estLabel}</p>
-            <p className="text-xs font-medium opacity-80">
-              {selectedChapters.length} capítulos • {totalPages} páginas • preset "{data.preset}"
-            </p>
-          </div>
-        </div>
-      </ComicPanel>
-
-      {/* Preview */}
-      <div className="border-t-[3px] border-dashed border-ink pt-5 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="font-display text-2xl flex-1">Preview da página</h3>
-          <span className="font-display text-xs bg-comic-blue text-accent-foreground border-[2.5px] border-ink shadow-comic-sm px-2 py-0.5 rounded">
-            servidor
-          </span>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="font-display text-sm">Capítulo</Label>
-            <Select
-              value={previewChapterId}
-              onValueChange={(v) => {
-                setPreviewChapterId(v);
-                setPreviewReady(false);
-              }}
-            >
-              <SelectTrigger className="border-[2.5px] border-ink h-10 shadow-comic-sm">
-                <SelectValue placeholder="Selecione um capítulo" />
-              </SelectTrigger>
-              <SelectContent className="border-[2.5px] border-ink">
-                {selectedChapters.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    Cap. {c.number} — {c.title} ({c.pages}p)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="font-display text-sm">Página</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={maxPage}
-                value={previewPage}
-                onChange={(e) => {
-                  setPreviewPage(Number(e.target.value));
-                  setPreviewReady(false);
-                }}
-                className="border-[2.5px] border-ink h-10 shadow-comic-sm w-24"
-                disabled={!previewChapterId}
-              />
-              <span className="text-xs font-medium opacity-70">
-                de {currentChapter ? maxPage : "—"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <Button
-          onClick={handleGeneratePreview}
-          disabled={!previewChapterId || previewLoading}
-          className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
-        >
-          {previewLoading ? (
-            <>
-              <span className="animate-spin mr-2">⏳</span> Gerando no servidor…
-            </>
-          ) : (
-            <>
-              <Zap className="h-4 w-4 mr-1" /> Gerar Preview
-            </>
-          )}
-        </Button>
-
-        {previewReady ? (
-          <div className="space-y-4">
-            {/* Controls row */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={previewDarkMode ? "default" : "outline"}
-                onClick={() => setPreviewDarkMode((v) => !v)}
-                className={cn(
-                  "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
-                  previewDarkMode && "bg-comic-ink text-comic-cream",
-                )}
-              >
-                <Moon className="h-3.5 w-3.5 mr-1" /> Modo escuro Kindle
-              </Button>
-              <Button
-                size="sm"
-                variant={doublePageSplit ? "default" : "outline"}
-                onClick={() => setDoublePageSplit((v) => !v)}
-                className={cn(
-                  "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
-                  doublePageSplit && "bg-comic-red text-primary-foreground",
-                )}
-              >
-                <Split className="h-3.5 w-3.5 mr-1" /> Split página dupla
-              </Button>
-            </div>
-
-            {/* Double page split detection mock */}
-            {doublePageSplit && (
-              <ComicPanel bg="red" padding="sm" tilt="left" className="animate-comic-pop">
-                <div className="flex items-center gap-2">
-                  <Split className="h-4 w-4" />
-                  <p className="font-display text-sm">
-                    Página dupla detectada! Será dividida automaticamente.
+        <>
+          <div className="lg:grid lg:grid-cols-[1fr,400px] lg:gap-6">
+            <div className="space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="font-display text-base flex items-center gap-1">
+                    <Tablet className="h-4 w-4" /> Perfil do dispositivo
+                  </Label>
+                  <Select value={data.device} onValueChange={(v) => update("device", v)}>
+                    <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-[3px] border-ink">
+                      {(options?.devices ?? []).map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-display text-base flex items-center gap-1">
+                    Formato de saída
+                  </Label>
+                  <Select value={data.format} onValueChange={(v) => update("format", v)}>
+                    <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-[3px] border-ink">
+                      {(options?.formats ?? []).map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="font-display text-base">Preset</Label>
+                  <Select value={activePresetId ?? ""} onValueChange={handlePresetChange}>
+                    <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm font-display">
+                      <SelectValue placeholder="Selecione um preset">
+                        {presetDisplayName}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="border-[3px] border-ink">
+                      {presetOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <span className="font-display mr-2">{p.name}</span>
+                          <span className="opacity-70 text-xs">— {p.description}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs font-medium opacity-70">
+                    {presetOptions.find((p) => p.id === activePresetId)?.description ??
+                      "Configurações personalizadas — nenhum preset corresponde exatamente."}
                   </p>
                 </div>
-              </ComicPanel>
-            )}
-
-            {/* Preview display */}
-            {previewDarkMode ? (
-              <div className="space-y-2">
-                <p className="font-display text-sm opacity-80">No {kindleLabel} (modo escuro)</p>
-                <div
-                  className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-800 shadow-comic-sm inline-block"
-                  style={{ width: frame.w + 14 }}
-                >
-                  <div style={{ filter: `${filter} invert(1) hue-rotate(180deg)` }}>
-                    <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
-                  </div>
+                <div className="space-y-2">
+                  <Label className="font-display text-base">Título (opcional)</Label>
+                  <Input
+                    value={data.meta.title}
+                    onChange={(e) => update("meta", { ...data.meta, title: e.target.value })}
+                    className="border-[3px] border-ink h-11 shadow-comic-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-display text-base">Autor (opcional)</Label>
+                  <Input
+                    value={data.meta.author}
+                    onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
+                    className="border-[3px] border-ink h-11 shadow-comic-sm"
+                  />
                 </div>
               </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 items-start">
-                <div className="space-y-2">
-                  <p className="font-display text-sm opacity-80">Original</p>
-                  <div className="inline-block">
-                    <ComparisonSlider
-                      left={<MockPage seed={previewSeed} width={frame.w} height={frame.h} />}
-                      right={
+
+              <div className="space-y-2">
+                <Label className="font-display text-base flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" /> Páginas indisponíveis na origem
+                </Label>
+                <Select
+                  value={data.errorHandlingStrategy}
+                  onValueChange={(v) =>
+                    update("errorHandlingStrategy", v as "ignore" | "skip_chapter" | "abort")
+                  }
+                >
+                  <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-[3px] border-ink">
+                    <SelectItem value="ignore">Ignorar e continuar (placeholder)</SelectItem>
+                    <SelectItem value="skip_chapter">Pular capítulo</SelectItem>
+                    <SelectItem value="abort">Abortar tudo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs font-medium opacity-70">
+                  {data.errorHandlingStrategy === "ignore"
+                    ? "Substitui páginas corrompidas por um aviso visual e finaliza a conversão."
+                    : data.errorHandlingStrategy === "skip_chapter"
+                      ? "Cancela apenas o capítulo com erro, mas continua convertendo o resto."
+                      : "Para todo o processo imediatamente ao encontrar a primeira página corrompida."}
+                </p>
+              </div>
+
+              <div className="border-t-[3px] border-dashed border-ink pt-5 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-display text-2xl flex-1">Opções de conversão</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetDefaults}
+                    className="border-[2.5px] border-ink shadow-comic-sm font-display h-8"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restaurar padrões
+                  </Button>
+                </div>
+                {options?.fields && options.fields.length > 0 ? (
+                  <Accordion type="single" collapsible defaultValue="reading">
+                    {GROUP_ORDER.map((groupId) => renderGroup(groupId, groupedFields[groupId]))}
+                    {Object.keys(groupedFields)
+                      .filter((gid) => !GROUP_ORDER.includes(gid) && gid !== "format")
+                      .map((groupId) => renderGroup(groupId, groupedFields[groupId]))}
+                  </Accordion>
+                ) : (
+                  <p className="text-sm font-medium opacity-60">Nenhuma opção disponível.</p>
+                )}
+              </div>
+
+              <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b-[3px] border-ink/20 lg:hidden">
+                <div className="flex items-center gap-3 text-sm font-medium">
+                  <span className="font-display">{kindleLabel}</span>
+                  <span className="opacity-40">|</span>
+                  <span className="font-display text-comic-blue">{presetDisplayName}</span>
+                  <span className="opacity-40">|</span>
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{estLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden lg:block">
+              <div className="sticky top-4 space-y-4">
+                <ComicPanel bg="blue" padding="md" tilt="left">
+                  <div className="flex items-center gap-3">
+                    <Clock className="h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="font-display text-base">Tempo estimado: {estLabel}</p>
+                      <p className="text-[11px] font-medium opacity-80">
+                        {selectedChapters.length} cap &bull; {totalPages} p&aacute;g
+                      </p>
+                    </div>
+                  </div>
+                </ComicPanel>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-display text-base flex-1">Preview da p&aacute;gina</h3>
+                    <span className="font-display text-[10px] bg-comic-blue text-accent-foreground border-[2px] border-ink shadow-comic-sm px-1.5 py-0.5 rounded">
+                      servidor
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="font-display text-sm">Cap&iacute;tulo</Label>
+                    <Select
+                      value={previewChapterId}
+                      onValueChange={(v) => {
+                        setPreviewChapterId(v);
+                        setPreviewReady(false);
+                      }}
+                    >
+                      <SelectTrigger className="border-[2.5px] border-ink h-9 shadow-comic-sm">
+                        <SelectValue placeholder="Selecione um cap&iacute;tulo" />
+                      </SelectTrigger>
+                      <SelectContent className="border-[2.5px] border-ink">
+                        {selectedChapters.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            Cap. {c.number} &mdash; {c.title} ({c.pages}p)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="font-display text-sm">P&aacute;gina</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={maxPage}
+                        value={previewPage}
+                        onChange={(e) => {
+                          setPreviewPage(Number(e.target.value));
+                          setPreviewReady(false);
+                        }}
+                        className="border-[2.5px] border-ink h-9 shadow-comic-sm w-20"
+                        disabled={!previewChapterId}
+                      />
+                      <span className="text-xs font-medium opacity-70">
+                        de {currentChapter ? maxPage : "&mdash;"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleGeneratePreview}
+                    disabled={!previewChapterId || previewLoading}
+                    size="sm"
+                    className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[2.5px] border-ink shadow-comic font-display"
+                  >
+                    {previewLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Gerando&hellip;
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-3.5 w-3.5 mr-1" /> Gerar Preview
+                      </>
+                    )}
+                  </Button>
+
+                  {previewReady ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          size="sm"
+                          variant={previewDarkMode ? "default" : "outline"}
+                          onClick={() => setPreviewDarkMode((v) => !v)}
+                          className={cn(
+                            "border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-7",
+                            previewDarkMode && "bg-comic-ink text-comic-cream",
+                          )}
+                        >
+                          <Moon className="h-3 w-3 mr-0.5" /> Modo escuro
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={doublePageSplit ? "default" : "outline"}
+                          onClick={() => setDoublePageSplit((v) => !v)}
+                          className={cn(
+                            "border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-7",
+                            doublePageSplit && "bg-comic-red text-primary-foreground",
+                          )}
+                        >
+                          <Split className="h-3 w-3 mr-0.5" /> Split dupla
+                        </Button>
+                      </div>
+
+                      {doublePageSplit && (
+                        <ComicPanel bg="red" padding="sm" tilt="left" className="animate-comic-pop">
+                          <div className="flex items-center gap-2">
+                            <Split className="h-4 w-4" />
+                            <p className="font-display text-sm">
+                              P&aacute;gina dupla detectada! Ser&aacute; dividida automaticamente.
+                            </p>
+                          </div>
+                        </ComicPanel>
+                      )}
+
+                      {previewDarkMode ? (
+                        <div className="space-y-2">
+                          <p className="font-display text-sm opacity-80">
+                            No {kindleLabel} (modo escuro)
+                          </p>
+                          <div
+                            className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-800 shadow-comic-sm inline-block"
+                            style={{ width: frame.w + 14 }}
+                          >
+                            <div style={{ filter: `${filter} invert(1) hue-rotate(180deg)` }}>
+                              <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <ComparisonSlider
+                            left={<MockPage seed={previewSeed} width={frame.w} height={frame.h} />}
+                            right={
+                              <div style={{ filter }}>
+                                <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                              </div>
+                            }
+                            leftLabel="Original"
+                            rightLabel="Convertido"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border-[3px] border-dashed border-ink rounded-lg p-6 text-center">
+                      <p className="font-display text-xs opacity-60">
+                        {previewChapterId
+                          ? 'Clique em "Gerar Preview" para ver a convers&atilde;o.'
+                          : 'Selecione cap&iacute;tulo e p&aacute;gina, depois clique em "Gerar Preview".'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ComicPanel bg="blue" padding="md" tilt="left" className="lg:hidden">
+            <div className="flex items-center gap-3">
+              <Clock className="h-6 w-6 shrink-0" />
+              <div>
+                <p className="font-display text-lg">Tempo estimado: {estLabel}</p>
+                <p className="text-xs font-medium opacity-80">
+                  {selectedChapters.length} capítulos &bull; {totalPages} páginas
+                </p>
+              </div>
+            </div>
+          </ComicPanel>
+
+          <div className="lg:hidden border-t-[3px] border-dashed border-ink pt-5 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-display text-2xl flex-1">Preview da página</h3>
+              <span className="font-display text-xs bg-comic-blue text-accent-foreground border-[2.5px] border-ink shadow-comic-sm px-2 py-0.5 rounded">
+                servidor
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="font-display text-sm">Capítulo</Label>
+                <Select
+                  value={previewChapterId}
+                  onValueChange={(v) => {
+                    setPreviewChapterId(v);
+                    setPreviewReady(false);
+                  }}
+                >
+                  <SelectTrigger className="border-[2.5px] border-ink h-10 shadow-comic-sm">
+                    <SelectValue placeholder="Selecione um capítulo" />
+                  </SelectTrigger>
+                  <SelectContent className="border-[2.5px] border-ink">
+                    {selectedChapters.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        Cap. {c.number} &mdash; {c.title} ({c.pages}p)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-display text-sm">Página</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={maxPage}
+                    value={previewPage}
+                    onChange={(e) => {
+                      setPreviewPage(Number(e.target.value));
+                      setPreviewReady(false);
+                    }}
+                    className="border-[2.5px] border-ink h-10 shadow-comic-sm w-24"
+                    disabled={!previewChapterId}
+                  />
+                  <span className="text-xs font-medium opacity-70">
+                    de {currentChapter ? maxPage : "&mdash;"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleGeneratePreview}
+              disabled={!previewChapterId || previewLoading}
+              className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
+            >
+              {previewLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" /> Gerando&hellip;
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-1" /> Gerar Preview
+                </>
+              )}
+            </Button>
+
+            {previewReady ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={previewDarkMode ? "default" : "outline"}
+                    onClick={() => setPreviewDarkMode((v) => !v)}
+                    className={cn(
+                      "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
+                      previewDarkMode && "bg-comic-ink text-comic-cream",
+                    )}
+                  >
+                    <Moon className="h-3.5 w-3.5 mr-1" /> Modo escuro Kindle
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={doublePageSplit ? "default" : "outline"}
+                    onClick={() => setDoublePageSplit((v) => !v)}
+                    className={cn(
+                      "border-[2.5px] border-ink shadow-comic-sm font-display text-sm",
+                      doublePageSplit && "bg-comic-red text-primary-foreground",
+                    )}
+                  >
+                    <Split className="h-3.5 w-3.5 mr-1" /> Split página dupla
+                  </Button>
+                </div>
+
+                {doublePageSplit && (
+                  <ComicPanel bg="red" padding="sm" tilt="left" className="animate-comic-pop">
+                    <div className="flex items-center gap-2">
+                      <Split className="h-4 w-4" />
+                      <p className="font-display text-sm">
+                        Página dupla detectada! Será dividida automaticamente.
+                      </p>
+                    </div>
+                  </ComicPanel>
+                )}
+
+                {previewDarkMode ? (
+                  <div className="space-y-2">
+                    <p className="font-display text-sm opacity-80">
+                      No {kindleLabel} (modo escuro)
+                    </p>
+                    <div
+                      className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-800 shadow-comic-sm inline-block"
+                      style={{ width: frame.w + 14 }}
+                    >
+                      <div style={{ filter: `${filter} invert(1) hue-rotate(180deg)` }}>
+                        <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 items-start">
+                    <div className="space-y-2">
+                      <p className="font-display text-sm opacity-80">Original</p>
+                      <div className="inline-block">
+                        <ComparisonSlider
+                          left={<MockPage seed={previewSeed} width={frame.w} height={frame.h} />}
+                          right={
+                            <div style={{ filter }}>
+                              <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                            </div>
+                          }
+                          leftLabel="Original"
+                          rightLabel="Convertido"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="font-display text-sm opacity-80">No {kindleLabel}</p>
+                      <div
+                        className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
+                        style={{ width: frame.w + 14 }}
+                      >
                         <div style={{ filter }}>
                           <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
                         </div>
-                      }
-                      leftLabel="Original"
-                      rightLabel="Convertido"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="font-display text-sm opacity-80">No {kindleLabel}</p>
-                  <div
-                    className="border-[3px] border-ink rounded-md p-1.5 bg-zinc-200 shadow-comic-sm inline-block"
-                    style={{ width: frame.w + 14 }}
-                  >
-                    <div style={{ filter }}>
-                      <MockPage seed={previewSeed} width={frame.w} height={frame.h} />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+              </div>
+            ) : (
+              <div className="border-[3px] border-dashed border-ink rounded-lg p-8 text-center">
+                <p className="font-display text-sm opacity-60">
+                  {previewChapterId
+                    ? 'Clique em "Gerar Preview" para ver a conversão no servidor.'
+                    : 'Selecione um capítulo e uma página, depois clique em "Gerar Preview".'}
+                </p>
               </div>
             )}
           </div>
-        ) : (
-          <div className="border-[3px] border-dashed border-ink rounded-lg p-8 text-center">
-            <p className="font-display text-sm opacity-60">
-              {previewChapterId
-                ? 'Clique em "Gerar Preview" para ver a conversão no servidor.'
-                : 'Selecione um capítulo e uma página, depois clique em "Gerar Preview".'}
-            </p>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
