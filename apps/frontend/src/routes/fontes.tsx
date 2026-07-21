@@ -158,9 +158,7 @@ function FontesPage() {
           </div>
           <div>
             <h1 className="font-display text-4xl uppercase leading-none">Fontes homologadas</h1>
-            <p className="text-sm font-medium opacity-80 mt-1">
-              Os sites que o Mangaink sabe ler.
-            </p>
+            <p className="text-sm font-medium opacity-80 mt-1">Os sites que o Mangaink sabe ler.</p>
           </div>
         </div>
 

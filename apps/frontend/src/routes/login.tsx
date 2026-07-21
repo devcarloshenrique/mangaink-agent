@@ -15,9 +15,7 @@ import { ApiError } from "@/lib/api";
 
 // ─── Schema de validação ───────────────────────────────────────────────────────
 const loginSchema = z.object({
-  identifier: z
-    .string()
-    .min(3, "E-mail ou nome de usuário deve ter no mínimo 3 caracteres"),
+  identifier: z.string().min(3, "E-mail ou nome de usuário deve ter no mínimo 3 caracteres"),
   password: z.string().min(1, "Senha é obrigatória"),
 });
 
@@ -141,10 +139,7 @@ function LoginPage() {
 
           <div className="mt-4 text-center">
             <span className="text-sm font-medium opacity-70">Não tem conta? </span>
-            <Link
-              to="/cadastro"
-              className="text-sm font-display text-comic-blue hover:underline"
-            >
+            <Link to="/cadastro" className="text-sm font-display text-comic-blue hover:underline">
               Criar conta
             </Link>
           </div>

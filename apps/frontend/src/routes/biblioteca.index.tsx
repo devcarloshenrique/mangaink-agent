@@ -72,10 +72,18 @@ function SeriesCover({ group, className }: { group: SeriesGroup; className?: str
 
 function getSeriesStatusBadge(group: SeriesGroup) {
   if (group.status === "active") {
-    return <OnomatopoeiaBadge variant="blue" size="sm">ATIVO</OnomatopoeiaBadge>;
+    return (
+      <OnomatopoeiaBadge variant="blue" size="sm">
+        ATIVO
+      </OnomatopoeiaBadge>
+    );
   }
   if (group.status === "mixed") {
-    return <OnomatopoeiaBadge variant="yellow" size="sm">MISTO</OnomatopoeiaBadge>;
+    return (
+      <OnomatopoeiaBadge variant="yellow" size="sm">
+        MISTO
+      </OnomatopoeiaBadge>
+    );
   }
   return null;
 }
@@ -97,9 +105,9 @@ function BibliotecaPage() {
       return groupConversionsBySource(all.filter((c) => c.status === "completed"));
     }
     if (activeTab === "converting") {
-      return groupConversionsBySource(all.filter((c) =>
-        c.status === "queued" || c.status === "processing"
-      ));
+      return groupConversionsBySource(
+        all.filter((c) => c.status === "queued" || c.status === "processing"),
+      );
     }
     return groupConversionsBySource(all);
   }, [allConversions, activeTab]);
@@ -169,7 +177,9 @@ function BibliotecaPage() {
             onClick={() => setActiveTab("all")}
             className={cn(
               "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all",
-              activeTab === "all" ? "bg-comic-red text-primary-foreground border-ink shadow-comic-sm" : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+              activeTab === "all"
+                ? "bg-comic-red text-primary-foreground border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
             )}
           >
             Todas ({totalCount})
@@ -179,7 +189,9 @@ function BibliotecaPage() {
             onClick={() => setActiveTab("converting")}
             className={cn(
               "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all flex items-center gap-1.5",
-              activeTab === "converting" ? "bg-comic-yellow text-comic-ink border-ink shadow-comic-sm" : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+              activeTab === "converting"
+                ? "bg-comic-yellow text-comic-ink border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
             )}
           >
             {convertingCount > 0 && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -190,7 +202,9 @@ function BibliotecaPage() {
             onClick={() => setActiveTab("completed")}
             className={cn(
               "px-4 py-2 rounded-md border-[3px] font-display text-sm transition-all",
-              activeTab === "completed" ? "bg-comic-blue text-accent-foreground border-ink shadow-comic-sm" : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+              activeTab === "completed"
+                ? "bg-comic-blue text-accent-foreground border-ink shadow-comic-sm"
+                : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
             )}
           >
             Concluídas ({allConversions.filter((c) => c.status === "completed").length})
@@ -246,18 +260,27 @@ function BibliotecaPage() {
                     params={{ sourceId: group.sourceId }}
                     className="block focus:outline-none cursor-pointer group transition-transform group-hover:-translate-y-1"
                   >
-                    <ComicPanel bg="card" padding="sm" tilt={i % 2 === 0 ? "left" : "right"} className="h-full">
+                    <ComicPanel
+                      bg="card"
+                      padding="sm"
+                      tilt={i % 2 === 0 ? "left" : "right"}
+                      className="h-full"
+                    >
                       <div className="aspect-[2/3] border-[3px] border-ink rounded mb-2 flex items-end p-2 shadow-comic-sm relative bg-muted overflow-hidden">
                         <SeriesCover group={group} />
                         <div className="bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs relative z-10">
                           {highlightMatch(group.title, searchQuery)}
                         </div>
                       </div>
-                      <p className="font-display text-base truncate">{highlightMatch(group.title, searchQuery)}</p>
+                      <p className="font-display text-base truncate">
+                        {highlightMatch(group.title, searchQuery)}
+                      </p>
                       <p className="text-xs font-medium opacity-70 flex items-center gap-1">
                         <FileText className="h-3 w-3" /> {group.conversionCount} conversões
                       </p>
-                      <p className="text-[10px] opacity-50 mt-1">{relativeTime(group.lastActivity)}</p>
+                      <p className="text-[10px] opacity-50 mt-1">
+                        {relativeTime(group.lastActivity)}
+                      </p>
                     </ComicPanel>
                     <div className="absolute -top-2 -right-2 z-10">
                       {getSeriesStatusBadge(group)}
@@ -293,7 +316,8 @@ function BibliotecaPage() {
                           {getSeriesStatusBadge(group)}
                         </div>
                         <p className="text-xs font-medium opacity-70 mt-1">
-                          <FileText className="h-3 w-3 inline mr-1" /> {group.conversionCount} conversões
+                          <FileText className="h-3 w-3 inline mr-1" /> {group.conversionCount}{" "}
+                          conversões
                         </p>
                       </div>
                       <div className="text-right shrink-0 hidden sm:block">

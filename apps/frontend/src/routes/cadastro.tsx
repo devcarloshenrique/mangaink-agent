@@ -125,9 +125,7 @@ function CadastroPage() {
                 {...register("email")}
               />
               {errors.email && (
-                <p className="text-xs font-medium text-comic-red mt-0.5">
-                  {errors.email.message}
-                </p>
+                <p className="text-xs font-medium text-comic-red mt-0.5">{errors.email.message}</p>
               )}
             </div>
 
@@ -193,10 +191,7 @@ function CadastroPage() {
 
           <div className="mt-4 text-center">
             <span className="text-sm font-medium opacity-70">Já tem conta? </span>
-            <Link
-              to="/login"
-              className="text-sm font-display text-comic-red hover:underline"
-            >
+            <Link to="/login" className="text-sm font-display text-comic-red hover:underline">
               Entrar
             </Link>
           </div>

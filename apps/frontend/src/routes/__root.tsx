@@ -60,8 +60,8 @@ function RootComponent() {
       <ThemeProvider>
         <ComicIntensityProvider>
           <AuthProvider>
-              <AppShell />
-            </AuthProvider>
+            <AppShell />
+          </AuthProvider>
         </ComicIntensityProvider>
       </ThemeProvider>
     </QueryClientProvider>

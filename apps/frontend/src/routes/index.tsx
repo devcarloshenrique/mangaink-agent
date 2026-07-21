@@ -108,7 +108,9 @@ function Dashboard() {
       {/* Última leitura + próximo agendamento */}
       <section className="mx-auto max-w-6xl px-4 pt-10">
         <h2 className="font-display text-3xl mb-1 uppercase">Continuar lendo</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">Retome de onde parou e veja o próximo agendamento.</p>
+        <p className="text-sm font-medium opacity-70 mb-4">
+          Retome de onde parou e veja o próximo agendamento.
+        </p>
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <LastReadCard />
@@ -122,14 +124,18 @@ function Dashboard() {
       {/* Stats animados */}
       <section className="mx-auto max-w-6xl px-4 pt-8">
         <h2 className="font-display text-3xl mb-1 uppercase">Estatísticas</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">Visão geral da sua biblioteca e conversões.</p>
+        <p className="text-sm font-medium opacity-70 mb-4">
+          Visão geral da sua biblioteca e conversões.
+        </p>
         <StatsRow />
       </section>
 
       {/* Atividade recente */}
       <section className="mx-auto max-w-6xl px-4 py-10">
         <h2 className="font-display text-3xl mb-1 uppercase">Atividade recente</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">Últimas conversões, envios e agendamentos.</p>
+        <p className="text-sm font-medium opacity-70 mb-4">
+          Últimas conversões, envios e agendamentos.
+        </p>
         <ActivityFeed />
       </section>
     </div>

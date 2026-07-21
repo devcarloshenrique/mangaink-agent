@@ -105,8 +105,17 @@ function ConverterPage() {
   const { jobId: conversionId } = Route.useParams();
   const navigate = useNavigate();
   const [terminalOpen, setTerminalOpen] = useState(false);
-  const { state, stages, overallProgress, currentChapter, logs, corruptPages, isLoading, error, cancel } =
-    useConversionProgress(conversionId);
+  const {
+    state,
+    stages,
+    overallProgress,
+    currentChapter,
+    logs,
+    corruptPages,
+    isLoading,
+    error,
+    cancel,
+  } = useConversionProgress(conversionId);
 
   // ── Loading ─────────────────────────────────────────────────────────────
   if (isLoading && !state) {
@@ -269,10 +278,12 @@ function ConverterPage() {
               <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
               <div className="flex-1 min-w-0">
                 <p className="font-display text-base">
-                  {corruptPages.length} página{corruptPages.length > 1 ? "s" : ""} corrompida{corruptPages.length > 1 ? "s" : ""} detectada{corruptPages.length > 1 ? "s" : ""}
+                  {corruptPages.length} página{corruptPages.length > 1 ? "s" : ""} corrompida
+                  {corruptPages.length > 1 ? "s" : ""} detectada{corruptPages.length > 1 ? "s" : ""}
                 </p>
                 <p className="text-xs font-medium opacity-80 mt-0.5">
-                  Substituída{corruptPages.length > 1 ? "s" : ""} por placeholder para evitar falha no KCC.
+                  Substituída{corruptPages.length > 1 ? "s" : ""} por placeholder para evitar falha
+                  no KCC.
                 </p>
                 <button
                   className="text-xs font-display underline mt-1.5 hover:opacity-70"
