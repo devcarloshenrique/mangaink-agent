@@ -28,8 +28,11 @@ function ReaderPage() {
   const [error, setError] = useState<string | null>(null);
   const [readerData, setReaderData] = useState<{ url: string; format: string } | null>(null);
   const [title, setTitle] = useState("");
-  const [jobs, setJobs] = useState<Array<{ jobId: string; title: string; outputFile?: string }>>([]);
+  const [jobs, setJobs] = useState<Array<{ jobId: string; title: string; outputFile?: string }>>(
+    [],
+  );
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
+  const [mangaMode, setMangaMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,10 +41,19 @@ function ReaderPage() {
         const state = await conversionsApi.get(conversionId);
         if (cancelled) return;
         const completed = state.jobs.filter((j) => j.status === "completed" && j.outputFile);
-        setJobs(completed.map((j) => ({ jobId: j.jobId, title: j.title, outputFile: j.outputFile })));
-        setTitle(state.config && typeof state.config === "object" && "metadata" in state.config
-          ? ((state.config as any).metadata?.title ?? "Conversão")
-          : "Conversão");
+        setJobs(
+          completed.map((j) => ({ jobId: j.jobId, title: j.title, outputFile: j.outputFile })),
+        );
+        setTitle(
+          state.config && typeof state.config === "object" && "metadata" in state.config
+            ? ((state.config as any).metadata?.title ?? "Conversão")
+            : "Conversão",
+        );
+        setMangaMode(
+          state.config && typeof state.config === "object" && "options" in state.config
+            ? !!(state.config as any).options?.mangaMode
+            : false,
+        );
         setLoading(false);
       } catch (err: any) {
         if (!cancelled) setError(err?.message ?? "Erro ao carregar");
@@ -49,7 +61,9 @@ function ReaderPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [conversionId]);
 
   async function openJob(jobId: string, outputFile?: string) {
@@ -102,7 +116,14 @@ function ReaderPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="font-display text-xl text-comic-red mb-4">{error}</p>
-          <Button onClick={() => { setError(null); navigate({ to: "/biblioteca" }); }}>Voltar</Button>
+          <Button
+            onClick={() => {
+              setError(null);
+              navigate({ to: "/biblioteca" });
+            }}
+          >
+            Voltar
+          </Button>
         </div>
       </div>
     );
@@ -115,8 +136,11 @@ function ReaderPage() {
         <ComicHeader />
         <div className="mx-auto max-w-4xl px-4 py-10">
           <div className="flex items-center gap-3 mb-6">
-            <button type="button" onClick={() => navigate({ to: "/biblioteca" })}
-              className="h-10 w-10 border-[3px] border-ink rounded-lg bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform">
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/biblioteca" })}
+              className="h-10 w-10 border-[3px] border-ink rounded-lg bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
+            >
               <ArrowLeft />
             </button>
             <div>
@@ -126,8 +150,18 @@ function ReaderPage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {jobs.map((job) => (
-              <ComicPanel key={job.jobId} bg="card" padding="md" tilt="none" className="cursor-pointer hover:-translate-y-1 transition-transform">
-                <button type="button" className="w-full text-left" onClick={() => openJob(job.jobId, job.outputFile)}>
+              <ComicPanel
+                key={job.jobId}
+                bg="card"
+                padding="md"
+                tilt="none"
+                className="cursor-pointer hover:-translate-y-1 transition-transform"
+              >
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => openJob(job.jobId, job.outputFile)}
+                >
                   <div className="flex items-center gap-3">
                     <div className="h-16 w-12 shrink-0 border-[3px] border-ink rounded bg-muted flex items-center justify-center">
                       <BookOpen className="h-6 w-6 opacity-40" />
@@ -149,8 +183,11 @@ function ReaderPage() {
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 border-b-[3px] border-ink bg-card shrink-0">
-        <button type="button" onClick={goBack}
-          className="h-9 w-9 border-[2.5px] border-ink rounded-md bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform">
+        <button
+          type="button"
+          onClick={goBack}
+          className="h-9 w-9 border-[2.5px] border-ink rounded-md bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
+        >
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h2 className="font-display text-lg uppercase truncate flex-1">{title}</h2>
@@ -158,9 +195,16 @@ function ReaderPage() {
       <div className="flex-1 relative overflow-hidden">
         {readerData && readerData.format === "epub" && <EpubViewer url={readerData.url} />}
         {readerData && readerData.format === "pdf" && <PdfViewer url={readerData.url} />}
-        {readerData && readerData.format === "cbz" && <CbzViewer url={readerData.url} />}
+        {readerData && readerData.format === "cbz" && (
+          <CbzViewer url={readerData.url} mangaMode={mangaMode} />
+        )}
         {readerData && readerData.format === "mobi" && (
-          <MobiViewer conversionId={conversionId} jobId={selectedJob ?? ""} title={title} />
+          <MobiViewer
+            conversionId={conversionId}
+            jobId={selectedJob ?? ""}
+            title={title}
+            mangaMode={mangaMode}
+          />
         )}
       </div>
     </div>
@@ -188,9 +232,15 @@ function EpubViewer({ url }: { url: string }) {
     let cancelled = false;
     fetch(url)
       .then((res) => res.arrayBuffer())
-      .then((buf) => { if (!cancelled) setArrayBuffer(buf); })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
+      .then((buf) => {
+        if (!cancelled) setArrayBuffer(buf);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (error) {
@@ -202,7 +252,11 @@ function EpubViewer({ url }: { url: string }) {
   }
 
   if (!ReactReader || !arrayBuffer || !readerStyles) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -220,12 +274,10 @@ function EpubViewer({ url }: { url: string }) {
 }
 
 function PdfViewer({ url }: { url: string }) {
-  return (
-    <iframe src={url} className="w-full h-full border-0" title="PDF Viewer" />
-  );
+  return <iframe src={url} className="w-full h-full border-0" title="PDF Viewer" />;
 }
 
-function CbzViewer({ url }: { url: string }) {
+function CbzViewer({ url, mangaMode }: { url: string; mangaMode?: boolean }) {
   const [pages, setPages] = useState<string[]>([]);
   const [current, setCurrent] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -237,49 +289,87 @@ function CbzViewer({ url }: { url: string }) {
         const res = await fetch(url);
         const blob = await res.blob();
         const zip = await JSZip.loadAsync(blob);
-        const imageFiles = Object.keys(zip.files).filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(f)).sort();
+        const imageFiles = Object.keys(zip.files)
+          .filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(f))
+          .sort();
         const urls: string[] = [];
         for (const file of imageFiles) {
           const data = await zip.files[file].async("blob");
           urls.push(URL.createObjectURL(data));
         }
-        if (!cancelled) { setPages(urls); setLoading(false); }
+        if (!cancelled) {
+          setPages(urls);
+          setLoading(false);
+        }
       } catch {
         if (!cancelled) setLoading(false);
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   useEffect(() => {
-    return () => { pages.forEach((u) => URL.revokeObjectURL(u)); };
+    return () => {
+      pages.forEach((u) => URL.revokeObjectURL(u));
+    };
   }, [pages]);
 
   const prev = useCallback(() => setCurrent((c) => Math.max(0, c - 1)), []);
-  const next = useCallback(() => setCurrent((c) => Math.min(pages.length - 1, c + 1)), [pages.length]);
+  const next = useCallback(
+    () => setCurrent((c) => Math.min(pages.length - 1, c + 1)),
+    [pages.length],
+  );
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   if (pages.length === 0) {
-    return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Nenhuma página encontrada no CBZ</p></div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">Nenhuma página encontrada no CBZ</p>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col h-full bg-[#2a2a2a]">
       <div className="flex items-center justify-between px-4 py-2 bg-card border-b-[2px] border-ink shrink-0">
-        <Button size="sm" variant="outline" className="border-[2px] border-ink shadow-comic-sm" onClick={prev} disabled={current === 0}>
-          <ChevronLeft className="h-4 w-4" />
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-[2px] border-ink shadow-comic-sm"
+          onClick={mangaMode ? next : prev}
+          disabled={mangaMode ? current >= pages.length - 1 : current === 0}
+        >
+          {mangaMode ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
-        <span className="font-display text-sm">{current + 1} / {pages.length}</span>
-        <Button size="sm" variant="outline" className="border-[2px] border-ink shadow-comic-sm" onClick={next} disabled={current === pages.length - 1}>
-          <ChevronRight className="h-4 w-4" />
+        <span className="font-display text-sm">
+          {current + 1} / {pages.length}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-[2px] border-ink shadow-comic-sm"
+          onClick={mangaMode ? prev : next}
+          disabled={mangaMode ? current === 0 : current >= pages.length - 1}
+        >
+          {mangaMode ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
       </div>
       <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-        <img src={pages[current]} alt={`Página ${current + 1}`} className="max-h-full max-w-full object-contain shadow-2xl" />
+        <img
+          src={pages[current]}
+          alt={`Página ${current + 1}`}
+          className="max-h-full max-w-full object-contain shadow-2xl"
+        />
       </div>
     </div>
   );
@@ -289,9 +379,10 @@ interface MobiViewerProps {
   conversionId: string;
   jobId: string;
   title: string;
+  mangaMode?: boolean;
 }
 
-function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
+function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) {
   const [status, setStatus] = useState<"starting" | "extracting" | "ready" | "failed">("starting");
   const [totalPages, setTotalPages] = useState(0);
   const [readyPages, setReadyPages] = useState(0);
@@ -311,13 +402,10 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
     async function startPreview() {
       try {
         const token = localStorage.getItem("mangaink_token");
-        const res = await fetch(
-          `/api/conversions/${conversionId}/jobs/${jobId}/preview`,
-          {
-            method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          },
-        );
+        const res = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!res.ok && res.status !== 202) throw new Error(`HTTP ${res.status}`);
         const body = await res.json().catch(() => ({}));
 
@@ -332,10 +420,9 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
         poll = setInterval(async () => {
           if (cancelled) return;
           try {
-            const sres = await fetch(
-              `/api/conversions/${conversionId}/jobs/${jobId}/preview`,
-              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-            );
+            const sres = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
             if (!sres.ok) return;
             const sbody = await sres.json().catch(() => ({}));
             setTotalPages(sbody.totalPages ?? 0);
@@ -461,8 +548,14 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
   return (
     <div className="flex flex-col h-full bg-[#2a2a2a]">
       <div className="flex items-center justify-between px-4 py-2 bg-card border-b-[2px] border-ink shrink-0">
-        <Button size="sm" variant="outline" className="border-[2px] border-ink shadow-comic-sm" onClick={prev} disabled={current === 0}>
-          <ChevronLeft className="h-4 w-4" />
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-[2px] border-ink shadow-comic-sm"
+          onClick={mangaMode ? next : prev}
+          disabled={mangaMode ? status === "ready" && current >= totalPages - 1 : current === 0}
+        >
+          {mangaMode ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
         <div className="flex items-center gap-3">
           <span className="font-display text-sm">
@@ -471,7 +564,9 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
                 Extraindo… {readyPages}/{totalPages || "…"}
               </span>
             ) : (
-              <span>{current + 1} / {totalPages}</span>
+              <span>
+                {current + 1} / {totalPages}
+              </span>
             )}
           </span>
           <a
@@ -487,10 +582,10 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
           size="sm"
           variant="outline"
           className="border-[2px] border-ink shadow-comic-sm"
-          onClick={next}
-          disabled={status === "ready" && current >= totalPages - 1}
+          onClick={mangaMode ? prev : next}
+          disabled={mangaMode ? current === 0 : status === "ready" && current >= totalPages - 1}
         >
-          <ChevronRight className="h-4 w-4" />
+          {mangaMode ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
       </div>
       <div className="flex-1 overflow-auto flex items-center justify-center p-4">
@@ -498,11 +593,17 @@ function MobiViewer({ conversionId, jobId, title }: MobiViewerProps) {
         {pageError && !pageLoading && (
           <div className="text-center text-comic-yellow">
             <p className="font-display text-lg mb-2">{pageError}</p>
-            <Button size="sm" variant="outline" onClick={() => loadPage(current)}>Tentar novamente</Button>
+            <Button size="sm" variant="outline" onClick={() => loadPage(current)}>
+              Tentar novamente
+            </Button>
           </div>
         )}
         {!pageLoading && !pageError && pageUrl && (
-          <img src={pageUrl} alt={`Página ${current + 1}`} className="max-h-full max-w-full object-contain shadow-2xl" />
+          <img
+            src={pageUrl}
+            alt={`Página ${current + 1}`}
+            className="max-h-full max-w-full object-contain shadow-2xl"
+          />
         )}
       </div>
     </div>
