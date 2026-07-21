@@ -271,6 +271,40 @@ export interface ConversionJobState extends ConversionJobStatus {
   config: ConversionJobConfig
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// User Presets
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface UserPreset {
+  id: string
+  userId: string
+  name: string
+  description?: string | null
+  values: Record<string, string | number | boolean>
+  isDefault: boolean
+  lastUsedAt?: string | null
+  usageCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserPresetResponse {
+  id: string
+  name: string
+  description?: string | null
+  values: Record<string, string | number | boolean>
+  isDefault: boolean
+  lastUsedAt?: string | null
+  usageCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserPresetListResponse {
+  presets: UserPresetResponse[]
+  limit: number
+}
+
 /** Dados enviados ao BullMQ para processamento de um Job. */
 export interface ConversionJobData {
   conversionId: string

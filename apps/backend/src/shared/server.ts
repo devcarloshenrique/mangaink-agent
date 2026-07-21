@@ -118,6 +118,9 @@ export async function createServer() {
         DOWNLOAD_FAILED: 500,
         PREVIEW_NOT_READY: 425,
         LISTING_REQUIRES_PRISMA: 501,
+        PRESET_NOT_FOUND: 404,
+        DUPLICATE_PRESET_NAME: 409,
+        PRESET_LIMIT_REACHED: 400,
       }
       const status = statusMap[error.code] ?? 500
       if (error.code === 'LISTING_REQUIRES_PRISMA') {

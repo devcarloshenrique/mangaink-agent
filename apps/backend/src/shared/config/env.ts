@@ -42,6 +42,8 @@ const envSchema = z.object({
 
   JOB_STATUS_TTL_SEC: z.coerce.number().int().positive().default(21600),
 
+  MAX_USER_PRESETS: z.coerce.number().int().positive().default(20),
+
   // Rate Limiting por Provider (bottleneck) — valores em ms
   RATE_LIMIT_DEFAULT_MAX_CONCURRENT: positiveMs.default(6),
   RATE_LIMIT_DEFAULT_MIN_TIME: numericMs.default(50),

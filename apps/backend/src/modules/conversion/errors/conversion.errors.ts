@@ -109,3 +109,24 @@ export class ListingNotSupportedError extends ConversionError {
     this.name = 'ListingNotSupportedError'
   }
 }
+
+export class UserPresetNotFoundError extends ConversionError {
+  constructor(presetId: string) {
+    super(`Preset não encontrado: ${presetId}`, 'PRESET_NOT_FOUND')
+    this.name = 'UserPresetNotFoundError'
+  }
+}
+
+export class DuplicatePresetNameError extends ConversionError {
+  constructor(name: string) {
+    super(`Nome de preset já existe: ${name}`, 'DUPLICATE_PRESET_NAME')
+    this.name = 'DuplicatePresetNameError'
+  }
+}
+
+export class PresetLimitReachedError extends ConversionError {
+  constructor(limit: number) {
+    super(`Limite de presets atingido (máximo: ${limit})`, 'PRESET_LIMIT_REACHED')
+    this.name = 'PresetLimitReachedError'
+  }
+}
