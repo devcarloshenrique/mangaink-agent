@@ -177,8 +177,54 @@ export type ConversionSSEEventType =
 
 /** Evento SSE persistido no journal do Redis */
 export interface SSEJournalEvent {
-  type: string
-  data: Record<string, unknown>
-  timestamp: string
-  id?: number
+  type: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+  id?: number;
 }
+
+export type FieldGroupId = "reading" | "processing" | "image" | "output" | "format";
+
+export const FIELD_GROUP_LABELS: Record<FieldGroupId, string> = {
+  reading: "Leitura",
+  processing: "Processamento",
+  image: "Imagem",
+  output: "Saída",
+  format: "Formato",
+};
+
+export const FIELD_CONFLICTS: Record<string, string[]> = {
+  mangaMode: ["webtoonMode"],
+  webtoonMode: ["mangaMode"],
+  forcePng: ["webp", "mozjpeg"],
+  webp: ["forcePng", "mozjpeg"],
+  mozjpeg: ["forcePng", "webp"],
+  blackBorders: ["whiteBorders"],
+  whiteBorders: ["blackBorders"],
+  noRotate: ["rotateRight", "rotateFirst"],
+  rotateRight: ["noRotate"],
+  coverFill: ["smartCoverCrop"],
+  smartCoverCrop: ["coverFill"],
+};
+
+export const IMAGE_SUBCATEGORIES = [
+  {
+    label: "Cor e Contraste",
+    fieldIds: [
+      "gamma",
+      "forceColor",
+      "autolevel",
+      "colorAutocontrast",
+      "noAutocontrast",
+      "eraseRainbow",
+    ],
+  },
+  {
+    label: "Qualidade e Formato",
+    fieldIds: ["jpegQuality", "forcePng", "webp", "mozjpeg", "noQuantize"],
+  },
+  {
+    label: "Bordas e Recorte",
+    fieldIds: ["blackBorders", "whiteBorders", "croppingPower", "croppingMinimum"],
+  },
+] as const;
