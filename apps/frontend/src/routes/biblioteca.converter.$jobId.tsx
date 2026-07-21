@@ -138,12 +138,13 @@ function ConverterPage() {
         <div className="mx-auto max-w-3xl px-4 py-20 text-center">
           <h1 className="font-display text-4xl uppercase mb-4">Conversão não encontrada</h1>
           <p className="text-sm font-medium opacity-70 mb-6">{error}</p>
-          <Link
-            to="/biblioteca"
+          <button
+            type="button"
+            onClick={() => window.history.back()}
             className="inline-flex items-center gap-1 font-display text-lg border-[3px] border-ink bg-comic-yellow px-4 py-2 rounded-md shadow-comic-sm hover:-translate-y-0.5 transition-transform"
           >
-            <ArrowLeft className="h-4 w-4" /> Voltar para a biblioteca
-          </Link>
+            <ArrowLeft className="h-4 w-4" /> Voltar
+          </button>
         </div>
       </div>
     );
@@ -171,12 +172,13 @@ function ConverterPage() {
       <Toaster richColors position="top-right" />
       <ComicHeader />
       <div className="mx-auto max-w-3xl px-4 py-10">
-        <Link
-          to="/biblioteca"
-          className="inline-flex items-center gap-1 font-display text-sm mb-6 underline underline-offset-4 hover:text-comic-red"
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="inline-flex items-center gap-1 font-display text-sm mb-6 underline underline-offset-4 hover:text-comic-red cursor-pointer"
         >
-          <ArrowLeft className="h-4 w-4" /> Biblioteca
-        </Link>
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </button>
 
         {/* Header */}
         <div className="flex items-start gap-5 mb-8">
@@ -336,12 +338,13 @@ function ConverterPage() {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-3 justify-between items-center">
-          <Link
-            to="/biblioteca"
+          <button
+            type="button"
+            onClick={() => window.history.back()}
             className="inline-flex items-center gap-1.5 font-display text-sm border-[3px] border-ink bg-card px-4 py-2 rounded-md shadow-comic-sm hover:-translate-y-0.5 transition-transform"
           >
-            <ArrowLeft className="h-4 w-4" /> Voltar para biblioteca
-          </Link>
+            <ArrowLeft className="h-4 w-4" /> Voltar
+          </button>
 
           <div className="flex gap-3">
             {isDone && (

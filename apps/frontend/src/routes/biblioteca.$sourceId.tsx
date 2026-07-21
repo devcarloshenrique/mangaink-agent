@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -63,7 +63,6 @@ function coverUrl(sourceId: string, cover?: { kind: string; coverId?: string }):
 
 function SourceDetailPage() {
   const { sourceId } = Route.useParams();
-  const navigate = useNavigate();
   const { data, isLoading } = useConversionsList({ sourceId, limit: 50 });
   const { cancel, remove, download, reconvert } = useConversionActions();
 
@@ -80,7 +79,7 @@ function SourceDetailPage() {
         <div className="flex items-center gap-3 mb-6">
           <button
             type="button"
-            onClick={() => navigate({ to: "/biblioteca" })}
+            onClick={() => window.history.back()}
             className="h-10 w-10 border-[3px] border-ink rounded-lg bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
           >
             <ArrowLeft />
