@@ -54,20 +54,17 @@ function seriesCoverUrl(group: SeriesGroup): string | null {
 
 function SeriesCover({ group, className }: { group: SeriesGroup; className?: string }) {
   const url = seriesCoverUrl(group);
-  return url ? (
+  const [error, setError] = useState(false);
+  if (!url || error) return null;
+  return (
     <img
       src={url}
       alt=""
       className={cn("h-full w-full object-cover", className)}
       loading="lazy"
-      onError={(e) => {
-        const el = e.currentTarget;
-        el.style.display = "none";
-        const parent = el.parentElement;
-        if (parent) parent.dataset.fallback = "true";
-      }}
+      onError={() => setError(true)}
     />
-  ) : null;
+  );
 }
 
 function getSeriesStatusBadge(group: SeriesGroup) {
@@ -260,28 +257,17 @@ function BibliotecaPage() {
                     params={{ sourceId: group.sourceId }}
                     className="block focus:outline-none cursor-pointer group transition-transform group-hover:-translate-y-1"
                   >
-                    <ComicPanel
-                      bg="card"
-                      padding="sm"
-                      tilt={i % 2 === 0 ? "left" : "right"}
-                      className="h-full"
+                    <div
+                      className={cn(
+                        "aspect-[2/3] border-[3px] border-ink rounded-xl shadow-comic relative bg-muted overflow-hidden",
+                        i % 2 === 0 ? "-rotate-1" : "rotate-1",
+                      )}
                     >
-                      <div className="aspect-[2/3] border-[3px] border-ink rounded mb-2 flex items-end p-2 shadow-comic-sm relative bg-muted overflow-hidden">
-                        <SeriesCover group={group} />
-                        <div className="bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs relative z-10">
-                          {highlightMatch(group.title, searchQuery)}
-                        </div>
-                      </div>
-                      <p className="font-display text-base truncate">
+                      <SeriesCover group={group} />
+                      <div className="absolute bottom-1 left-1 bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs z-10">
                         {highlightMatch(group.title, searchQuery)}
-                      </p>
-                      <p className="text-xs font-medium opacity-70 flex items-center gap-1">
-                        <FileText className="h-3 w-3" /> {group.conversionCount} conversões
-                      </p>
-                      <p className="text-[10px] opacity-50 mt-1">
-                        {relativeTime(group.lastActivity)}
-                      </p>
-                    </ComicPanel>
+                      </div>
+                    </div>
                     <div className="absolute -top-2 -right-2 z-10">
                       {getSeriesStatusBadge(group)}
                     </div>
