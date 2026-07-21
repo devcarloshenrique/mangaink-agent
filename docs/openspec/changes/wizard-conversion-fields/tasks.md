@@ -1,14 +1,14 @@
 # Wizard Conversion Fields — Tasks
 
-> **Status:** DRAFT v2
+> **Status:** COMPLETED
 > **Data:** 2026-07-20 (rev. 2026-07-21)
 
 ---
 
 ## 1. Tipos e Constantes (Pre-requisito)
 
-- [ ] 1.1 Adicionar `FieldGroupId` type, `FieldGroupLabelMap`, e `IMAGE_SUBCATEGORIES` constante em `src/types/conversion.ts`
-- [ ] 1.2 Adicionar tipo `ConversionFieldGroup` no arquivo de tipos (se necessario alem do agrupamento inline)
+- [x] 1.1 Adicionar `FieldGroupId` type, `FieldGroupLabelMap`, e `IMAGE_SUBCATEGORIES` constante em `src/types/conversion.ts`
+- [x] 1.2 Adicionar tipo `ConversionFieldGroup` no arquivo de tipos (se necessario alem do agrupamento inline)
 
 ---
 
@@ -16,20 +16,20 @@
 
 **Arquivo:** `apps/frontend/src/components/wizard/ConversionFieldRenderer.tsx`
 
-- [ ] 2.1 Criar componente `ConversionFieldRenderer` com props: `{ field, value, onChange, disabled }`
-- [ ] 2.2 Renderizar switch (`type=boolean, component=switch`) usando `<Switch>` + `<Label>` do shadcn
-- [ ] 2.3 Renderizar select (`type=enum, component=select`) usando `<Select>` do shadcn, mapeando `field.options`
-- [ ] 2.4 Renderizar slider (`type=number, component=slider`) usando `<Slider>` do shadcn, com `min`, `max`, `step` e valor numerico visivel em badge
-- [ ] 2.5 Renderizar input (`type=number, component=input`) usando `<Input type="number">` do shadcn, com validacao:
+- [x] 2.1 Criar componente `ConversionFieldRenderer` com props: `{ field, value, onChange, disabled }`
+- [x] 2.2 Renderizar switch (`type=boolean, component=switch`) usando `<Switch>` + `<Label>` do shadcn
+- [x] 2.3 Renderizar select (`type=enum, component=select`) usando `<Select>` do shadcn, mapeando `field.options`
+- [x] 2.4 Renderizar slider (`type=number, component=slider`) usando `<Slider>` do shadcn, com `min`, `max`, `step` e valor numerico visivel em badge
+- [x] 2.5 Renderizar input (`type=number, component=input`) usando `<Input type="number">` do shadcn, com validacao:
   - Rejeitar NaN: reverter ao valor anterior (ou `field.default`) se `isNaN(parsed)`
   - Clamp ao range `[min, max]` no evento `blur`
   - `step` nativo do HTML (`<input step={field.step}>`)
-- [ ] 2.6 Renderizar fallback para tipo/componente desconhecido: exibir "Tipo nao suportado: {type}/{component}" em card com borda dashed — nao quebrar a pagina
-- [ ] 2.7 Exibir `field.description` abaixo do label e `field.help` como texto secundario (`text-xs opacity-50 italic`)
-- [ ] 2.8 Aplicar estilo `disabled` (opacity-50, cursor-not-allowed, pointer-events-none) quando `disabled=true`
-- [ ] 2.9 Adicionar `React.memo` com comparador customizado: re-renderiza apenas se `field.id`, `value` ou `disabled` mudaram
-- [ ] 2.10 Adicionar acessibilidade: `aria-label={field.label}`, `aria-describedby={field.id + '-help'}`, label clicavel foca o controle
-- [ ] 2.11 Adicionar `data-testid="conversion-field-{field.id}"` para facilitar testes
+- [x] 2.6 Renderizar fallback para tipo/componente desconhecido: exibir "Tipo nao suportado: {type}/{component}" em card com borda dashed — nao quebrar a pagina
+- [x] 2.7 Exibir `field.description` abaixo do label e `field.help` como texto secundario (`text-xs opacity-50 italic`)
+- [x] 2.8 Aplicar estilo `disabled` (opacity-50, cursor-not-allowed, pointer-events-none) quando `disabled=true`
+- [x] 2.9 Adicionar `React.memo` com comparador customizado: re-renderiza apenas se `field.id`, `value` ou `disabled` mudaram
+- [x] 2.10 Adicionar acessibilidade: `aria-label={field.label}`, `aria-describedby={field.id + '-help'}`, label clicavel foca o controle
+- [x] 2.11 Adicionar `data-testid="conversion-field-{field.id}"` para facilitar testes
 
 ---
 
@@ -37,16 +37,16 @@
 
 **Arquivo:** `apps/frontend/src/components/wizard/ConversionFieldGroup.tsx`
 
-- [ ] 3.1 Criar componente `ConversionFieldGroup` com props: `{ groupId, groupLabel, fields, values, onChange, disabled, defaultExpanded }`
-- [ ] 3.2 Renderizar `<Accordion type="multiple">` com `<AccordionItem>` por grupo
-- [ ] 3.3 Usar `defaultValue` no Accordion baseado em `defaultExpanded`
-- [ ] 3.4 Renderizar `AccordionTrigger` com icone do grupo (lucide-react) + label + badge com contagem de campos
-- [ ] 3.5 Para grupos sem subcategorias: renderizar `AccordionContent` com `<ConversionFieldRenderer>` para cada campo
-- [ ] 3.6 Para o grupo `image`: renderizar subcategorias com `<Separator>` + label em negrito, campos agrupados por `IMAGE_SUBCATEGORIES`
-- [ ] 3.7 Mapear icones por grupo: `reading` → `BookOpen`, `processing` → `Cog`, `image` → `Image`, `output` → `FileOutput`, `format` → `FileType`
-- [ ] 3.8 Aplicar estilo comic-pop-art consistente (bordas `border-ink`, sombras `shadow-comic-sm`, fonte `font-display` nos titulos)
-- [ ] 3.9 Acessibilidade do accordion: foco move-se para o primeiro campo ao expandir grupo (usar `onValueChange` + `ref.focus()`)
-- [ ] 3.10 Adicionar `data-testid="conversion-group-{groupId}"` para facilitar testes
+- [x] 3.1 Criar componente `ConversionFieldGroup` com props: `{ groupId, groupLabel, fields, values, onChange, disabled, defaultExpanded }`
+- [x] 3.2 Renderizar `<Accordion type="multiple">` com `<AccordionItem>` por grupo
+- [x] 3.3 Usar `defaultValue` no Accordion baseado em `defaultExpanded`
+- [x] 3.4 Renderizar `AccordionTrigger` com icone do grupo (lucide-react) + label + badge com contagem de campos
+- [x] 3.5 Para grupos sem subcategorias: renderizar `AccordionContent` com `<ConversionFieldRenderer>` para cada campo
+- [x] 3.6 Para o grupo `image`: renderizar subcategorias com `<Separator>` + label em negrito, campos agrupados por `IMAGE_SUBCATEGORIES`
+- [x] 3.7 Mapear icones por grupo: `reading` → `BookOpen`, `processing` → `Cog`, `image` → `Image`, `output` → `FileOutput`, `format` → `FileType`
+- [x] 3.8 Aplicar estilo comic-pop-art consistente (bordas `border-ink`, sombras `shadow-comic-sm`, fonte `font-display` nos titulos)
+- [x] 3.9 Acessibilidade do accordion: foco move-se para o primeiro campo ao expandir grupo (usar `onValueChange` + `ref.focus()`)
+- [x] 3.10 Adicionar `data-testid="conversion-group-{groupId}"` para facilitar testes
 
 ---
 
@@ -54,31 +54,31 @@
 
 **Arquivo:** `apps/frontend/src/routes/wizard.tsx`
 
-- [ ] 4.1 Importar `ConversionFieldGroup`, `ConversionFieldRenderer`, `IMAGE_SUBCATEGORIES`
-- [ ] 4.2 Agrupar `options.fields` por `group` usando `useMemo` — criar mapa `Record<string, ConversionField[]>`
-- [ ] 4.3 Implementar `buildEffectiveState(fields, fieldOptions)` — retorna defaults + overrides
-- [ ] 4.4 Implementar `isPresetMatch(effectiveState, preset)` — verifica se TODAS as chaves do preset batem no estado efetivo
-- [ ] 4.5 Implementar `activePresetId` via `useMemo` — `null` quando nenhum preset bate (="Personalizado")
-- [ ] 4.6 Implementar `handlePresetChange(presetId)`:
+- [x] 4.1 Importar `ConversionFieldGroup`, `ConversionFieldRenderer`, `IMAGE_SUBCATEGORIES`
+- [x] 4.2 Agrupar `options.fields` por `group` usando `useMemo` — criar mapa `Record<string, ConversionField[]>`
+- [x] 4.3 Implementar `buildEffectiveState(fields, fieldOptions)` — retorna defaults + overrides
+- [x] 4.4 Implementar `isPresetMatch(effectiveState, preset)` — verifica se TODAS as chaves do preset batem no estado efetivo
+- [x] 4.5 Implementar `activePresetId` via `useMemo` — `null` quando nenhum preset bate (="Personalizado")
+- [x] 4.6 Implementar `handlePresetChange(presetId)`:
   - Se `preset.exclusive`: substituicao completa `fieldOptions = { ...preset.values }`
   - Senao: merge `fieldOptions = { ...prev, ...preset.values }`
   - `presetId === ""` (Personalizado): nao faz nada (mantem valores)
-- [ ] 4.7 Implementar `handleFieldChange(id, value)` com `useCallback` — atualiza `data.fieldOptions`
-- [ ] 4.8 Modificar preset `<Select>`: mostrar "Personalizado" como display value quando `value=""`, sem injetar opcao fake
-- [ ] 4.9 Implementar botao "Restaurar padroes":
+- [x] 4.7 Implementar `handleFieldChange(id, value)` com `useCallback` — atualiza `data.fieldOptions`
+- [x] 4.8 Modificar preset `<Select>`: mostrar "Personalizado" como display value quando `value=""`, sem injetar opcao fake
+- [x] 4.9 Implementar botao "Restaurar padroes":
   - Reseta `fieldOptions = {}` e `preset` para o primeiro da lista
   - So habilitado quando `Object.keys(fieldOptions).length > 0`
-- [ ] 4.10 Calcular `isNoProcessing = data.fieldOptions.noProcessing === true`
-- [ ] 4.11 Passar `disabled={isNoProcessing}` para todos os `ConversionFieldGroup`
-- [ ] 4.12 Renderizar 5 `ConversionFieldGroup` apos os controles existentes (dispositivo, formato, preset, reset) — antes do preview mock
-- [ ] 4.13 Configurar `defaultExpanded`: `reading=true`, `processing=true`, demais `false`
-- [ ] 4.14 Garantir que `finish()` envia `options: data.fieldOptions` (ja funciona — apenas verificar)
+- [x] 4.10 Calcular `isNoProcessing = data.fieldOptions.noProcessing === true`
+- [x] 4.11 Passar `disabled={isNoProcessing}` para todos os `ConversionFieldGroup`
+- [x] 4.12 Renderizar 5 `ConversionFieldGroup` apos os controles existentes (dispositivo, formato, preset, reset) — antes do preview mock
+- [x] 4.13 Configurar `defaultExpanded`: `reading=true`, `processing=true`, demais `false`
+- [x] 4.14 Garantir que `finish()` envia `options: data.fieldOptions` (ja funciona — apenas verificar)
 
 ---
 
 ## 5. Testes
 
-- [ ] 5.1 Teste unitario de `ConversionFieldRenderer`:
+- [x] 5.1 Teste unitario de `ConversionFieldRenderer`:
   - Renderiza switch para campo boolean com label e descricao
   - Renderiza select com opcoes para campo enum
   - Renderiza slider com limites para campo number/slider
@@ -89,14 +89,14 @@
   - Rejeita NaN no input numerico (reverte ao valor anterior)
   - Clampa valor no blur para [min, max]
   - Nao re-renderiza quando props nao mudaram (`React.memo`)
-- [ ] 5.2 Teste unitario de `ConversionFieldGroup`:
+- [x] 5.2 Teste unitario de `ConversionFieldGroup`:
   - Renderiza accordion com label e badge de contagem
   - Expande/colapsa ao clicar no trigger
   - Expande grupos com `defaultExpanded=true` por padrao
   - Renderiza `ConversionFieldRenderer` para cada campo
   - Grupo `image` renderiza subcategorias com separadores
   - Foco move-se para primeiro campo ao expandir
-- [ ] 5.3 Teste de integracao: logica de preset no `StepConvert`:
+- [x] 5.3 Teste de integracao: logica de preset no `StepConvert`:
   - `fieldOptions = {}`, preset Manga selecionado → `fieldOptions = { mangaMode: true, cropping: 'marginsAndPageNumbers', stretchMode: 'upscale' }`
   - `fieldOptions = { mangaMode: true, gamma: 2.0 }` com preset Manga → `activePresetId === "manga"` (gamma extra nao quebra match)
   - Modifica `stretchMode` → `activePresetId === null` (Personalizado)
@@ -105,23 +105,23 @@
   - Troca de Manga → Webtoon → Manga: cada transicao mantem integridade dos valores
   - Sequencia rapida: preset → campo → preset → campo (sem race conditions)
   - Reset: `fieldOptions` com varios valores → botao Reset → `fieldOptions = {}`
-- [ ] 5.4 Testes de borda:
+- [x] 5.4 Testes de borda:
   - Backend retorna `presets: []` → wizard funciona, campos individuais disponiveis
   - Backend adiciona novo grupo (`field.group = "advanced"`) → renderiza com fallback (label = groupId, icone generico)
   - Backend envia campo com `type: "color"` (desconhecido) → renderiza fallback, nao quebra
   - Campo sem `default` → switch off, select sem selecao, slider no min, input vazio
-- [ ] 5.5 Atualizar teste de `useConversionOptions.test.tsx` para incluir `fields` e `presets` no mock
+- [x] 5.5 Atualizar teste de `useConversionOptions.test.tsx` para incluir `fields` e `presets` no mock
 
 ---
 
 ## 6. Validacao e Polish
 
-- [ ] 6.1 Rodar `pnpm lint` e `pnpm typecheck` no frontend — zero erros
-- [ ] 6.2 Verificar responsividade: campos devem se reorganizar em telas menores (stack vertical)
-- [ ] 6.3 Verificar consistencia visual com o resto do wizard (cores, fontes, sombras)
-- [ ] 6.4 Testar navegacao por teclado: Tab entre campos, Arrow keys no accordion, Enter/Space para interagir
-- [ ] 6.5 Teste manual E2E: fluxo completo wizard → selecionar preset → modificar campos → reset → novo preset → enviar → verificar no backend se `options` chegou correto
-- [ ] 6.6 Teste manual: abrir wizard, nao mexer em nada, enviar → `options: {}` (sem erros no backend)
+- [x] 6.1 Rodar `pnpm lint` e `pnpm typecheck` no frontend — zero erros
+- [x] 6.2 Verificar responsividade: campos devem se reorganizar em telas menores (stack vertical)
+- [x] 6.3 Verificar consistencia visual com o resto do wizard (cores, fontes, sombras)
+- [x] 6.4 Testar navegacao por teclado: Tab entre campos, Arrow keys no accordion, Enter/Space para interagir
+- [x] 6.5 Teste manual E2E: fluxo completo wizard → selecionar preset → modificar campos → reset → novo preset → enviar → verificar no backend se `options` chegou correto
+- [x] 6.6 Teste manual: abrir wizard, nao mexer em nada, enviar → `options: {}` (sem erros no backend)
 
 ---
 
