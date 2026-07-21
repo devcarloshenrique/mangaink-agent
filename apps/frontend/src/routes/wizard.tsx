@@ -881,7 +881,7 @@ function StepCovers({
                 key={t.key}
                 className="flex items-center gap-3 border-[3px] border-ink rounded-lg p-3 bg-card shadow-comic-sm"
               >
-                <CoverPreview ref={ref} covers={series.covers} />
+                <CoverPreview ref={ref} covers={series.covers} sourceId={series.sourceId} />
                 <div className="flex-1 min-w-0">
                   <p className="font-display text-base truncate">{t.label}</p>
                   <p className="text-xs font-medium opacity-70">
@@ -929,11 +929,13 @@ function StepCovers({
                     }}
                     className="border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm hover:-translate-y-0.5 transition-transform"
                   >
-                    <div
-                      className="aspect-[2/3] flex items-end p-1"
-                      style={{ background: `hsl(${(c.id.length * 45) % 360} 80% 60%)` }}
-                    >
-                      <span className="font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink">
+                    <div className="aspect-[2/3] relative">
+                      <img
+                        src={conversionsApi.coverUrl(series.sourceId, { kind: "gallery", coverId: c.id }) ?? ""}
+                        alt={c.label}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <span className="absolute bottom-1 left-1 font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink">
                         {c.label}
                       </span>
                     </div>
@@ -967,21 +969,20 @@ function StepCovers({
 function CoverPreview({
   ref,
   covers,
+  sourceId,
 }: {
   ref: CoverRef | undefined;
   covers: SourceInspectResponse["covers"];
+  sourceId: string;
 }) {
-  const cls = "h-12 w-9 border-[2.5px] border-ink rounded shrink-0";
+  const cls = "h-12 w-9 border-[2.5px] border-ink rounded shrink-0 overflow-hidden";
   if (!ref || ref.kind === "original")
     return (
-      <div
-        className={cn(
-          cls,
-          "bg-comic-yellow flex items-center justify-center text-[9px] font-display",
-        )}
-      >
-        ORIG
-      </div>
+      <img
+        src={conversionsApi.coverUrl(sourceId, { kind: "original" }) ?? ""}
+        alt=""
+        className={cn(cls, "object-cover")}
+      />
     );
   if (ref.kind === "upload")
     return (
@@ -995,10 +996,12 @@ function CoverPreview({
       </div>
     );
   const c = covers.find((cv) => cv.id === ref.coverId);
+  if (!c) return <div className={cn(cls, "bg-muted")} />;
   return (
-    <div
-      className={cls}
-      style={{ background: c ? `hsl(${(c.id.length * 45) % 360} 80% 60%)` : undefined }}
+    <img
+      src={conversionsApi.coverUrl(sourceId, { kind: "gallery", coverId: c.id }) ?? ""}
+      alt=""
+      className={cn(cls, "object-cover")}
     />
   );
 }
