@@ -33,6 +33,21 @@ import { conversionParamsSchema } from './dtos/conversion-params.dto'
 import { conversionOptionsResponseSchema } from './dtos/conversion-options.dto'
 import { listConversionsQuerySchema } from './dtos/list-conversions.dto'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
+import {
+  listUserPresetsHandler,
+  createUserPresetHandler,
+  updateUserPresetMetaHandler,
+  updateUserPresetValuesHandler,
+  deleteUserPresetHandler,
+} from './controllers/user-presets.controller'
+import {
+  createUserPresetSchema,
+  updateUserPresetSchema,
+  updateUserPresetValuesSchema,
+  presetParamsSchema,
+  userPresetResponseSchema,
+  userPresetListResponseSchema,
+} from './dtos/user-preset.dto'
 
 // ── Instâncias compartilhadas ──────────────────────────────────────────
 const conversions = getConversionRepository()
@@ -138,6 +153,115 @@ export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     conversionOptionsHandler,
+  )
+
+  // ── User Presets ────────────────────────────────────────────────────
+
+  // GET /api/conversions/presets
+  app.get(
+    '/api/conversions/presets',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Lista presets do usuario autenticado',
+        description:
+          'Retorna todos os presets de conversao do usuario autenticado com o limite maximo configurado.',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: userPresetListResponseSchema,
+          401: z.object({ error: z.string() }),
+        },
+      },
+    },
+    listUserPresetsHandler,
+  )
+
+  // POST /api/conversions/presets
+  app.post(
+    '/api/conversions/presets',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Cria um novo preset de conversao',
+        description:
+          'Salva a configuracao atual como um preset reutilizavel. Nome unico por usuario.',
+        security: [{ bearerAuth: [] }],
+        body: createUserPresetSchema,
+        response: {
+          201: userPresetResponseSchema,
+          400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
+        },
+      },
+    },
+    createUserPresetHandler,
+  )
+
+  // PATCH /api/conversions/presets/:presetId
+  app.patch(
+    '/api/conversions/presets/:presetId',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Edita metadados de um preset',
+        description: 'Atualiza nome, descricao e/ou flag isDefault de um preset do usuario.',
+        security: [{ bearerAuth: [] }],
+        params: presetParamsSchema,
+        body: updateUserPresetSchema,
+        response: {
+          200: userPresetResponseSchema,
+          400: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    updateUserPresetMetaHandler,
+  )
+
+  // PUT /api/conversions/presets/:presetId/values
+  app.put(
+    '/api/conversions/presets/:presetId/values',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Atualiza valores de um preset',
+        description: 'Substitui os valores (fieldOptions) de um preset existente.',
+        security: [{ bearerAuth: [] }],
+        params: presetParamsSchema,
+        body: updateUserPresetValuesSchema,
+        response: {
+          200: userPresetResponseSchema,
+          400: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    updateUserPresetValuesHandler,
+  )
+
+  // DELETE /api/conversions/presets/:presetId
+  app.delete(
+    '/api/conversions/presets/:presetId',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Exclui um preset',
+        description: 'Remove permanentemente um preset do usuario.',
+        security: [{ bearerAuth: [] }],
+        params: presetParamsSchema,
+        response: {
+          204: z.object({}).nullable(),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    deleteUserPresetHandler,
   )
 
   // GET /api/conversions (listagem paginada por usuário)
