@@ -21,6 +21,7 @@ model User {
   updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz @map("updated_at")
 
   conversions  Conversion[]
+  userPresets  UserPreset[]
 
   @@map("users")
 }
@@ -146,4 +147,23 @@ model ConversionJob {
   @@index([conversionId])
   @@index([status])
   @@map("conversion_jobs")
+}
+
+model UserPreset {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  description String?   @db.VarChar(500)
+  values      Json      @db.JsonB
+  isDefault   Boolean   @default(false) @map("is_default")
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz
+  usageCount  Int       @default(0) @map("usage_count")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("user_presets")
 }
