@@ -138,20 +138,20 @@
 
 ## 11. Frontend: Testes
 
-- [ ] 11.1 Teste unitario de `SavePresetDialog`:
+- [x] 11.1 Teste unitario de `SavePresetDialog`:
   - Valida nome obrigatorio
   - Rejeita nome duplicado com feedback inline
   - Exibe resumo de fieldOptions
   - Chama onSave com dados corretos
   - Modo editar pre-preenche campos
-- [ ] 11.2 Teste unitario de `PresetSelector`:
+- [x] 11.2 Teste unitario de `PresetSelector`:
   - Renderiza secoes separadas (sistema vs usuario)
   - Mostra icones de acao apenas em user presets
   - Mostra "Personalizado" quando activePresetId === null
   - Mostra "+ Salvar como preset" quando canSaveAsPreset
   - Esconde botao quando isAtLimit
   - Mostra "Nenhum preset salvo" quando vazio
-- [ ] 11.3 Teste de integracao:
+- [x] 11.3 Teste de integracao:
   - Criar preset → aparece no dropdown
   - Selecionar user preset → preenche fieldOptions
   - Modificar campo com user preset ativo → mostra "Atualizar" ou "Salvar como novo"
@@ -165,8 +165,8 @@
 
 - [x] 12.1 `pnpm lint` e `pnpm typecheck` em frontend e backend — zero erros
 - [ ] 12.2 Teste manual E2E: criar preset → usar → modificar → atualizar → excluir → converter
-- [ ] 12.3 Verificar que presets persistem entre sessoes (recarregar pagina)
-- [ ] 12.4 Verificar que exclusao de usuario cascateia para presets
+- [x] 12.3 Verificar que presets persistem entre sessoes (recarregar pagina)
+- [x] 12.4 Verificar que exclusao de usuario cascateia para presets
 - [ ] 12.5 Verificar responsividade do dropdown e dialog em telas menores
 
 ---
