@@ -34,11 +34,11 @@ export function SpeechBubble({ children, variant = "white", tail = "left", class
           className={cn(
             "absolute h-0 w-0",
             tail === "left" &&
-              "-bottom-4 left-8 border-t-[18px] border-r-[14px] border-l-0 border-t-current border-r-transparent",
+              "-bottom-5 left-8 border-t-[18px] border-r-[14px] border-l-0 border-t-current border-r-transparent",
             tail === "right" &&
-              "-bottom-4 right-8 border-t-[18px] border-l-[14px] border-r-0 border-t-current border-l-transparent",
+              "-bottom-5 right-8 border-t-[18px] border-l-[14px] border-r-0 border-t-current border-l-transparent",
             tail === "bottom" &&
-              "-bottom-4 left-1/2 -translate-x-1/2 border-t-[18px] border-x-[10px] border-t-current border-x-transparent",
+              "-bottom-5 left-1/2 -translate-x-1/2 border-t-[18px] border-x-[10px] border-t-current border-x-transparent",
           )}
           style={{ color: "inherit" }}
         />
