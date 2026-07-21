@@ -20,11 +20,7 @@ const preview: Preview = {
     },
   },
   decorators: [
-    (Story) => React.createElement(
-      "div",
-      { className: "p-6" },
-      React.createElement(Story)
-    ),
+    (Story) => React.createElement("div", { className: "p-6" }, React.createElement(Story)),
   ],
 };
 
