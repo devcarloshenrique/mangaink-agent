@@ -52,7 +52,15 @@ import { MockPage } from "@/components/comic/MockPage";
 import { ComparisonSlider } from "@/components/wizard/ComparisonSlider";
 import { ConversionFieldGroup } from "@/components/wizard/ConversionFieldGroup";
 import { Accordion } from "@/components/ui/accordion";
-import type { ConversionField, ConversionPreset, FieldGroupId } from "@/types/conversion";
+import type {
+  ConversionField,
+  ConversionPreset,
+  FieldGroupId,
+  UserPresetResponse,
+} from "@/types/conversion";
+import { useUserPresets } from "@/hooks/useUserPresets";
+import { PresetSelector } from "@/components/wizard/PresetSelector";
+import { SavePresetDialog } from "@/components/wizard/SavePresetDialog";
 import { FIELD_CONFLICTS } from "@/types/conversion";
 import { cn } from "@/lib/utils";
 import { authGuard } from "./-authGuard";
@@ -1016,13 +1024,13 @@ function buildEffectiveState(
 }
 
 function isPresetMatch(
-  effectiveState: Record<string, string | number | boolean>,
-  preset: ConversionPreset,
+  effective: Record<string, string | number | boolean>,
+  preset: { values: Record<string, string | number | boolean> },
 ): boolean {
   const presetKeys = Object.keys(preset.values);
   if (presetKeys.length === 0) return false;
   for (const key of presetKeys) {
-    if (effectiveState[key] !== preset.values[key]) return false;
+    if (effective[key] !== preset.values[key]) return false;
   }
   return true;
 }
@@ -1037,6 +1045,20 @@ function StepConvert({
   update: <K extends keyof WizardData>(k: K, v: WizardData[K]) => void;
 }) {
   const { data: options, isLoading: optLoading } = useConversionOptions();
+  const {
+    presets: userPresets,
+    isLoading: userPresetsLoading,
+    isAtLimit,
+    create: createPreset,
+    updateMeta,
+    updateValues,
+    remove: removePreset,
+  } = useUserPresets();
+  const [savePresetOpen, setSavePresetOpen] = useState(false);
+  const [savePresetMode, setSavePresetMode] = useState<"create" | "edit">("create");
+  const [editingPreset, setEditingPreset] = useState<UserPresetResponse | undefined>();
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastUserPresetId, setLastUserPresetId] = useState<string | null>(null);
   const [previewChapterId, setPreviewChapterId] = useState("");
   const [previewPage, setPreviewPage] = useState(1);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -1069,24 +1091,47 @@ function StepConvert({
 
   const activePresetId = useMemo(() => {
     if (!options?.presets) return null;
+    // User presets first (priority)
+    for (const preset of userPresets) {
+      if (isPresetMatch(effectiveState, preset)) return preset.id;
+    }
     for (const preset of options.presets) {
       if (isPresetMatch(effectiveState, preset)) return preset.id;
     }
     return null;
-  }, [effectiveState, options?.presets]);
+  }, [effectiveState, options?.presets, userPresets]);
+
+  const activePresetSource = useMemo((): "system" | "user" | null => {
+    if (!activePresetId) return null;
+    if (userPresets.some((p) => p.id === activePresetId)) return "user";
+    return "system";
+  }, [activePresetId, userPresets]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!lastUserPresetId) return false;
+    const lastPreset = userPresets.find((p) => p.id === lastUserPresetId);
+    if (!lastPreset) return false;
+    const presetValues = lastPreset.values;
+    const hasDiff =
+      Object.entries(presetValues).some(([k, v]) => data.fieldOptions[k] !== v) ||
+      Object.keys(data.fieldOptions).some((k) => !(k in presetValues));
+    return hasDiff && Object.keys(data.fieldOptions).length > 0;
+  }, [lastUserPresetId, userPresets, data.fieldOptions]);
 
   const isNoProcessing = data.fieldOptions.noProcessing === true;
 
   const handlePresetChange = useCallback(
     (presetId: string) => {
       if (!presetId) return;
-      const preset = options?.presets.find((p) => p.id === presetId);
+      const preset =
+        options?.presets.find((p) => p.id === presetId) ??
+        userPresets.find((p) => p.id === presetId);
       if (!preset) return;
 
       const previous = { ...data.fieldOptions };
       update("preset", presetId);
 
-      if (preset.exclusive) {
+      if ("exclusive" in preset && (preset as ConversionPreset).exclusive) {
         update("fieldOptions", { ...preset.values });
       } else {
         update("fieldOptions", { ...data.fieldOptions, ...preset.values });
@@ -1109,7 +1154,7 @@ function StepConvert({
         );
       }
     },
-    [options?.presets, data.fieldOptions, update],
+    [options?.presets, userPresets, data.fieldOptions, update],
   );
 
   const handleFieldChange = useCallback(
@@ -1245,7 +1290,7 @@ function StepConvert({
 
   const presetOptions = options?.presets ?? [];
   const presetDisplayName = activePresetId
-    ? presetOptions.find((p) => p.id === activePresetId)?.name
+    ? [...userPresets, ...presetOptions].find((p) => p.id === activePresetId)?.name
     : "Personalizado";
 
   const renderGroup = (groupId: string, fields: ConversionField[]) => {
@@ -1347,24 +1392,87 @@ function StepConvert({
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="font-display text-base">Preset</Label>
-                  <Select value={activePresetId ?? ""} onValueChange={handlePresetChange}>
-                    <SelectTrigger className="border-[3px] border-ink h-11 shadow-comic-sm font-display">
-                      <SelectValue placeholder="Selecione um preset">
-                        {presetDisplayName}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="border-[3px] border-ink">
-                      {presetOptions.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          <span className="font-display mr-2">{p.name}</span>
-                          <span className="opacity-70 text-xs">— {p.description}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <PresetSelector
+                    presets={options?.presets ?? []}
+                    userPresets={userPresets}
+                    activePresetId={activePresetId}
+                    activePresetSource={activePresetSource}
+                    isAtLimit={isAtLimit}
+                    onSelectPreset={(id) => {
+                      handlePresetChange(id);
+                      if (userPresets.some((p) => p.id === id)) {
+                        setLastUserPresetId(id);
+                      }
+                    }}
+                    onSaveAsPreset={() => {
+                      setSavePresetMode("create");
+                      setEditingPreset(undefined);
+                      setSavePresetOpen(true);
+                    }}
+                    onEditPreset={(preset) => {
+                      setSavePresetMode("edit");
+                      setEditingPreset(preset);
+                      setSavePresetOpen(true);
+                    }}
+                    onDeletePreset={async (preset) => {
+                      if (!window.confirm(`Excluir preset "${preset.name}"?`)) return;
+                      await removePreset(preset.id);
+                      if (activePresetId === preset.id) {
+                        update("preset", "");
+                      }
+                      toast.success(`Preset "${preset.name}" excluido`);
+                    }}
+                    onToggleDefault={async (preset) => {
+                      await updateMeta(preset.id, { isDefault: !preset.isDefault });
+                    }}
+                    onCustomMode={() => update("preset", "")}
+                    onUpdateValues={async (preset) => {
+                      try {
+                        await updateValues(preset.id, data.fieldOptions);
+                        toast.success(`Preset "${preset.name}" atualizado`);
+                      } catch {
+                        toast.error("Erro ao atualizar preset");
+                      }
+                    }}
+                  />
+                  {hasUnsavedChanges && (
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[2px] border-ink shadow-comic-sm font-display text-xs"
+                        onClick={async () => {
+                          try {
+                            await updateValues(lastUserPresetId!, data.fieldOptions);
+                            toast.success("Preset atualizado");
+                          } catch {
+                            toast.error("Erro ao atualizar preset");
+                          }
+                        }}
+                      >
+                        Atualizar{" "}
+                        {userPresets.find((p) => p.id === lastUserPresetId)?.name ?? "preset"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[2px] border-ink shadow-comic-sm font-display text-xs"
+                        onClick={() => {
+                          setSavePresetMode("create");
+                          setEditingPreset(undefined);
+                          setSavePresetOpen(true);
+                        }}
+                      >
+                        Salvar como novo
+                      </Button>
+                    </div>
+                  )}
                   <p className="text-xs font-medium opacity-70">
-                    {presetOptions.find((p) => p.id === activePresetId)?.description ??
-                      "Configurações personalizadas — nenhum preset corresponde exatamente."}
+                    {activePresetId
+                      ? ([...userPresets, ...(options?.presets ?? [])].find(
+                          (p) => p.id === activePresetId,
+                        )?.description ?? "")
+                      : "Configurações personalizadas — nenhum preset corresponde exatamente."}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -1788,6 +1896,33 @@ function StepConvert({
           </div>
         </>
       )}
+
+      <SavePresetDialog
+        open={savePresetOpen}
+        onOpenChange={setSavePresetOpen}
+        onSave={async (data) => {
+          setIsSaving(true);
+          try {
+            if (savePresetMode === "edit" && editingPreset) {
+              await updateMeta(editingPreset.id, data);
+            } else {
+              await createPreset(data);
+            }
+            setSavePresetOpen(false);
+            toast.success(savePresetMode === "edit" ? "Preset atualizado" : "Preset salvo");
+          } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Erro ao salvar";
+            toast.error(msg);
+          } finally {
+            setIsSaving(false);
+          }
+        }}
+        fieldOptions={data.fieldOptions}
+        mode={savePresetMode}
+        existingPreset={editingPreset}
+        existingNames={userPresets.map((p) => p.name)}
+        isSaving={isSaving}
+      />
     </div>
   );
 }

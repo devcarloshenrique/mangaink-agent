@@ -228,3 +228,35 @@ export const IMAGE_SUBCATEGORIES = [
     fieldIds: ["blackBorders", "whiteBorders", "croppingPower", "croppingMinimum"],
   },
 ] as const;
+
+// ─── User Presets ────────────────────────────────────────────────────────────
+
+export interface UserPresetResponse {
+  id: string;
+  name: string;
+  description?: string | null;
+  values: Record<string, string | number | boolean>;
+  isDefault: boolean;
+  lastUsedAt?: string | null;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserPresetListResponse {
+  presets: UserPresetResponse[];
+  limit: number;
+}
+
+export interface CreateUserPresetInput {
+  name: string;
+  description?: string;
+  values: Record<string, string | number | boolean>;
+  isDefault?: boolean;
+}
+
+export interface UpdateUserPresetMetaInput {
+  name?: string;
+  description?: string | null;
+  isDefault?: boolean;
+}

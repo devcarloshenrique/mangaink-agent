@@ -1,7 +1,13 @@
 // Cliente HTTP para comunicação com o backend MangaInk
 // Backend: Fastify + JWT Bearer token na resposta JSON
 
-import type { AuthResponse, LoginCredentials, RegisterData, UpdateProfileData, User } from "@/types/auth";
+import type {
+  AuthResponse,
+  LoginCredentials,
+  RegisterData,
+  UpdateProfileData,
+  User,
+} from "@/types/auth";
 import type { InspectTriggerResponse, SourceInspectResponse } from "@/types/scraping";
 import type {
   ConversionOptions,
@@ -10,6 +16,10 @@ import type {
   CreateConversionResponse,
   ConversionListResult,
   ConversionStatus,
+  UserPresetListResponse,
+  UserPresetResponse,
+  CreateUserPresetInput,
+  UpdateUserPresetMetaInput,
 } from "@/types/conversion";
 import type { SSEJournalEvent } from "@/types/conversion";
 import { createSSEStream } from "@/lib/sse";
@@ -53,8 +63,10 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = tokenStore.get();
 
+  const hasBody = options.body != null;
+
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(hasBody ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
@@ -228,13 +240,13 @@ export const conversionsApi = {
   },
 
   /** DELETE /api/conversions/:conversionId — remove permanentemente */
-  async remove(conversionId: string): Promise<{ conversionId: string; status: 'deleted' }> {
-    return request(`/api/conversions/${conversionId}`, { method: 'DELETE' });
+  async remove(conversionId: string): Promise<{ conversionId: string; status: "deleted" }> {
+    return request(`/api/conversions/${conversionId}`, { method: "DELETE" });
   },
 
   /** POST /api/conversions/:conversionId/cancel — cancela sem remover */
-  async cancel(conversionId: string): Promise<{ conversionId: string; status: 'cancelled' }> {
-    return request(`/api/conversions/${conversionId}/cancel`, { method: 'POST' });
+  async cancel(conversionId: string): Promise<{ conversionId: string; status: "cancelled" }> {
+    return request(`/api/conversions/${conversionId}/cancel`, { method: "POST" });
   },
 
   /** GET /api/conversions/:conversionId/logs — eventos do journal (Redis) */
@@ -259,3 +271,43 @@ export const conversionsApi = {
   },
 };
 
+// ─── User Presets API ─────────────────────────────────────────────────────────
+
+export const presetsApi = {
+  /** GET /api/conversions/presets — lista presets do usuario */
+  async list(): Promise<UserPresetListResponse> {
+    return request<UserPresetListResponse>("/api/conversions/presets");
+  },
+
+  /** POST /api/conversions/presets — cria novo preset */
+  async create(body: CreateUserPresetInput): Promise<UserPresetResponse> {
+    return request<UserPresetResponse>("/api/conversions/presets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  /** PATCH /api/conversions/presets/:id — edita metadados */
+  async updateMeta(presetId: string, body: UpdateUserPresetMetaInput): Promise<UserPresetResponse> {
+    return request<UserPresetResponse>(`/api/conversions/presets/${presetId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
+  /** PUT /api/conversions/presets/:id/values — atualiza valores */
+  async updateValues(
+    presetId: string,
+    values: Record<string, string | number | boolean>,
+  ): Promise<UserPresetResponse> {
+    return request<UserPresetResponse>(`/api/conversions/presets/${presetId}/values`, {
+      method: "PUT",
+      body: JSON.stringify({ values }),
+    });
+  },
+
+  /** DELETE /api/conversions/presets/:id — exclui preset */
+  async remove(presetId: string): Promise<void> {
+    return request(`/api/conversions/presets/${presetId}`, { method: "DELETE" });
+  },
+};
