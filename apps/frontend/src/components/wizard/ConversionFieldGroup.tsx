@@ -188,7 +188,7 @@ export const ConversionFieldGroup = React.memo(function ConversionFieldGroup({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 font-display text-xs ml-auto mr-2 hover:bg-muted"
+            className="h-7 px-2 font-display text-xs ml-auto mr-2"
             onClick={(e) => {
               e.stopPropagation();
               onResetGroup();
