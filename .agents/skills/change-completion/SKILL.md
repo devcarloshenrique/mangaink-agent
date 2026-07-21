@@ -47,7 +47,7 @@ Nunca ignore falhas. Nunca "siga em frente". Nunca documente para corrigir depoi
 Garantir que nenhuma change seja considerada concluída sem passar por todas as etapas de validação de qualidade, arquivamento e organização do histórico Git.
 
 **Quando usar:**
-- Implementação da change concluída (todas as tasks marcadas)
+- Implementação da change concluída
 - Preparação para entregar uma feature
 - Antes de abrir um Pull Request
 - Ao arquivar uma change OpenSpec
@@ -63,7 +63,7 @@ Garantir que nenhuma change seja considerada concluída sem passar por todas as 
 
 ```
 [ ] Existe uma change OpenSpec ativa em docs/openspec/changes/{change-id}/
-[ ] O arquivo tasks.md existe e todas as tasks estão marcadas [x]
+[ ] O arquivo tasks.md existe (tasks serão marcadas automaticamente no passo 8b)
 [ ] A implementação está funcionalmente completa
 [ ] Não há bloqueios ou pendências conhecidas
 ```
@@ -84,6 +84,7 @@ Gate
   → 6. Risk Scan
   → 7. Análise de Impacto
   → 8. Specification Review
+  → 8b. Task Completion
   → 9. Evidence Review
   → 10. Arquivamento
   → 11. Atomic Boundary Analysis
@@ -109,6 +110,14 @@ Antes de qualquer validação, identifique o ferramental do projeto. Inspecione 
 | Contributing docs | `CONTRIBUTING.md`, `README.md`, `DEVELOPMENT.md`, `HACKING.md` |
 
 **Resultado esperado**: uma lista clara dos comandos de validação oficiais (lint, test, typecheck, build). Use esses comandos em todo o fluxo — nunca suponha `npm test` se o projeto usa `cargo test`.
+
+**Discovery adicional — changes ativas:**
+
+Antes de prosseguir, execute `openspec list` (ou liste o diretório `docs/openspec/changes/`) para identificar todas as changes ativas.
+
+- Se houver **uma única change** ativa → prossiga automaticamente com ela.
+- Se houver **múltiplas changes** ativas → pergunte ao usuário qual deseja finalizar. Mostre a lista numerada e aguarde a escolha.
+- Se houver **zero changes** ativas → interrompa. Nada a finalizar.
 
 ---
 
@@ -258,6 +267,24 @@ Verifique superfícies alteradas e seus efeitos em consumidores.
 
 ---
 
+### 8b. Task Completion
+
+**Após validar** (passo 8) que a implementação corresponde às tasks descritas, marque TODAS as tasks como concluídas no arquivo `tasks.md`.
+
+**Procedimento:**
+
+1. Leia `docs/openspec/changes/{change-id}/tasks.md`
+2. Substitua **todas** as ocorrências de `- [ ]` por `- [x]`
+3. Substitua o header de status: `> **Status:** DRAFT` (ou qualquer valor) por `> **Status:** COMPLETED`
+4. Escreva o arquivo atualizado
+5. Reporte: `"N tasks marcadas como concluídas em tasks.md"`
+
+> **Regra**: só execute este passo se o passo 8 (Specification Review) confirmou que todas as tasks foram implementadas. Se alguma task descrita não foi implementada, **volte para a implementação** — não marque tasks falsamente.
+
+> **Por que isso importa**: o `openspec archive` reporta `0/N tasks` se as checkboxes não estiverem marcadas. Tasks marcadas são o registro canônico de que a implementação está completa.
+
+---
+
 ### 9. Evidence Review
 
 Revise artefatos auxiliares que demonstram o comportamento da funcionalidade.
@@ -278,6 +305,11 @@ Quando existirem, verifique se continuam válidos:
 ---
 
 ### 10. Arquivamento
+
+**Pré-validação obrigatória antes do arquivamento:**
+
+- [ ] `tasks.md` tem todas as tasks marcadas `[x]`? Se não, execute o passo 8b primeiro
+- [ ] `openspec validate {change-id}` passou? Re-execute o passo 3 se necessário
 
 Execute o arquivamento via CLI do OpenSpec:
 
@@ -412,6 +444,7 @@ A change só está **concluída** quando todos os itens estiverem marcados:
 
 ```
 [ ] Todas as tasks concluídas (tasks.md com todos [x])
+[ ] tasks.md atualizado (status COMPLETED, passo 8b executado)
 [ ] Projeto descoberto (comandos de validação identificados)
 [ ] Revisão de código finalizada (sem TODOs, debug, código morto)
 [ ] OpenSpec validado (validate --all --strict)
@@ -473,25 +506,25 @@ A change só está **concluída** quando todos os itens estiverem marcados:
 Usuário: "finalizei a implementação de fix-testes. Pode finalizar?"
 
 Agente:
-  1. Gate: change existe, tasks [x], sem bloqueios ✓
-  2. Passo 1: descoberta → package.json + pnpm-workspace.yaml → monorepo pnpm ✓
+  1. Gate: change existe, tasks.md existe, sem bloqueios ✓
+  2. Passo 1: descoberta → pnpm monorepo + openspec list → 1 change ativa (wizard-conversion-fields) ✓
   3. Passo 2: varredura de TODOs/logs → limpo ✓
   4. Passo 3: validação → pnpm lint/test + openspec validate → tudo passando ✓
   5. Passo 4: escopo → sem código oportunista ✓
   6. Passo 5: arquitetural → sem duplicação, acoplamento ou violações ✓
   7. Passo 6: risk scan → sem credenciais, timeouts, fallbacks ✓
-  8. Passo 7: impacto → sem breaking changes; docs de env vars atualizadas ✓
+  8. Passo 7: impacto → sem breaking changes ✓
   9. Passo 8: specification review → design.md, tasks.md consistentes ✓
-  10. Passo 9: evidence review → fixtures e exemplos válidos ✓
-  11. Passo 10: openspec archive fix-testes --yes → archive/ ✓
-  12. Passo 11: Atomic Boundary Analysis → 5 responsabilidades claras →
-      prossegue automaticamente ✓
-  13. Passo 12: 5 commits atômicos criados ✓
-  14. Passo 13: git log revisado → ordem lógica, mensagens claras ✓
-  15. Passo 14: release readiness → sem migração, sem breaking change, deploy independente ✓
-  16. DoD: 20 itens marcados ✓
+  10. Passo 8b: task completion → 48 tasks marcadas [x], status COMPLETED ✓
+  11. Passo 9: evidence review → sem artefatos desatualizados ✓
+  12. Passo 10: archive → pré-validação tasks [x] + validate → openspec archive --yes → archive/ ✓
+  13. Passo 11: Atomic Boundary Analysis → 5 responsabilidades claras → prossegue ✓
+  14. Passo 12: 5 commits atômicos criados ✓
+  15. Passo 13: git log revisado → ordem lógica, mensagens claras ✓
+  16. Passo 14: release readiness → sem migração, sem breaking change, deploy independente ✓
+  17. DoD: 21 itens marcados ✓
 
-Agente: "Change fix-testes concluída. 5 commits, pronta para produção."
+Agente: "Change wizard-conversion-fields concluída. 5 commits, tasks marcadas, pronta para produção."
 ```
 
 ---
