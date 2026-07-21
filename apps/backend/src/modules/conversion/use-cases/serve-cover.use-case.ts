@@ -1,6 +1,6 @@
 import { join, extname } from 'node:path'
+import { readdir, writeFile } from 'node:fs/promises'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
-import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import type { SourceCacheRepository } from '../../scraping/repositories/source-cache.repository'
 import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
@@ -20,7 +20,10 @@ export class ServeCoverUseCase {
 
   async execute(sourceId: string, coverId: string): Promise<{ filePath: string; contentType: string }> {
     const source = await this.sources.load(sourceId)
+
     if (!source) {
+      const diskHit = await this.findCachedFile(sourceId, coverId)
+      if (diskHit) return diskHit
       throw new ConversionNotFoundError(`Source "${sourceId}" não encontrada`)
     }
 
@@ -49,6 +52,23 @@ export class ServeCoverUseCase {
     await writeFile(cachedPath, buffer)
 
     return { filePath: cachedPath, contentType: MIME_MAP[urlExt] ?? 'image/jpeg' }
+  }
+
+  private async findCachedFile(
+    sourceId: string,
+    coverId: string,
+  ): Promise<{ filePath: string; contentType: string } | null> {
+    const coversDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
+    try {
+      const entries = await readdir(coversDir)
+      const match = entries.find((name) => name.startsWith(`${coverId}.`))
+      if (!match) return null
+      const filePath = join(coversDir, match)
+      const ext = extname(match).toLowerCase()
+      return { filePath, contentType: MIME_MAP[ext] ?? 'image/jpeg' }
+    } catch {
+      return null
+    }
   }
 
   private async resolveProvider(source: any): Promise<IProviderStrategy | null> {

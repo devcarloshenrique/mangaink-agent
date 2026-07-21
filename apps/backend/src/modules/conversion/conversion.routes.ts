@@ -27,7 +27,6 @@ import { coverParamsSchema } from './dtos/cover-params.dto'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
-  coverSchema,
 } from './dtos/create-conversion.dto'
 import { conversionParamsSchema } from './dtos/conversion-params.dto'
 import { conversionOptionsResponseSchema } from './dtos/conversion-options.dto'
@@ -116,7 +115,7 @@ const conversionSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   finishedAt: z.string().optional(),
-  cover: coverSchema.optional(),
+  cover: z.object({ kind: z.string() }).passthrough().optional(),
 })
 
 const listConversionsResponseSchema = z.object({
