@@ -115,9 +115,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     const s = comicIntensity;
-    root.style.setProperty("--shadow-comic-sm", `${Math.round(3 * s)}px ${Math.round(3 * s)}px 0 0 var(--comic-ink)`);
-    root.style.setProperty("--shadow-comic", `${Math.round(6 * s)}px ${Math.round(6 * s)}px 0 0 var(--comic-ink)`);
-    root.style.setProperty("--shadow-comic-lg", `${Math.round(10 * s)}px ${Math.round(10 * s)}px 0 0 var(--comic-ink)`);
+    root.style.setProperty(
+      "--shadow-comic-sm",
+      `${Math.round(3 * s)}px ${Math.round(3 * s)}px 0 0 var(--comic-ink)`,
+    );
+    root.style.setProperty(
+      "--shadow-comic",
+      `${Math.round(6 * s)}px ${Math.round(6 * s)}px 0 0 var(--comic-ink)`,
+    );
+    root.style.setProperty(
+      "--shadow-comic-lg",
+      `${Math.round(10 * s)}px ${Math.round(10 * s)}px 0 0 var(--comic-ink)`,
+    );
     localStorage.setItem(INTENSITY_KEY, String(s));
   }, [comicIntensity]);
 

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { authApi, userApi, ApiError } from "@/lib/api";
 import type { User, LoginCredentials, RegisterData, UpdateProfileData } from "@/types/auth";
 
@@ -60,7 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     restoreSession();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Métodos de Auth ────────────────────────────────────────────────────────
@@ -95,9 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Compat com consumidores legados ────────────────────────────────────────
-  const signIn = useCallback(async (email: string, password: string) => {
-    await login({ identifier: email, password });
-  }, [login]);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      await login({ identifier: email, password });
+    },
+    [login],
+  );
 
   const signUp = useCallback(
     async (username: string, email: string, password: string) => {

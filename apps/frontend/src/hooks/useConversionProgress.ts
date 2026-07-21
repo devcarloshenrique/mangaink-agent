@@ -149,11 +149,14 @@ function progressReducer(state: ProgressState, action: ProgressAction): Progress
     case "CORRUPT_PAGE":
       return {
         ...state,
-        corruptPages: [...state.corruptPages, {
-          chapterId: action.chapterId,
-          pageIndex: action.pageIndex,
-          reason: action.reason,
-        }],
+        corruptPages: [
+          ...state.corruptPages,
+          {
+            chapterId: action.chapterId,
+            pageIndex: action.pageIndex,
+            reason: action.reason,
+          },
+        ],
       };
 
     case "CONVERSION_STARTED":
@@ -201,8 +204,7 @@ function deriveStages(progress: ProgressState, apiJobs: { status: string }[]): S
 
   // ── Download ─────────────────────────────────────────────────────────
   const downloadDone =
-    allDone ||
-    (progress.totalChapters > 0 && progress.processedChapters >= progress.totalChapters);
+    allDone || (progress.totalChapters > 0 && progress.processedChapters >= progress.totalChapters);
   const downloadActive =
     !downloadDone && (progress.processedChapters > 0 || progress.currentChapter !== null);
   const downloadProgress =
@@ -276,10 +278,10 @@ function toLogType(fromCache: boolean): "cache" | "info" {
 function formatJournalEntry(entry: SSEJournalEvent): LogEntry | null {
   const base = {
     timestamp: entry.timestamp,
-  }
+  };
 
-  const ch = entry.data.chapterId as string | undefined
-  const fromCache = (entry.data.fromCache as boolean) ?? false
+  const ch = entry.data.chapterId as string | undefined;
+  const fromCache = (entry.data.fromCache as boolean) ?? false;
 
   switch (entry.type) {
     case "download.chapter.started":
@@ -289,66 +291,66 @@ function formatJournalEntry(entry: SSEJournalEvent): LogEntry | null {
         message: fromCache
           ? `${formatChapterId(ch ?? "")} em cache — pulando download`
           : `Baixando ${formatChapterId(ch ?? "")} (${entry.data.totalImages} imagens)`,
-      }
+      };
 
     case "download.chapter.finished":
       return {
         ...base,
         type: "info",
         message: `${formatChapterId(ch ?? "")} baixado — ${entry.data.downloadedImages ?? "?"}/${entry.data.totalImages ?? "?"} imagens`,
-      }
+      };
 
     case "download.chapter.skipped":
       return {
         ...base,
         type: "warn",
         message: `${formatChapterId(ch ?? "")} indisponível no site — capítulo ignorado`,
-      }
+      };
 
     case "download.image.corrupt":
       return {
         ...base,
         type: "warn",
         message: `${formatChapterId(ch ?? "")} pág. ${entry.data.pageIndex} corrompida — ${String(entry.data.reason ?? "desconhecido")}`,
-      }
+      };
 
     case "download.error":
       return {
         ...base,
         type: "error",
         message: `Erro no capítulo ${ch ?? "?"}: ${String(entry.data.error ?? "desconhecido")}`,
-      }
+      };
 
     case "job.failed":
       return {
         ...base,
         type: "error",
         message: `Job falhou: ${String(entry.data.error ?? "Erro desconhecido")}`,
-      }
+      };
 
     case "conversion.started":
       return {
         ...base,
         type: "info",
         message: `KCC iniciado — ${String(entry.data.deviceId ?? "")} ${String(entry.data.format ?? "")}`,
-      }
+      };
 
     case "conversion.finished":
       return {
         ...base,
         type: "info",
         message: `KCC concluído — output: ${String(entry.data.outputFile ?? "?")}`,
-      }
+      };
 
     case "job.finished":
       return {
         ...base,
         type: "info",
         message: `Volume concluído — ${String(entry.data.outputFile ?? "")}${((entry.data.outputSize as number) ?? 0) > 0 ? ` (${((entry.data.outputSize as number) / 1024 / 1024).toFixed(1)} MB)` : ""}`,
-      }
+      };
 
     default:
-      return null
+      return null;
   }
 }
 
@@ -402,21 +404,26 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
               }, 0)
           : undefined;
 
-        dispatch({ type: "SET_TOTALS", totalChapters, totalJobs, processedChapters: initialProcessed });
+        dispatch({
+          type: "SET_TOTALS",
+          totalChapters,
+          totalJobs,
+          processedChapters: initialProcessed,
+        });
 
         setIsLoading(false);
 
         if (isTerminal(initial.status)) {
           try {
-            const entries = await conversionsApi.getLogs(conversionId)
+            const entries = await conversionsApi.getLogs(conversionId);
             for (const entry of entries) {
-              const log = formatJournalEntry(entry)
-              if (log) dispatch({ type: "ADD_LOG", entry: log })
+              const log = formatJournalEntry(entry);
+              if (log) dispatch({ type: "ADD_LOG", entry: log });
             }
           } catch {
             // logs não disponíveis — mantém array vazio
           }
-          return
+          return;
         }
 
         const sse = conversionsApi.events(conversionId, {

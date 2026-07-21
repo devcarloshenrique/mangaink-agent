@@ -335,6 +335,13 @@ function slugify(title: string): string {
 
 export function useConversion() {
   const ctx = useContext(Ctx);
-  if (!ctx) return { jobs: [], startJob: (() => "") as never, getJob: () => undefined, cancelJob: () => {}, clearCompleted: () => {} } as ConversionCtx;
+  if (!ctx)
+    return {
+      jobs: [],
+      startJob: (() => "") as never,
+      getJob: () => undefined,
+      cancelJob: () => {},
+      clearCompleted: () => {},
+    } as ConversionCtx;
   return ctx;
 }
