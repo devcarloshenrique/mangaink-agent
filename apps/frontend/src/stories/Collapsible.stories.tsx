@@ -17,7 +17,10 @@ export const Default: Story = {
     return (
       <Collapsible open={open} onOpenChange={setOpen} className="w-[350px] space-y-2">
         <CollapsibleTrigger asChild>
-          <Button variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display w-full justify-between">
+          <Button
+            variant="outline"
+            className="border-[3px] border-ink shadow-comic-sm font-display w-full justify-between"
+          >
             <span>Mostrar detalhes</span>
             <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
           </Button>

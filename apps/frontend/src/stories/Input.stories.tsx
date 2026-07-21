@@ -31,9 +31,19 @@ export const Disabled: Story = {
 export const ComicStyle: Story = {
   render: () => (
     <div className="space-y-4">
-      <Input placeholder="https://exemplo.com/manga/meu-manga" className="border-[3px] border-ink h-12 text-base shadow-comic-sm focus-visible:ring-comic-blue" />
-      <Input placeholder="seu-nome@kindle.com" className="border-[3px] border-ink h-11 shadow-comic-sm" />
-      <Input placeholder="Desabilitado" disabled className="border-[3px] border-ink h-11 shadow-comic-sm" />
+      <Input
+        placeholder="https://exemplo.com/manga/meu-manga"
+        className="border-[3px] border-ink h-12 text-base shadow-comic-sm focus-visible:ring-comic-blue"
+      />
+      <Input
+        placeholder="seu-nome@kindle.com"
+        className="border-[3px] border-ink h-11 shadow-comic-sm"
+      />
+      <Input
+        placeholder="Desabilitado"
+        disabled
+        className="border-[3px] border-ink h-11 shadow-comic-sm"
+      />
     </div>
   ),
 };

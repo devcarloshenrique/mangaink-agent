@@ -76,7 +76,8 @@ export const LongText: Story = {
   args: {
     variant: "yellow",
     tail: "bottom",
-    children: "Este é um texto mais longo para demonstrar como o balão se comporta com várias linhas de conteúdo. Ele se adapta automaticamente ao tamanho do texto.",
+    children:
+      "Este é um texto mais longo para demonstrar como o balão se comporta com várias linhas de conteúdo. Ele se adapta automaticamente ao tamanho do texto.",
   },
 };
 

@@ -45,14 +45,30 @@ export const Large: Story = {
 export const AllSounds: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
-      <OnomatopoeiaBadge variant="yellow" size="md">BAM!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="red" size="md">POW!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="blue" size="md">DONE!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="yellow" size="sm">ZIP!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="red" size="lg">BOOM!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="blue" size="sm">SEND!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="yellow" size="md">WHOOSH!</OnomatopoeiaBadge>
-      <OnomatopoeiaBadge variant="red" size="md">BEEP!</OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="yellow" size="md">
+        BAM!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="red" size="md">
+        POW!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="blue" size="md">
+        DONE!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="yellow" size="sm">
+        ZIP!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="red" size="lg">
+        BOOM!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="blue" size="sm">
+        SEND!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="yellow" size="md">
+        WHOOSH!
+      </OnomatopoeiaBadge>
+      <OnomatopoeiaBadge variant="red" size="md">
+        BEEP!
+      </OnomatopoeiaBadge>
     </div>
   ),
 };

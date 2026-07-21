@@ -7,7 +7,10 @@ const meta: Meta<typeof Button> = {
   component: Button,
   tags: ["autodocs"],
   argTypes: {
-    variant: { control: "select", options: ["default", "destructive", "outline", "secondary", "ghost", "link"] },
+    variant: {
+      control: "select",
+      options: ["default", "destructive", "outline", "secondary", "ghost", "link"],
+    },
     size: { control: "select", options: ["default", "sm", "lg", "icon"] },
     disabled: { control: "boolean" },
   },
@@ -25,7 +28,9 @@ export const Link: Story = { args: { variant: "link", children: "Link" } };
 export const Disabled: Story = { args: { disabled: true, children: "Desabilitado" } };
 export const Small: Story = { args: { size: "sm", children: "Pequeno" } };
 export const Large: Story = { args: { size: "lg", children: "Grande" } };
-export const IconOnly: Story = { args: { size: "icon", children: <Download className="h-4 w-4" /> } };
+export const IconOnly: Story = {
+  args: { size: "icon", children: <Download className="h-4 w-4" /> },
+};
 
 export const WithIcon: Story = {
   render: () => (
@@ -39,7 +44,10 @@ export const WithIcon: Story = {
       <Button variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display">
         <Mail className="h-4 w-4 mr-1" /> Enviar
       </Button>
-      <Button variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display text-destructive">
+      <Button
+        variant="outline"
+        className="border-[3px] border-ink shadow-comic-sm font-display text-destructive"
+      >
         <Trash2 className="h-4 w-4 mr-1" /> Excluir
       </Button>
     </div>
@@ -58,7 +66,11 @@ export const ComicStyle: Story = {
       <Button variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display">
         Cancelar
       </Button>
-      <Button variant="outline" className="border-[3px] border-ink shadow-comic-sm font-display" disabled>
+      <Button
+        variant="outline"
+        className="border-[3px] border-ink shadow-comic-sm font-display"
+        disabled
+      >
         <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Carregando…
       </Button>
     </div>

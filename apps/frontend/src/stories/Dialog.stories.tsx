@@ -1,6 +1,13 @@
 import type { Meta } from "@storybook/react";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +25,9 @@ export const Default: Story = {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button className="border-[3px] border-ink shadow-comic font-display">Abrir Dialog</Button>
+          <Button className="border-[3px] border-ink shadow-comic font-display">
+            Abrir Dialog
+          </Button>
         </DialogTrigger>
         <DialogContent className="border-[3px] border-ink shadow-comic-lg">
           <DialogHeader>
@@ -28,14 +37,24 @@ export const Default: Story = {
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
               <Label className="font-display">Nome</Label>
-              <Input placeholder="Digite seu nome" className="border-[3px] border-ink shadow-comic-sm" />
+              <Input
+                placeholder="Digite seu nome"
+                className="border-[3px] border-ink shadow-comic-sm"
+              />
             </div>
           </div>
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setOpen(false)} className="border-[3px] border-ink shadow-comic-sm font-display">
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              className="border-[3px] border-ink shadow-comic-sm font-display"
+            >
               Cancelar
             </Button>
-            <Button onClick={() => setOpen(false)} className="bg-comic-red text-primary-foreground border-[3px] border-ink shadow-comic font-display">
+            <Button
+              onClick={() => setOpen(false)}
+              className="bg-comic-red text-primary-foreground border-[3px] border-ink shadow-comic font-display"
+            >
               Confirmar
             </Button>
           </div>

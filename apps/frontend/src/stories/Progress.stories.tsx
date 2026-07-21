@@ -41,19 +41,28 @@ export const ComicStyle: Story = {
       <div>
         <p className="font-display text-sm mb-1">Baixando imagens • 45%</p>
         <div className="h-4 w-full border-[3px] border-ink rounded-full bg-card overflow-hidden">
-          <div className="h-full bg-comic-blue transition-all duration-300" style={{ width: "45%" }} />
+          <div
+            className="h-full bg-comic-blue transition-all duration-300"
+            style={{ width: "45%" }}
+          />
         </div>
       </div>
       <div>
         <p className="font-display text-sm mb-1">Convertendo páginas • 78%</p>
         <div className="h-4 w-full border-[3px] border-ink rounded-full bg-card overflow-hidden">
-          <div className="h-full bg-comic-yellow transition-all duration-300" style={{ width: "78%" }} />
+          <div
+            className="h-full bg-comic-yellow transition-all duration-300"
+            style={{ width: "78%" }}
+          />
         </div>
       </div>
       <div>
         <p className="font-display text-sm mb-1">Concluído • 100%</p>
         <div className="h-4 w-full border-[3px] border-ink rounded-full bg-card overflow-hidden">
-          <div className="h-full bg-comic-blue transition-all duration-300" style={{ width: "100%" }} />
+          <div
+            className="h-full bg-comic-blue transition-all duration-300"
+            style={{ width: "100%" }}
+          />
         </div>
       </div>
     </div>

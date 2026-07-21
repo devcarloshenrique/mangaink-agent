@@ -14,15 +14,21 @@ export const Default: Story = {
     <RadioGroup defaultValue="epub">
       <div className="flex items-center gap-2">
         <RadioGroupItem value="epub" id="r1" />
-        <Label htmlFor="r1" className="font-display">EPUB</Label>
+        <Label htmlFor="r1" className="font-display">
+          EPUB
+        </Label>
       </div>
       <div className="flex items-center gap-2">
         <RadioGroupItem value="mobi" id="r2" />
-        <Label htmlFor="r2" className="font-display">MOBI</Label>
+        <Label htmlFor="r2" className="font-display">
+          MOBI
+        </Label>
       </div>
       <div className="flex items-center gap-2">
         <RadioGroupItem value="cbz" id="r3" />
-        <Label htmlFor="r3" className="font-display">CBZ</Label>
+        <Label htmlFor="r3" className="font-display">
+          CBZ
+        </Label>
       </div>
     </RadioGroup>
   ),

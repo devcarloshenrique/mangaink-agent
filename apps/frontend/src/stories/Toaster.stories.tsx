@@ -29,7 +29,9 @@ export const Examples: Story = {
           Error Toast
         </Button>
         <Button
-          onClick={() => toast("Processando…", { description: "Aguarde enquanto convertemos as páginas." })}
+          onClick={() =>
+            toast("Processando…", { description: "Aguarde enquanto convertemos as páginas." })
+          }
           variant="outline"
           className="border-[3px] border-ink shadow-comic-sm font-display"
         >

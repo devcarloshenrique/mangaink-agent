@@ -77,18 +77,14 @@ export const Halftone: Story = {
 export const TiltLeft: Story = {
   args: {
     tilt: "left",
-    children: (
-      <p className="font-display text-xl">Inclinado para a esquerda (-1°)</p>
-    ),
+    children: <p className="font-display text-xl">Inclinado para a esquerda (-1°)</p>,
   },
 };
 
 export const TiltRight: Story = {
   args: {
     tilt: "right",
-    children: (
-      <p className="font-display text-xl">Inclinado para a direita (+1°)</p>
-    ),
+    children: <p className="font-display text-xl">Inclinado para a direita (+1°)</p>,
   },
 };
 

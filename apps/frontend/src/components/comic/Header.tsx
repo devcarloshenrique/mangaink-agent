@@ -45,7 +45,9 @@ export function ComicHeader() {
 
   const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const activeCount = activeJobs.length;
-  const completedCount = jobs.filter((j) => j.status === "completed" || j.status === "error").length;
+  const completedCount = jobs.filter(
+    (j) => j.status === "completed" || j.status === "error",
+  ).length;
 
   return (
     <header className="sticky top-0 z-40 border-b-[3px] border-ink bg-comic-yellow">
@@ -54,9 +56,7 @@ export function ComicHeader() {
           <span className="flex h-10 w-10 items-center justify-center rounded-full border-[3px] border-ink bg-comic-red text-primary-foreground shadow-comic-sm group-hover:-rotate-12 transition-transform">
             <BookOpen className="h-5 w-5" strokeWidth={3} />
           </span>
-          <span className="font-display text-2xl md:text-3xl tracking-wide">
-            Mangaink
-          </span>
+          <span className="font-display text-2xl md:text-3xl tracking-wide">Mangaink</span>
         </Link>
 
         {user && (
@@ -95,7 +95,9 @@ export function ComicHeader() {
                       ? "border-ink bg-comic-yellow shadow-comic-sm hover:-translate-y-0.5"
                       : "border-ink bg-card hover:-translate-y-0.5",
                   )}
-                  title={activeCount > 0 ? `${activeCount} conversão(ões) em andamento` : "Downloads"}
+                  title={
+                    activeCount > 0 ? `${activeCount} conversão(ões) em andamento` : "Downloads"
+                  }
                 >
                   <Download className={cn("h-4 w-4", activeCount > 0 && "text-comic-blue")} />
                   {activeCount > 0 && (
@@ -127,9 +129,7 @@ export function ComicHeader() {
                   {jobs.length === 0 ? (
                     <div className="px-4 py-8 text-center">
                       <Download className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm font-medium opacity-50">
-                        Nenhuma conversão recente
-                      </p>
+                      <p className="text-sm font-medium opacity-50">Nenhuma conversão recente</p>
                     </div>
                   ) : (
                     jobs.map((job) => (
@@ -168,8 +168,11 @@ export function ComicHeader() {
                               />
                             </div>
                             <p className="text-[11px] font-medium opacity-60 ml-6">
-                              {STAGE_LABELS[job.stages.find((s) => s.status === "active")?.id as JobStage] ?? "Iniciando..."}
-                              {" • "}{job.overallProgress}%
+                              {STAGE_LABELS[
+                                job.stages.find((s) => s.status === "active")?.id as JobStage
+                              ] ?? "Iniciando..."}
+                              {" • "}
+                              {job.overallProgress}%
                             </p>
                           </>
                         ) : job.status === "completed" ? (

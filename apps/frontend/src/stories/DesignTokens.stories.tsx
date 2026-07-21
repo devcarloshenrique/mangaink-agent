@@ -21,16 +21,17 @@ export function Colors() {
       <div>
         <h2 className="font-display text-3xl uppercase mb-4">Cores do Tema</h2>
         <p className="text-sm font-medium opacity-70 mb-6">
-          Cores definidas em <code className="bg-muted px-1 rounded">src/styles.css</code> usando oklch.
+          Cores definidas em <code className="bg-muted px-1 rounded">src/styles.css</code> usando
+          oklch.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {colors.map((c) => (
-          <div key={c.var} className="border-[3px] border-ink rounded-xl shadow-comic-sm overflow-hidden">
-            <div
-              className="h-24 border-b-[3px] border-ink"
-              style={{ background: c.hex }}
-            />
+          <div
+            key={c.var}
+            className="border-[3px] border-ink rounded-xl shadow-comic-sm overflow-hidden"
+          >
+            <div className="h-24 border-b-[3px] border-ink" style={{ background: c.hex }} />
             <div className="p-4">
               <p className="font-display text-xl">{c.name}</p>
               <p className="text-xs font-mono opacity-60 mt-1">{c.var}</p>

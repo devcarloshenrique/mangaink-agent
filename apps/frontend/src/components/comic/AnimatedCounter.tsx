@@ -29,5 +29,7 @@ export function AnimatedCounter({ value, duration = 800, format, className }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, duration]);
 
-  return <span className={className}>{format ? format(display) : display.toLocaleString("pt-BR")}</span>;
+  return (
+    <span className={className}>{format ? format(display) : display.toLocaleString("pt-BR")}</span>
+  );
 }

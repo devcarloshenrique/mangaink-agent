@@ -16,7 +16,10 @@ export const Default: Story = {
     const [isOpen, setIsOpen] = useState(false);
     return (
       <div>
-        <Button onClick={() => setIsOpen(true)} className="border-[3px] border-ink shadow-comic font-display">
+        <Button
+          onClick={() => setIsOpen(true)}
+          className="border-[3px] border-ink shadow-comic font-display"
+        >
           Renomear Série
         </Button>
         <RenameSeriesDialog
