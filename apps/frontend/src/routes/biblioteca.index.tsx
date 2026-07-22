@@ -18,7 +18,7 @@ import {
   Clock,
   RefreshCw,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
 import {
   useConversionsList,
   useActiveConversions,
@@ -33,18 +33,6 @@ export const Route = createFileRoute("/biblioteca/")({
 });
 
 type TabId = "all" | "converting" | "completed";
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "agora";
-  if (mins < 60) return `há ${mins}min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `há ${days}d`;
-  return `há ${Math.floor(days / 30)} meses`;
-}
 
 function seriesCoverUrl(group: SeriesGroup): string | null {
   const withCover = group.items.find((i) => i.cover);
