@@ -10,7 +10,12 @@ import { TabDetalhes } from "@/components/biblioteca/TabDetalhes";
 import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
 import { TabConversoes } from "@/components/biblioteca/TabConversoes";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { MOCK_MANGA_DETAILS, MOCK_CACHED_CHAPTERS } from "@/lib/manga-detail-mocks";
+import {
+  MOCK_MANGA_DETAILS,
+  MOCK_CACHED_CHAPTERS,
+  MOCK_CONVERSIONS,
+  MOCK_CONVERSION_JOBS,
+} from "@/lib/manga-detail-mocks";
 
 export const Route = createFileRoute("/biblioteca/$sourceId")({
   component: MangaDetailPage,
@@ -82,7 +87,11 @@ function MangaDetailPage() {
               </TabsContent>
 
               <TabsContent value="conversoes" className="mt-4 animate-slide-up min-h-[420px]">
-                <TabConversoes sourceId={sourceId} />
+                <TabConversoes
+                  sourceId={sourceId}
+                  conversions={MOCK_CONVERSIONS}
+                  jobsMap={MOCK_CONVERSION_JOBS}
+                />
               </TabsContent>
             </Tabs>
           </div>

@@ -1,4 +1,5 @@
 import type { MangaDetails, CachedChapter } from "@/types/manga-detail";
+import type { ConversionSummary, JobSummary } from "@/types/conversion";
 
 export const MOCK_MANGA_DETAILS: MangaDetails = {
   title: "Shingeki no Kyojin",
@@ -67,3 +68,115 @@ export const MOCK_CACHED_CHAPTERS: CachedChapter[] = [
     cachedAt: "2026-07-18T08:05:00Z",
   },
 ];
+
+export const MOCK_CONVERSIONS: ConversionSummary[] = [
+  {
+    conversionId: "conv-mock-one-piece",
+    sourceId: "src-one-piece",
+    title: "One Piece",
+    status: "completed",
+    progress: 100,
+    totalJobs: 3,
+    completedJobs: 3,
+    failedJobs: 0,
+    createdAt: "2026-07-21T14:00:00Z",
+    updatedAt: "2026-07-21T14:30:00Z",
+    finishedAt: "2026-07-21T14:30:00Z",
+  },
+  {
+    conversionId: "conv-mock-jujutsu",
+    sourceId: "src-jujutsu-kaisen",
+    title: "Jujutsu Kaisen",
+    status: "processing",
+    progress: 50,
+    totalJobs: 4,
+    completedJobs: 2,
+    failedJobs: 0,
+    createdAt: "2026-07-22T10:00:00Z",
+    updatedAt: "2026-07-22T12:15:00Z",
+  },
+  {
+    conversionId: "conv-mock-chainsaw",
+    sourceId: "src-chainsaw-man",
+    title: "Chainsaw Man",
+    status: "failed",
+    progress: 0,
+    totalJobs: 1,
+    completedJobs: 0,
+    failedJobs: 1,
+    createdAt: "2026-07-18T08:00:00Z",
+    updatedAt: "2026-07-18T08:15:00Z",
+    finishedAt: "2026-07-18T08:15:00Z",
+  },
+];
+
+export const MOCK_CONVERSION_JOBS: Record<string, JobSummary[]> = {
+  "conv-mock-one-piece": [
+    {
+      jobId: "job-op-1",
+      index: 0,
+      title: "Vol. 1 — East Blue",
+      status: "completed",
+      progress: 100,
+      outputFile: "One Piece - Vol. 1 - East Blue.epub",
+    },
+    {
+      jobId: "job-op-2",
+      index: 1,
+      title: "Vol. 2 — Baroque Works",
+      status: "completed",
+      progress: 100,
+      outputFile: "One Piece - Vol. 2 - Baroque Works.epub",
+    },
+    {
+      jobId: "job-op-3",
+      index: 2,
+      title: "Vol. 3 — Skypiea",
+      status: "completed",
+      progress: 100,
+      outputFile: "One Piece - Vol. 3 - Skypiea.epub",
+    },
+  ],
+  "conv-mock-jujutsu": [
+    {
+      jobId: "job-jjk-1",
+      index: 0,
+      title: "Vol. 1 — O Inicio",
+      status: "completed",
+      progress: 100,
+      outputFile: "Jujutsu Kaisen - Vol. 1.epub",
+    },
+    {
+      jobId: "job-jjk-2",
+      index: 1,
+      title: "Vol. 2 — Maldicão",
+      status: "completed",
+      progress: 100,
+      outputFile: "Jujutsu Kaisen - Vol. 2.epub",
+    },
+    {
+      jobId: "job-jjk-3",
+      index: 2,
+      title: "Vol. 3 — Batalha de Tokyo",
+      status: "converting",
+      progress: 60,
+    },
+    {
+      jobId: "job-jjk-4",
+      index: 3,
+      title: "Vol. 4 — Incidente de Shibuya",
+      status: "queued",
+      progress: 0,
+    },
+  ],
+  "conv-mock-chainsaw": [
+    {
+      jobId: "job-csm-1",
+      index: 0,
+      title: "Vol. 1 — O Cao Motosserra",
+      status: "failed",
+      progress: 0,
+      error: "Erro ao baixar capitulos",
+    },
+  ],
+};

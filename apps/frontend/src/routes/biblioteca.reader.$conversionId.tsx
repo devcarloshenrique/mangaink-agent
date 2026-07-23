@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,9 @@ import { conversionsApi } from "@/lib/api";
 import JSZip from "jszip";
 
 export const Route = createFileRoute("/biblioteca/reader/$conversionId")({
+  validateSearch: z.object({
+    jobId: z.string().optional(),
+  }),
   component: ReaderPage,
 });
 
@@ -23,6 +27,7 @@ function getFormat(filename: string): string {
 
 function ReaderPage() {
   const { conversionId } = Route.useParams();
+  const { jobId: preselectedJobId } = Route.useSearch();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readerData, setReaderData] = useState<{ url: string; format: string } | null>(null);
@@ -32,6 +37,7 @@ function ReaderPage() {
   );
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [mangaMode, setMangaMode] = useState(false);
+  const autoSelectFired = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +101,22 @@ function ReaderPage() {
       setError(err?.message ?? "Erro ao abrir");
     }
   }
+
+  useEffect(() => {
+    if (
+      preselectedJobId &&
+      jobs.length > 0 &&
+      !readerData &&
+      !loading &&
+      !autoSelectFired.current
+    ) {
+      const target = jobs.find((j) => j.jobId === preselectedJobId);
+      if (target) {
+        autoSelectFired.current = true;
+        openJob(target.jobId, target.outputFile);
+      }
+    }
+  }, [preselectedJobId, jobs, readerData, loading]);
 
   const goBack = () => {
     if (readerData?.url) URL.revokeObjectURL(readerData.url);
