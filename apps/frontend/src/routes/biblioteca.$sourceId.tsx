@@ -17,6 +17,7 @@ import {
   MOCK_CONVERSION_JOBS,
 } from "@/lib/manga-detail-mocks";
 
+
 export const Route = createFileRoute("/biblioteca/$sourceId")({
   component: MangaDetailPage,
 });
@@ -87,11 +88,7 @@ function MangaDetailPage() {
               </TabsContent>
 
               <TabsContent value="conversoes" className="mt-4 animate-slide-up min-h-[420px]">
-                <TabConversoes
-                  sourceId={sourceId}
-                  conversions={MOCK_CONVERSIONS}
-                  jobsMap={MOCK_CONVERSION_JOBS}
-                />
+                <TabConversoes sourceId={sourceId} conversions={MOCK_CONVERSIONS} jobsMap={MOCK_CONVERSION_JOBS} />
               </TabsContent>
             </Tabs>
           </div>
