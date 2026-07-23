@@ -9,7 +9,9 @@ import {
   Settings,
   Search,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/utils";
 import { conversionsApi } from "@/lib/api";
@@ -324,6 +326,17 @@ export function TabConversoes({
                     onClick={() => toggleExpand(conv.conversionId)}
                   />
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => reconvert(conv.conversionId)}
+                      disabled={
+                        conv.status === "queued" || conv.status === "processing"
+                      }
+                      className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-7 w-7 rounded-md bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Reconverter todos os volumes"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </button>
                     <Link
                       to="/biblioteca/converter/$jobId"
                       params={{ jobId: conv.conversionId }}
@@ -403,11 +416,11 @@ export function TabConversoes({
                   {!loadingJobs &&
                     !jobsError &&
                     filteredJobs.length > 0 && (
-                      <div className="max-h-64 overflow-y-auto space-y-2">
+                      <div className="max-h-64 overflow-y-auto pr-4 space-y-1.5">
                         {filteredJobs.map((job) => (
                           <div
                             key={job.jobId}
-                            className="flex items-center gap-3 p-2.5 border-2 border-ink rounded bg-muted/20 hover:bg-muted/40 transition-colors"
+                            className="flex items-center gap-3 py-2 px-2.5 border-2 border-ink rounded bg-muted/20 hover:bg-muted/40 transition-colors"
                           >
                             <div className="shrink-0 border-[2px] border-ink rounded overflow-hidden bg-muted aspect-[2/3] h-20">
                               <JobRowCover sourceId={sourceId} />
@@ -436,6 +449,26 @@ export function TabConversoes({
                             >
                               <Eye className="h-3.5 w-3.5" />
                               Ler
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toast.info("Reconversão de volume em breve")
+                              }
+                              title="Reconverter este volume"
+                              className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-muted transition-all shrink-0"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toast.info("Exclusão de volume em breve")
+                              }
+                              title="Excluir este volume"
+                              className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-comic-red/10 hover:text-comic-red transition-all shrink-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
@@ -475,8 +508,8 @@ export function TabConversoes({
             </div>
 
             {idx < conversions.length - 1 && (
-              <div className="ml-8 py-4">
-                <div className="border-b-2 border-ink/10" />
+              <div className="ml-8 py-5">
+                <div className="border-b-[3px] border-ink" />
               </div>
             )}
           </div>

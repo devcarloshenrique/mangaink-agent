@@ -50,6 +50,10 @@
   --shadow-comic-sm: var(--_sc-sm, 3px 3px 0 0 var(--comic-ink));
   --shadow-comic: var(--_sc-md, 6px 6px 0 0 var(--comic-ink));
   --shadow-comic-lg: var(--_sc-lg, 10px 10px 0 0 var(--comic-ink));
+
+  --color-scrollbar-track: var(--scrollbar-track);
+  --color-scrollbar-thumb: var(--scrollbar-thumb);
+  --color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
 }
 
 :root {
@@ -80,6 +84,11 @@
   --border: var(--comic-ink);
   --input: oklch(0.92 0.01 90);
   --ring: var(--comic-blue);
+
+  --scrollbar-track: oklch(0.97 0.025 90 / 0.6);
+  --scrollbar-thumb: var(--comic-yellow);
+  --scrollbar-thumb-hover: var(--comic-yellow);
+  --scrollbar-thumb-border: var(--comic-ink);
 
   --chart-1: var(--comic-red);
   --chart-2: var(--comic-yellow);
@@ -114,6 +123,11 @@
   --accent-foreground: oklch(0.99 0 0);
   --border: var(--comic-cream);
   --input: oklch(0.27 0.02 260);
+
+  --scrollbar-track: oklch(0.18 0.02 260 / 0.6);
+  --scrollbar-thumb: var(--comic-yellow);
+  --scrollbar-thumb-hover: var(--comic-yellow);
+  --scrollbar-thumb-border: var(--comic-cream);
 }
 
 @layer base {
@@ -254,6 +268,64 @@
   }
   .animate-bounce-in {
     animation: bounce-in 0.5s ease-out both;
+  }
+
+  /* ── Scrollbars (Comic Pop: borda ink + sombra hard offset) ── */
+
+  /* Classe utilitária — sempre visível. Use em áreas onde auto-hide
+     não é desejado (ex.: log de conversão, dropdowns longos). */
+  .scrollbar-comic {
+    scrollbar-width: auto;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  .scrollbar-comic::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+  }
+  .scrollbar-comic::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  .scrollbar-comic::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 2px solid var(--scrollbar-thumb-border);
+    border-radius: 9999px;
+    box-shadow: var(--shadow-comic-sm);
+  }
+  .scrollbar-comic::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  /* Regra global — auto-hide estilo macOS: thumb invisível em
+     repouso, aparece no hover da área scrollável com visual
+     Comic Pop (borda ink + sombra hard offset). */
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: transparent transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+    background: transparent;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    box-shadow: none;
+  }
+  *:hover::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-color: var(--scrollbar-thumb-border);
+    box-shadow: var(--shadow-comic-sm);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
   }
 }
 

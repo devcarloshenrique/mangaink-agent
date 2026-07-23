@@ -390,7 +390,7 @@ function ConverterPage() {
               ({logs.length} evento{logs.length !== 1 ? "s" : ""})
             </span>
           </DialogTitle>
-          <div className="flex-1 overflow-y-auto rounded-md border-[2px] border-ink bg-comic-ink text-comic-cream p-3 font-mono text-xs space-y-0.5 mt-4">
+          <div className="scrollbar-comic flex-1 overflow-y-auto rounded-md border-[2px] border-ink bg-comic-ink text-comic-cream p-3 font-mono text-xs space-y-0.5 mt-4">
             {logs.length === 0 ? (
               <p className="opacity-50">Nenhum evento ainda…</p>
             ) : (

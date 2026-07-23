@@ -14,7 +14,7 @@ export function FavoriteButton({ isFavorite, onToggle, className }: FavoriteButt
       onClick={onToggle}
       className={cn(
         "w-full border-[3px] border-ink shadow-comic-sm font-display py-2.5 rounded-md transition-all flex items-center justify-center gap-2",
-        isFavorite ? "bg-comic-red text-primary-foreground" : "bg-card hover:bg-muted",
+        isFavorite ? "bg-comic-yellow text-secondary-foreground" : "bg-card hover:bg-muted",
         className,
       )}
     >
