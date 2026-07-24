@@ -20,6 +20,7 @@ export interface Chapter {
   url: string
   pages: number | null
   volume: number | null
+  isDownloaded: boolean
 }
 
 export type CoverType = 'original' | 'gallery' | 'upload'

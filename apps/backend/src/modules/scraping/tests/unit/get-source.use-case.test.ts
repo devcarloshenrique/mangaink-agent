@@ -50,7 +50,7 @@ describe('GetSourceUseCase', () => {
         genres: ['Action'],
       },
       chapters: [
-        { id: 'chap_0001', number: '1', title: 'Chapter 1', url: 'https://example.com/chap-1/', pages: null, volume: null },
+        { id: 'chap_0001', number: '1', title: 'Chapter 1', url: 'https://example.com/chap-1/', pages: null, volume: null, isDownloaded: false },
       ],
       covers: [
         { id: 'cover_001', type: 'original', label: 'Original', imageUrl: 'https://example.com/cover.jpg' },
@@ -72,6 +72,8 @@ describe('GetSourceUseCase', () => {
     expect(result.chapters).toHaveLength(1)
     expect(result.covers).toHaveLength(1)
     expect(result.statistics.chapters).toBe(1)
+    // isDownloaded deve estar presente e ser booleano
+    expect(typeof result.chapters[0].isDownloaded).toBe('boolean')
   })
 
   it('deve remover campo cache da resposta', async () => {

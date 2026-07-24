@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { writeFile, readdir } from 'node:fs/promises'
-import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
+import { mkdirp, pathExists, writeJson } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import { ConversionEventsService } from './conversion-events.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
@@ -259,6 +259,13 @@ export class ImageDownloaderService {
       errors: errors + corruptPages.length,
       fromCache: false,
     }))
+
+    // Escreve manifest.json com as URLs originais para o proxy inteligente do reader.
+    // Apenas no cache miss path — se for cache hit, as URLs não estão disponíveis.
+    await writeJson(join(cacheDir, 'manifest.json'), {
+      totalImages: imageUrls.length,
+      urls: imageUrls,
+    })
 
     await this.repository.appendLog(jobId, `Capítulo ${chapterId}: download concluído (${downloaded}/${imageUrls.length}, ${errors + corruptPages.length} erros${corruptPages.length > 0 ? `, ${corruptPages.length} corrompidas` : ''})`)
 

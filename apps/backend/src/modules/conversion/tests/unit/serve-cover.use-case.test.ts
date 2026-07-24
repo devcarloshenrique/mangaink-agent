@@ -40,7 +40,7 @@ function makeSource(overrides: Partial<SourceMetadataFile> = {}): SourceMetadata
     source: { url: 'https://test.example.com/manga/test/', language: 'pt-BR' },
     metadata: { title: 'Test', author: null, description: null, status: null, genres: [] },
     chapters: [
-      { id: 'chap_0001', number: '1', title: 'Cap 1', url: 'https://test.example.com/ch/1', pages: 20, volume: 1 },
+      { id: 'chap_0001', number: '1', title: 'Cap 1', url: 'https://test.example.com/ch/1', pages: 20, volume: 1, isDownloaded: false },
     ],
     covers: [
       { id: 'cover_001', type: 'original', label: 'Original', imageUrl: 'https://img.example.com/cover.jpg' },

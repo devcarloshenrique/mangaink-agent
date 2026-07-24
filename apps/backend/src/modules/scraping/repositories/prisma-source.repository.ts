@@ -39,6 +39,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
         url: ch.url,
         pages: ch.pages,
         volume: ch.volume,
+        isDownloaded: false,
       }))
       .sort((a, b) => parseFloat(a.number) - parseFloat(b.number))
 

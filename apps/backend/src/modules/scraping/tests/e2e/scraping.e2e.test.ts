@@ -168,7 +168,7 @@ describe('Scraping E2E', () => {
           genres: ['Action', 'Adventure'],
         },
         chapters: [
-          { id: 'chap_0001', number: '1', title: 'Chapter 1', url: 'https://mangalivre.to/chap-1/', pages: null, volume: null },
+          { id: 'chap_0001', number: '1', title: 'Chapter 1', url: 'https://mangalivre.to/chap-1/', pages: null, volume: null, isDownloaded: false },
         ],
         covers: [
           { id: 'cover_001', type: 'original', label: 'Original', imageUrl: 'https://mangalivre.to/cover.jpg' },

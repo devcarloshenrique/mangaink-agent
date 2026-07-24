@@ -45,7 +45,7 @@ function makeSourceMetadataFile(chapterIds: string[]): SourceMetadataFile {
     provider: { slug: 'mangalivre', name: 'Mangá Livre', engine: 'cheerio' },
     source: { url: 'https://test.com/manga/hxh/', language: 'pt-br' },
     metadata: { title: 'Hunter x Hunter', author: 'Yoshihiro Togashi', description: null, status: 'ongoing', genres: [] },
-    chapters: chapterIds.map((id, i) => ({ id, number: String(i + 1), title: `Chapter ${i + 1}`, url: `https://test.com/${id}`, pages: 20, volume: 1 })),
+    chapters: chapterIds.map((id, i) => ({ id, number: String(i + 1), title: `Chapter ${i + 1}`, url: `https://test.com/${id}`, pages: 20, volume: 1, isDownloaded: false })),
     covers: [],
     statistics: { chapters: chapterIds.length, covers: 0 },
     cache: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastAccessAt: new Date().toISOString(), cacheTtlHours: 24, retentionDays: 30 },

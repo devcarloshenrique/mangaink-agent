@@ -150,6 +150,7 @@ function mapChapters(obra: BritanniaObra, slug: string): Chapter[] {
       url: buildChapterUrl(slug, cap.numero),
       pages: cap.total_paginas ?? null,
       volume: null,
+      isDownloaded: false,
     }
   })
 

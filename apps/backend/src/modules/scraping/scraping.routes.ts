@@ -19,6 +19,7 @@ const chapterSchema = z.object({
   url: z.string(),
   pages: z.number().nullable(),
   volume: z.number().nullable(),
+  isDownloaded: z.boolean(),
 })
 
 const coverSchema = z.object({

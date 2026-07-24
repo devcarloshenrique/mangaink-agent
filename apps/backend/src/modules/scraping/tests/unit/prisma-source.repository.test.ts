@@ -18,8 +18,8 @@ function makeSourcePayload(sourceId: string): SourceMetadataFile {
       genres: ['Action', 'Comedy'],
     },
     chapters: [
-      { id: 'ch_test_001', number: '1', title: 'Chapter 1', url: 'https://example.com/manga/test/1', pages: 20, volume: 1 },
-      { id: 'ch_test_002', number: '2', title: 'Chapter 2', url: 'https://example.com/manga/test/2', pages: 22, volume: 1 },
+      { id: 'ch_test_001', number: '1', title: 'Chapter 1', url: 'https://example.com/manga/test/1', pages: 20, volume: 1, isDownloaded: false },
+      { id: 'ch_test_002', number: '2', title: 'Chapter 2', url: 'https://example.com/manga/test/2', pages: 22, volume: 1, isDownloaded: false },
     ],
     covers: [
       { id: 'cv_test_001', type: 'original', label: 'Cover 1', imageUrl: 'https://example.com/covers/cover1.jpg' },

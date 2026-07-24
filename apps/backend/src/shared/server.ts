@@ -16,11 +16,14 @@ import { authRoutes } from '../modules/auth/auth.routes'
 import { scrapingRoutes } from '../modules/scraping/scraping.routes'
 import { conversionRoutes } from '../modules/conversion/conversion.routes'
 import { mobiPreviewRoutes } from '../modules/conversion/mobi-preview.routes'
+import { chapterRoutes } from '../modules/scraping/chapter.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
+import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
 import '../modules/scraping/workers/inspect-source.worker'
 import '../modules/conversion/workers/conversion-job.worker'
 import { startMobiPreviewWorker } from '../modules/conversion/workers/mobi-preview.worker'
+import { startChapterDownloadWorker } from '../modules/scraping/workers/chapter-download.worker'
 
 export async function createServer() {
   const app = Fastify({
@@ -139,6 +142,16 @@ export async function createServer() {
       return reply.code(status).send({ error: error.message })
     }
 
+    if (error instanceof PageNotReadyError) return reply.code(425).send({
+      error: error.message,
+      readyPages: error.readyCount,
+      totalPages: error.totalCount,
+    })
+    if (error instanceof ChapterNotFoundError) return reply.code(404).send({ error: error.message })
+    if (error instanceof PageNotFoundError) return reply.code(404).send({ error: error.message })
+    if (error instanceof InvalidPageIndexError) return reply.code(400).send({ error: error.message })
+    if (error instanceof ChapterDownloadFailedError) return reply.code(500).send({ error: error.message })
+
     if (error instanceof UserAlreadyExistsError) return reply.code(409).send({ error: error.message })
     if (error instanceof InvalidCredentialsError) return reply.code(401).send({ error: error.message })
     if (error instanceof EmailAlreadyInUseError) return reply.code(409).send({ error: error.message })
@@ -154,10 +167,12 @@ export async function createServer() {
   await app.register(scrapingRoutes)
   await app.register(conversionRoutes)
   await app.register(mobiPreviewRoutes)
+  await app.register(chapterRoutes)
 
   // Inicia o worker BullMQ de extracao de preview MOBI (substrato do reader)
   if (env.NODE_ENV !== 'test') {
     startMobiPreviewWorker()
+    startChapterDownloadWorker()
   }
 
   return app

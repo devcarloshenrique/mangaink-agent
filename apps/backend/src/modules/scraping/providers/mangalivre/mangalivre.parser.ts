@@ -175,6 +175,7 @@ export function parseChapters($: CheerioAPI, base: string, canonicalUrl: string)
       url: absoluteUrl(href, base) ?? href,
       pages: null,
       volume: null,
+      isDownloaded: false,
     })
   })
 
