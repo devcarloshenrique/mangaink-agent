@@ -1,6 +1,6 @@
 # Chapter Reader — Proposta
 
-> **Status:** DRAFT
+> **Status:** IMPLEMENTED
 > **Data:** 2026-07-23
 > **Modulo:** `backend` (scraping + sources) + `frontend` (reader + biblioteca)
 
