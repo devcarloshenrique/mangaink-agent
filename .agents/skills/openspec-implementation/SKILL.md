@@ -1,32 +1,29 @@
 ---
 name: openspec-implementation
-description: Implementa propostas de especificação aprovadas, executando tarefas sequencialmente com testes e validação. Use ao implementar mudanças, aplicar propostas, executar tarefas de spec ou construir a partir de planos aprovados. Gatilhos: "openspec implement", "implementar", "aplicar mudança", "executar spec", "trabalhar nas tarefas", "construir feature", "iniciar implementação".
+description: Implementa propostas de especificação aprovadas com TDD estrito (Red-Green-Refactor), executando tarefas sequencialmente com testes antes do código. Use ao implementar mudanças, aplicar propostas, executar tarefas de spec ou construir a partir de planos aprovados. Gatilhos: "openspec implement", "implementar", "aplicar mudança", "executar spec", "trabalhar nas tarefas", "construir feature", "iniciar implementação".
 ---
 
-# Implementação de Especificações
+# Implementação de Especificações com TDD
 
-Implementa sistematicamente propostas de spec aprovadas, executando tarefas sequencialmente com testes e validação adequados.
+Implementa propostas de spec aprovadas com **TDD estrito**: testes primeiro, código depois. Cada tarefa segue o ciclo Red-Green-Refactor.
 
 ## Início Rápido
 
-A implementação segue um ciclo **ler → executar → testar → validar** para cada tarefa:
 1. Leia a proposta completa e a lista de tarefas
-2. Execute as tarefas uma de cada vez, em ordem
-3. Teste cada tarefa concluída
-4. Marque como concluída somente após verificação
+2. Configure TodoWrite com todas as tarefas
+3. Para **cada tarefa**, siga TDD: **RED** (escrever teste falhando) → **GREEN** (código mínimo) → **REFACTOR** (limpar)
+4. Só marque como concluída após verificação
 
-**Regra crítica**: Use TodoWrite para acompanhar o progresso. Nunca pule tarefas nem marque trabalho incompleto como concluído.
+**Regra de ferro**: NENHUM código de produção sem um teste falhando primeiro. Use TodoWrite para acompanhar o progresso.
 
 ## Fluxo de Trabalho
-
-Copie este checklist e acompanhe o progresso:
 
 ```
 Progresso da Implementação:
 - [ ] Passo 1: Carregar e entender a proposta
 - [ ] Passo 2: Configurar TodoWrite para acompanhamento
-- [ ] Passo 3: Executar tarefas sequencialmente
-- [ ] Passo 4: Testar e validar cada tarefa
+- [ ] Passo 3: Executar tarefas com TDD (Red-Green-Refactor)
+- [ ] Passo 4: Validar integração (test suite completa)
 - [ ] Passo 5: Atualizar especificações vivas (se aplicável)
 - [ ] Passo 6: Marcar tasks como concluídas no arquivo tasks.md
 - [ ] Passo 7: Marcar proposta como implementada (IMPLEMENTED)
@@ -34,336 +31,295 @@ Progresso da Implementação:
 
 ### Passo 1: Carregar e entender a proposta
 
-Antes de começar, leia todo o contexto:
-
 ```bash
-# Read the proposal
 cat docs/openspec/changes/{change-id}/proposal.md
-
-# Read all tasks
 cat docs/openspec/changes/{change-id}/tasks.md
-
-# Read spec deltas to understand requirements
 find docs/openspec/changes/{change-id}/specs -name "*.md" -exec cat {} \;
 ```
 
-**Entenda**:
-- Por que essa mudança é necessária (do proposal.md)
-- Quais são os resultados esperados
-- Quais specs serão afetadas
-- Quais são os critérios de aceitação (dos cenários)
+**Entenda**: por que essa mudança é necessária, resultados esperados, specs afetadas, critérios de aceitação.
 
 ### Passo 2: Configurar TodoWrite para acompanhamento
 
-Carregue as tarefas do tasks.md no TodoWrite **antes de começar o trabalho**:
+Carregue as tarefas do `tasks.md` no TodoWrite **antes de começar o trabalho**:
 
 ```markdown
-**Padrão**:
 Leia tasks.md → Extraia a lista numerada → Crie entradas no TodoWrite
 
-**Exemplo**:
-Se tasks.md contém:
-1. Create database migration
-2. Implement API endpoint
-3. Add tests
-4. Update documentation
-
-Então crie TodoWrite com:
-- content: "Create database migration", status: "in_progress"
-- content: "Implement API endpoint", status: "pending"
-- content: "Add tests", status: "pending"
-- content: "Update documentation", status: "pending"
+Exemplo:
+- content: "Criar migration do banco", status: "in_progress"
+- content: "Implementar endpoint da API", status: "pending"
+- content: "Adicionar testes E2E", status: "pending"
 ```
 
-**Por que isso importa**: TodoWrite dá visibilidade ao usuário sobre o progresso e garante que nada seja esquecido.
+### Passo 3: Executar tarefas com TDD (Red-Green-Refactor)
 
-### Passo 3: Executar tarefas sequencialmente
+Cada tarefa segue o ciclo TDD. **NUNCA** pule etapas, **NUNCA** escreva código antes do teste.
 
-Trabalhe nas tarefas **uma de cada vez, em ordem**:
+#### 3.1 RED — Escrever teste falhando
 
-```markdown
-Para cada tarefa:
-1. Marque como "in_progress" no TodoWrite
-2. Execute o trabalho
-3. Teste o trabalho
-4. Só marque como "completed" após verificação
+Escreva um teste mínimo mostrando o comportamento esperado:
 
-NUNCA avance ou agrupe várias tarefas antes de testar.
+```typescript
+// ✅ BOM: Nome claro, comportamento real, uma coisa só
+test('rejeita email vazio', async () => {
+  const resultado = await enviarFormulario({ email: '' });
+  expect(resultado.erro).toBe('Email obrigatório');
+});
 ```
 
-**Padrão de execução de tarefa**:
+**Requisitos**: um comportamento por teste, nome descritivo, código real (mocks apenas se inevitável).
 
-```markdown
-## Task: {Task Description}
+#### 3.2 Verificar RED — Ver a falha
 
-**What**: [Brief explanation of what this task does]
+**OBRIGATÓRIO. Nunca pule.**
 
-**Implementation**:
-[Code changes, file edits, commands run]
-
-**Verification**:
-[How to verify this task is complete]
-- [ ] Code compiles/runs
-- [ ] Tests pass
-- [ ] Meets requirement scenarios
-
-**Status**: ✓ Complete / ✗ Blocked / ⚠ Partial
-```
-
-### Passo 4: Testar e validar cada tarefa
-
-Após cada tarefa, verifique se funciona:
-
-**Para tarefas de código**:
 ```bash
-# Run relevant tests
-pnpm test
-
-# Run linter
-pnpm lint
-
-# Check types (if applicable)
-pnpm run type-check
+pnpm test -- --reporter=verbose caminho/para/teste
 ```
 
-**Para tarefas de banco de dados**:
+Confirme:
+- Teste **falha** (não dá erro de compilação)
+- Mensagem de falha é a esperada
+- Falha porque funcionalidade está faltando, não por erros de digitação
+
+**Teste passou?** Você está testando comportamento existente. Corrija o teste.
+**Teste deu erro?** Corrija o erro, execute novamente até falhar corretamente.
+
+#### 3.3 GREEN — Código mínimo
+
+Escreva o código mais simples para passar no teste. **Nada além do que o teste exige.**
+
+```typescript
+function enviarFormulario(dados: DadosFormulario) {
+  if (!dados.email?.trim()) {
+    return { erro: 'Email obrigatório' };
+  }
+  // ...
+}
+```
+
+Não adicione funcionalidades extras, não refatore outro código, não "melhore" além do teste.
+
+#### 3.4 Verificar GREEN — Ver passar
+
+**OBRIGATÓRIO.**
+
 ```bash
-# Verify migration runs
-pnpm db:migrate
-
-# Check schema matches expected
-pnpm db:push
+pnpm test -- --reporter=verbose caminho/para/teste
 ```
 
-**Para tarefas de API**:
+Confirme: teste passa, outros testes ainda passam, saída limpa (sem erros ou warnings).
+
+**Teste falhou?** Corrija o código, não o teste.
+**Outros testes falharam?** Corrija agora.
+
+#### 3.5 REFACTOR — Limpar
+
+Após o verde apenas: remova duplicação, melhore nomes, extraia helpers. Mantenha os testes verdes. Não adicione comportamento.
+
+#### 3.6 Próximo teste
+
+Repita o ciclo para o próximo comportamento da mesma tarefa. Só avance para a próxima tarefa quando a atual estiver completa.
+
+### Passo 4: Validar integração
+
+Após concluir uma tarefa ou um grupo delas, execute a suíte completa:
+
 ```bash
-# Test endpoint manually
-curl -X POST http://localhost:3333/api/endpoint \
-  -H "Content-Type: application/json" \
-  -d '{"test": "data"}'
-
-# Or run integration tests
-pnpm test
+pnpm test          # Testes unitários e de integração
+pnpm lint          # ESLint
+pnpm run type-check  # Verificação de tipos (se aplicável)
 ```
 
-**Só marque a tarefa como concluída após todas as verificações passarem**.
+### Passo 5: Atualizar especificações vivas
 
-### Passo 5: Atualizar especificações vivas (se aplicável)
-
-**Durante a implementação**, se você descobrir que os deltas de spec precisam de atualizações:
-
-1. **Documente a descoberta** no proposal.md ou em um arquivo de notas
+Durante a implementação, se descobrir que os deltas de spec precisam de ajustes:
+1. Documente a descoberta no proposal.md
 2. **NÃO modifique os deltas de spec** durante a implementação
-3. **Após a conclusão da implementação**, considere se a spec precisa de ajustes
+3. Após conclusão, considere se a spec precisa de ajustes
 
-**Nota**: Os deltas de spec são mesclados durante o arquivamento (Passo 6), não durante a implementação.
+### Passo 6: Marcar tasks no arquivo tasks.md
 
-### Passo 6: Marcar tasks como concluídas no arquivo tasks.md
-
-**Após implementar cada tarefa**, o arquivo `tasks.md` deve ser atualizado para refletir o progresso real:
-
-```markdown
-Para cada tarefa concluída:
-1. Abra docs/openspec/changes/{change-id}/tasks.md
-2. Substitua `- [ ]` por `- [x]` nas linhas correspondentes
-3. Use Edit tool — NÃO reescreva o arquivo inteiro
-```
-
-**Por que isso importa**: O `tasks.md` é o registro canônico do que foi feito. Quando a change for arquivada, qualquer pessoa que ler o archive saberá exatamente o que foi implementado apenas olhando os checkboxes.
-
-**Exemplo**:
-
-Antes:
-```markdown
-## 1. Schema Prisma
-- [ ] 1.1 Adicionar modelos ao schema.prisma
-- [ ] 1.2 Adicionar relation ao User
-```
-
-Depois:
-```markdown
-## 1. Schema Prisma
-- [x] 1.1 Adicionar modelos ao schema.prisma
-- [x] 1.2 Adicionar relation ao User
-```
-
-**Regra**: Só marque `[x]` em tarefas que passaram na verificação (Passo 4). Se uma tarefa falhou ou está bloqueada, mantenha `[ ]` e documente o motivo.
+Para cada tarefa concluída, use Edit tool para substituir `- [ ]` por `- [x]` no `tasks.md`. Só marque tarefas que passaram na verificação completa.
 
 ### Passo 7: Marcar proposta como implementada
 
-Após todas as tarefas concluídas:
-
 ```bash
-# Create a completion marker
 echo "Implementation completed: $(date)" > docs/openspec/changes/{change-id}/IMPLEMENTED
 ```
 
-**Informe o usuário**:
-```markdown
+```
 ## Implementation Complete
-
 **Change**: {change-id}
 **Tasks completed**: {count}
 **Tests**: All passing
 
-**Next step**: Use a skill `change-completion` para finalizar a change com qualidade: revisão, validação, arquivamento e commits atômicos.
-Diga "finalizar change {change-id}" ou "encerrar implementação" quando estiver pronto.
+**Next step**: Use a skill `change-completion` para finalizar: revisão, validação, arquivamento, commits atômicos.
 ```
+
+## A Lei de Ferro do TDD
+
+```
+NENHUM CÓDIGO DE PRODUÇÃO SEM UM TESTE FALHANDO PRIMEIRO
+```
+
+Escreveu código antes do teste? Delete. Comece de novo. **Sem exceções:**
+- Não mantenha como "referência"
+- Não "adapte" enquanto escreve os testes
+- Não olhe para ele — deletar significa deletar
+
+Implemente do zero a partir dos testes. Ponto final.
 
 ## Boas Práticas
 
-### Padrão 1: Tarefas Bloqueadas
+### Tarefas Bloqueadas
 
-Se uma tarefa não puder ser concluída:
+Se uma tarefa não puder ser concluída: mantenha como "in_progress", documente o bloqueio, crie uma nova tarefa para resolvê-lo, informe o usuário.
 
-```markdown
-**Marcar como bloqueada**:
-- Mantenha o status como "in_progress" (NÃO "completed")
-- Documente o bloqueio claramente
-- Crie uma nova tarefa para resolver o bloqueio
-- Informe o usuário imediatamente
+### Dependências entre Tarefas
 
-**Example**:
-Task: "Implement payment processing"
-Blocker: "Missing API credentials for payment gateway"
-Action: Create new task "Obtain payment gateway credentials"
-```
+Verifique pré-requisitos antes de começar cada tarefa. Ex.: migration do banco deve rodar antes do código da API.
 
-### Padrão 2: Dependências entre Tarefas
+### TDD: Bons Testes
 
-Se as tarefas têm dependências, verifique os pré-requisitos antes de começar:
+| Qualidade | Bom | Ruim |
+|-----------|-----|------|
+| **Mínimo** | Uma coisa. "e" no nome? Divida. | `test('valida email e domínio e espaço')` |
+| **Claro** | Nome descreve comportamento | `test('teste1')` |
+| **Mostra intenção** | Demonstra a API desejada | Obscurece o que o código deveria fazer |
 
-```bash
-# Example: Database migration must run before API code
-# Check migration status
-pnpm db:migrate status
+### TDD: Compatibilidade Cross-Platform
 
-# Only proceed with API task if migration succeeded
-```
+Testes devem passar em qualquer SO sem modificação.
 
-### Padrão 3: Testes Incrementais
+- ❌ `const p = basePath + '/covers/' + filename`
+- ✅ `const p = path.join(basePath, 'covers', filename)`
+- ❌ `expect(result.filePath).toContain('/covers/')`
+- ✅ `expect(result.filePath).toContain(path.join('sources', id, 'covers'))`
 
-Teste incrementalmente, não no final:
+Mocks de I/O: normalize separadores com `replace(/\\/g, '/')` para buscas por prefixo.
 
-**Good**:
-```
-Task 1: Create model → Test model → Mark complete
-Task 2: Create API → Test API → Mark complete
-Task 3: Add validation → Test validation → Mark complete
-```
+### TDD: Isolamento de Recursos
 
-**Bad**:
-```
-Task 1, 2, 3 → Implement all → Test everything → Debug failures
-```
+- **Diretórios temporários**: use `os.tmpdir()` + sufixo aleatório. Remova em `afterAll`/`globalTeardown`.
+- **Banco de dados**: testes de integração usam banco dedicado (`_test_db`). Limpe com `beforeEach deleteMany`.
+- **Todo recurso criado** por teste deve ser removido ao final, passe ou falhe.
 
-### Padrão 4: Documentação Viva
+### TDD: Singletons e Efeitos Colaterais
 
-Mantenha README, documentação de API e comentários atualizados **conforme avança**:
+A mera importação de um módulo não deve causar efeitos colaterais.
+- ❌ `export const prisma = new PrismaClient()` no nível do módulo
+- ✅ `let _client; export function getClient() { ... }` com inicialização lazy
 
-```markdown
-When adding a new API endpoint, also:
-- Update API documentation
-- Add example request/response
-- Update OpenAPI/Swagger spec
-- Add inline code comments
-```
+### TDD: Execução Paralela
 
-## Tópicos Avançados
-
-**Trabalho paralelo**: Se as tarefas forem verdadeiramente independentes (ex.: módulos separados), você pode trabalhar nelas em paralelo, mas cada uma deve ser testada independentemente.
-
-**Pontos de integração**: Quando existirem dependências entre tarefas, use testes de integração para verificar se a conexão funciona.
-
-**Estratégia de rollback**: Para mudanças arriscadas, crie tarefas de rollback antes de implantar.
+Se `fileParallelism > 1`, cada worker deve usar diretórios, portas e namespaces de banco independentes. Considere `pool: 'forks'` para isolamento de memória.
 
 ## Padrões Comuns
 
-### Padrão 1: Database + API + UI
+### Database + API + UI
 
 Ordem típica neste projeto:
 1. Database schema/migration (Prisma)
 2. Data access layer (repositories)
-3. Business logic layer (use-cases/services)
+3. Business logic (use-cases/services) — **TDD cada camada**
 4. API endpoints (controllers + routes)
 5. Shared schemas (`apps/shared`)
 6. Frontend integration (React + TanStack Query)
 7. End-to-end tests (Vitest)
 
-### Padrão 2: Feature Flags
+### Feature Flags
 
-Para implantações graduais:
-1. Implement feature behind flag
-2. Test with flag enabled
-3. Deploy with flag disabled
-4. Enable flag incrementally
-5. Remove flag after full rollout
+Para implantações graduais: implemente atrás de flag → teste com flag habilitada → deploy com flag desabilitada → habilite incrementalmente → remova flag após rollout completo.
 
-### Padrão 3: Breaking Changes
+### Breaking Changes
 
-Para mudanças quebradoras de API:
-1. Implement new version (v2)
-2. Keep old version (v1) working
-3. Add deprecation warnings to v1
-4. Migrate users to v2
-5. Remove v1 (separate task/proposal)
+Mudanças quebradoras de API: implemente v2 → mantenha v1 funcionando → adicione avisos de depreciação → migre usuários → remova v1 (tarefa/proposta separada).
+
+## Racionalizações Comuns (Não Caia Nessas)
+
+| Desculpa | Realidade |
+|----------|-----------|
+| "Simples demais para testar" | Código simples quebra. Teste leva 30 segundos. |
+| "Vou testar depois" | Testes passando imediatamente não provam nada. |
+| "Testes depois alcançam mesmos objetivos" | Testes-depois = "o que isso faz?" Testes-primeiro = "o que isso deveria fazer?" |
+| "Já testei manualmente" | Ad-hoc ≠ sistemático. Sem registro, não pode reexecutar. |
+| "Deletar X horas é desperdício" | Falácia do custo irrecuperável. Manter código não verificado é dívida. |
+| "Manter como referência, escrever testes primeiro" | Você vai adaptar. Isso é testar depois. Delete. |
+| "Preciso explorar primeiro" | Tudo bem. Jogue fora a exploração, comece com TDD. |
+| "TDD vai me atrasar" | TDD é mais rápido que debug. Pragmático = test-first. |
+
+## Bandeiras Vermelhas — PARE e Recomece
+
+- Código antes do teste
+- Teste passa imediatamente (sem ter visto falhar)
+- Não consegue explicar por que o teste falhou
+- Testes adicionados "depois"
+- Racionalizando "só desta vez"
+- "Já testei manualmente"
+- "Manter como referência" ou "adaptar código existente"
+
+**Tudo isso significa: Delete o código. Recomece com TDD.**
 
 ## Anti-Padrões a Evitar
 
-**Don't**:
-- Skip testing individual tasks
-- Mark tasks complete before verification
-- Ignore failing tests ("I'll fix it later")
-- Batch multiple tasks before testing
-- Modify living specs during implementation
-- Work out of order (dependencies break)
+**Don't:**
+- Escrever código de produção sem teste pendente
+- Marcar tarefas como completas antes da verificação
+- Ignorar testes falhando ("arrumo depois")
+- Agrupar várias tarefas antes de testar
+- Modificar specs durante a implementação
+- Trabalhar fora de ordem (dependências quebram)
 
-**Do**:
-- Test each task immediately
-- Fix failing tests before proceeding
-- Update TodoWrite in real-time
-- Document blockers clearly
-- Communicate progress to user
-- Keep commits atomic and descriptive
+**Do:**
+- Seguir Red-Green-Refactor em cada tarefa
+- Ver o teste falhar antes de implementar
+- Corrigir testes falhando antes de prosseguir
+- Atualizar TodoWrite em tempo real
+- Manter commits atômicos e descritivos
+
+## Quando Estiver Travado (TDD)
+
+| Problema | Solução |
+|----------|---------|
+| Não sabe como testar | Escreva a API desejada. Escreva a asserção primeiro. |
+| Teste complicado demais | Design complicado demais. Simplifique a interface. |
+| Precisa mockar tudo | Código muito acoplado. Use injeção de dependência. |
+| Setup do teste enorme | Extraia helpers. Ainda complexo? Simplifique o design. |
+
+**Bug encontrado?** Escreva um teste falhando que o reproduza. Siga o ciclo TDD. O teste prova a correção e previne regressão.
 
 ## Solução de Problemas
 
-### Problema: Tests failing after task completion
+### Testes falhando após tarefa
 
-**Solution**:
-```markdown
-1. Do NOT mark task complete
-2. Debug the failure
-3. Fix the code
-4. Re-run tests
-5. Only mark complete after pass
-```
+1. NÃO marque como concluída
+2. Debug a falha
+3. Corrija o código
+4. Re-execute os testes
+5. Só marque como concluída após passar
 
-### Problema: Task is too large
+### Tarefa muito grande
 
-**Solution**:
-```markdown
-1. Break into subtasks
-2. Update TodoWrite with subtasks
-3. Complete subtasks sequentially
-4. Mark parent task complete after all subtasks done
-```
+1. Quebre em subtarefas
+2. Atualize TodoWrite com subtarefas
+3. Complete subtarefas sequencialmente
+4. Marque tarefa pai como concluída após todas as subtarefas
 
-### Problema: Dependency not met
+### Dependência não atendida
 
-**Solution**:
-```markdown
-1. Pause current task
-2. Complete dependency first
-3. Test dependency
-4. Resume original task
-```
+1. Pause a tarefa atual
+2. Complete a dependência primeiro
+3. Teste a dependência
+4. Retome a tarefa original
 
 ## Referências
 
-- [TASK_PATTERNS.md](reference/TASK_PATTERNS.md) - Padrões comuns de execução de tarefas
-- [TESTING_STRATEGIES.md](reference/TESTING_STRATEGIES.md) - Abordagens de teste por tipo de tarefa
+- [testing-anti-patterns.md](reference/testing-anti-patterns.md) — Anti-padrões de teste: mocks, métodos só para teste, etc.
+- [TASK_PATTERNS.md](reference/TASK_PATTERNS.md) — Padrões comuns de execução de tarefas
+- [TESTING_STRATEGIES.md](reference/TESTING_STRATEGIES.md) — Abordagens de teste por tipo de tarefa
 
 ---
 
-**Orçamento de tokens**: Este SKILL.md tem aproximadamente 430 linhas, dentro do limite recomendado de 500 linhas.
+**Orçamento de tokens**: Este SKILL.md integra o fluxo de implementação do OpenSpec com TDD estrito como motor de cada tarefa.
