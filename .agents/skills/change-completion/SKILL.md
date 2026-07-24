@@ -322,14 +322,27 @@ cd docs/openspec && npx openspec archive {change-id} --yes
 - `--skip-specs`: pula mesclagem de specs (changes de infraestrutura)
 - `--dry-run`: preview sem alterar arquivos
 
-**Pós-arquivamento:**
+**Pós-arquivamento — correção de localização:**
+
+O CLI do OpenSpec coloca a change arquivada em `docs/openspec/changes/archive/{prefix}-{change-id}/`. O projeto espera o arquivamento em `docs/openspec/archive/{change-id}/`. Execute a correção manualmente:
+
+```bash
+# Move a change para o diretório de archive correto
+mv docs/openspec/changes/archive/*-{change-id} docs/openspec/archive/{change-id}
+
+# Remove o diretório changes/archive/ se estiver vazio
+rmdir docs/openspec/changes/archive/ 2>/dev/null
+```
+
+**Verificação pós-arquivamento:**
 
 - [ ] A change foi removida de `docs/openspec/changes/`
 - [ ] A change está em `docs/openspec/archive/{change-id}/`
-- [ ] Arquivos base íntegros: `.openspec.yaml`, `README.md`, `proposal.md`, `design.md`, `tasks.md`, `specs/`
+- [ ] Arquivos base íntegros: `.openspec.yaml` (se existir), `proposal.md`, `tasks.md`, `specs/`
+- [ ] A spec foi mergeada em `docs/openspec/specs/{change-id}/spec.md` (o CLI faz isso automaticamente)
 - [ ] Repositório consistente (sem referências quebradas)
 
-> O comando pode colocar em `changes/archive/`. Se o projeto usar `archive/` na raiz, mova manualmente.
+> **Nota sobre o CLI**: o comando `openspec archive` deve ser executado a partir de `docs/openspec/` para que o CLI encontre as changes ativas em `changes/`. O CLI coloca o resultado em `changes/archive/` por padrão, exigindo a correção manual para `archive/`. Este comportamento é uma limitação do CLI sem `.openspec.yaml` configurado.
 
 ---
 
