@@ -41,7 +41,7 @@ export function ChapterReader({
   // para que o leitor exiba a primeira imagem via proxy imediatamente.
   // O poll/SSE atualiza o total real assim que disponivel.
   const effectiveTotal = cached
-    ? (cachedTotalPages ?? 0)
+    ? (cachedTotalPages ?? estimatedTotalPages ?? 0)
     : sseTotal > 0
       ? sseTotal
       : estimatedTotalPages != null
