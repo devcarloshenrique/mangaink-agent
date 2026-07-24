@@ -22,6 +22,7 @@ import type {
   UpdateUserPresetMetaInput,
 } from "@/types/conversion";
 import type { SSEJournalEvent } from "@/types/conversion";
+import type { ChapterDownloadStatus, ChapterDownloadResponse } from "@/types/chapter-reader";
 import { createSSEStream } from "@/lib/sse";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -309,5 +310,36 @@ export const presetsApi = {
   /** DELETE /api/conversions/presets/:id — exclui preset */
   async remove(presetId: string): Promise<void> {
     return request(`/api/conversions/presets/${presetId}`, { method: "DELETE" });
+  },
+};
+
+// ─── Chapters API ─────────────────────────────────────────────────────────────
+
+export const chaptersApi = {
+  /** POST /api/sources/:sourceId/chapters/:chapterId/download */
+  async download(sourceId: string, chapterId: string): Promise<ChapterDownloadResponse> {
+    return request<ChapterDownloadResponse>(
+      `/api/sources/${sourceId}/chapters/${chapterId}/download`,
+      {
+        method: "POST",
+      },
+    );
+  },
+
+  /** GET /api/sources/:sourceId/chapters/:chapterId/download */
+  async getDownloadStatus(sourceId: string, chapterId: string): Promise<ChapterDownloadStatus> {
+    return request<ChapterDownloadStatus>(
+      `/api/sources/${sourceId}/chapters/${chapterId}/download`,
+    );
+  },
+
+  /** URL para EventSource SSE */
+  downloadEventsUrl(sourceId: string, chapterId: string): string {
+    return `/api/sources/${sourceId}/chapters/${chapterId}/download/events`;
+  },
+
+  /** URL da página (imagem) — endpoint público, sem auth */
+  pageUrl(sourceId: string, chapterId: string, index: number): string {
+    return `/api/sources/${sourceId}/chapters/${chapterId}/images/${index}`;
   },
 };

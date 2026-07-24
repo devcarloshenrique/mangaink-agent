@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Chapter, Book } from "@/types/scraping";
+import type { Chapter } from "@/types/scraping";
+import type { Book } from "@/types/conversion";
 
 // ── Funções extraídas do wizard.tsx ────────────────────────────────────
 
@@ -54,7 +55,8 @@ function buildBooks(
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function makeChapter(id: string): Chapter {
-  return { id, title: `Capítulo ${id}`, url: `https://site/${id}`, pages: 20 };
+  const num = id.replace('chap_', '');
+  return { id, number: num, title: `Capítulo ${num}`, url: `https://site/${num}`, pages: 20, volume: null, isDownloaded: false };
 }
 
 describe("computeVolumes", () => {
