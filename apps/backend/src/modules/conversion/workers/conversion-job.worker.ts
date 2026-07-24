@@ -9,6 +9,7 @@ import { ImageDownloaderService } from '../services/image-downloader.service'
 import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
 import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
+import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 
@@ -472,21 +473,6 @@ async function getChapterImageUrls(
   }
 
   return images
-}
-
-/**
- * Resolve o provider correto para o sourceId com rate limiter injetado.
- */
-async function resolveProvider(sourceId: string): Promise<import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null> {
-  const source = await getSourceRepository().load(sourceId)
-  if (!source) return null
-
-  const firstChapter = source.chapters[0]
-  if (!firstChapter?.url) return null
-
-  const { ProviderResolver } = await import('../../scraping/providers/provider-resolver')
-  const resolver = new ProviderResolver()
-  return resolver.resolve(firstChapter.url)
 }
 
 /**
