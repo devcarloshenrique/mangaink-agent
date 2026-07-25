@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { ComicHeader } from "@/components/comic/Header";
 import { ChapterReader } from "@/components/reader/ChapterReader";
 import { Toaster } from "sonner";
-import { ArrowLeft } from "lucide-react";
 import { chaptersApi } from "@/lib/api";
 import { scrapingApi } from "@/lib/api";
 import { authGuard } from "./-authGuard";
@@ -21,6 +19,7 @@ export const Route = createFileRoute("/biblioteca/reader-chapter/$sourceId")({
 function ChapterReaderPage() {
   const { sourceId } = Route.useParams();
   const { chapterId } = Route.useSearch();
+  const nav = useNavigate();
 
   const [source, setSource] = useState<SourceInspectResponse | null>(null);
   const [cachedTotalPages, setCachedTotalPages] = useState<number | null>(null);
@@ -32,6 +31,13 @@ function ChapterReaderPage() {
 
   const chapter = source?.chapters.find((c) => c.id === chapterId);
   const isDownloaded = chapter?.isDownloaded ?? false;
+
+  const chapterIndex = source ? source.chapters.findIndex((c) => c.id === chapterId) : -1;
+  const prevChapterId = chapterIndex > 0 ? source!.chapters[chapterIndex - 1].id : null;
+  const nextChapterId =
+    chapterIndex >= 0 && chapterIndex < (source?.chapters.length ?? 1) - 1
+      ? source!.chapters[chapterIndex + 1].id
+      : null;
 
   // Cache hit: busca totalImages exato do manifest.json
   useEffect(() => {
@@ -69,33 +75,32 @@ function ChapterReaderPage() {
       .catch(console.error);
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="flex items-center gap-3 mb-8">
-          <Link
-            to="/biblioteca/$sourceId"
-            params={{ sourceId }}
-            className="h-10 w-10 border-[3px] border-ink rounded-lg bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
-          >
-            <ArrowLeft />
-          </Link>
-          <h2 className="font-display text-xl uppercase">
-            {chapter?.title ?? `Capítulo ${chapterId}`}
-          </h2>
-        </div>
+  const handleNavigateChapter = (newChapterId: string) => {
+    nav({
+      to: "/biblioteca/reader-chapter/$sourceId",
+      params: { sourceId },
+      search: { chapterId: newChapterId },
+    });
+  };
 
-        <ChapterReader
-          sourceId={sourceId}
-          chapterId={chapterId}
-          cached={isDownloaded}
-          cachedTotalPages={cachedTotalPages ?? undefined}
-          estimatedTotalPages={chapter?.pages ?? undefined}
-          onRetry={handleRetry}
-        />
-      </div>
+  return (
+    <div className="fixed inset-0 z-50 bg-black">
+      <Toaster richColors position="top-right" />
+      <ChapterReader
+        sourceId={sourceId}
+        chapterId={chapterId}
+        cached={isDownloaded}
+        cachedTotalPages={cachedTotalPages ?? undefined}
+        estimatedTotalPages={chapter?.pages ?? undefined}
+        onRetry={handleRetry}
+        mangaTitle={source?.metadata?.title}
+        chapterTitle={chapter?.title ?? `Capítulo ${chapterId}`}
+        backUrl={`/biblioteca/${sourceId}`}
+        chapters={source?.chapters ?? []}
+        prevChapterId={prevChapterId}
+        nextChapterId={nextChapterId}
+        onNavigateChapter={handleNavigateChapter}
+      />
     </div>
   );
 }

@@ -90,6 +90,7 @@
   --scrollbar-thumb-hover: var(--comic-yellow);
   --scrollbar-thumb-border: var(--comic-ink);
 
+  --theme-primary: var(--comic-yellow);
   --chart-1: var(--comic-red);
   --chart-2: var(--comic-yellow);
   --chart-3: var(--comic-blue);
@@ -121,6 +122,7 @@
   --muted-foreground: oklch(0.75 0.02 90);
   --accent: var(--comic-blue);
   --accent-foreground: oklch(0.99 0 0);
+  --theme-primary: var(--comic-yellow);
   --border: var(--comic-cream);
   --input: oklch(0.27 0.02 260);
 
@@ -326,6 +328,14 @@
   }
   *::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
+  }
+
+  .scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
   }
 }
 
