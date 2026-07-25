@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { join } from 'node:path'
 
 const mockPubsubInstance = vi.hoisted(() => ({
   publish: vi.fn().mockResolvedValue(undefined),
@@ -175,12 +176,12 @@ describe('processChapterDownload', () => {
     expect(mockWriteFile).toHaveBeenCalledTimes(2)
     expect(mockWriteFile).toHaveBeenNthCalledWith(
       1,
-      '/test/storage/sources/src-test/chapters/chap-test/0001.jpg',
+      join('/test/storage/sources/src-test/chapters/chap-test', '0001.jpg'),
       expect.any(Buffer),
     )
     expect(mockWriteFile).toHaveBeenNthCalledWith(
       2,
-      '/test/storage/sources/src-test/chapters/chap-test/0002.jpg',
+      join('/test/storage/sources/src-test/chapters/chap-test', '0002.jpg'),
       expect.any(Buffer),
     )
 
