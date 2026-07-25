@@ -18,11 +18,7 @@ import { conversionsApi } from "@/lib/api";
 import { useConversionsList } from "@/hooks/useConversions";
 import { useConversionActions } from "@/hooks/useConversionActions";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import type {
-  ConversionStatus,
-  ConversionSummary,
-  JobSummary,
-} from "@/types/conversion";
+import type { ConversionStatus, ConversionSummary, JobSummary } from "@/types/conversion";
 
 interface TabConversoesProps {
   sourceId: string;
@@ -69,10 +65,7 @@ function ExpandBtn({ open, onClick }: { open: boolean; onClick: () => void }) {
     >
       <span>{open ? "Fechar" : "Ver"}</span>
       <ChevronDown
-        className={cn(
-          "h-3 w-3 transition-transform duration-200",
-          open && "rotate-180",
-        )}
+        className={cn("h-3 w-3 transition-transform duration-200", open && "rotate-180")}
       />
     </button>
   );
@@ -94,24 +87,13 @@ function SearchBtn({ open, onClick }: { open: boolean; onClick: () => void }) {
   );
 }
 
-function JobRowCover({
-  sourceId,
-  className,
-}: {
-  sourceId: string;
-  className?: string;
-}) {
+function JobRowCover({ sourceId, className }: { sourceId: string; className?: string }) {
   const [error, setError] = useState(false);
   const url = conversionsApi.coverUrl(sourceId, { kind: "original" });
 
   if (!url || error) {
     return (
-      <div
-        className={cn(
-          "h-full w-full bg-muted flex items-center justify-center",
-          className,
-        )}
-      >
+      <div className={cn("h-full w-full bg-muted flex items-center justify-center", className)}>
         <BookOpen className="h-5 w-5 opacity-30" />
       </div>
     );
@@ -144,9 +126,7 @@ export function TabConversoes({
   const conversions = propConversions ?? data?.items ?? [];
   const isLoading = !isMock && apiLoading;
 
-  const [expandedMap, setExpandedMap] = useState<Record<string, ExpandedState>>(
-    {},
-  );
+  const [expandedMap, setExpandedMap] = useState<Record<string, ExpandedState>>({});
 
   const toggleExpand = useCallback(
     async (convId: string) => {
@@ -162,9 +142,7 @@ export function TabConversoes({
         }
 
         if (jobsMap?.[convId]) {
-          const mockJobs = jobsMap[convId].filter(
-            (j) => j.status === "completed" && j.outputFile,
-          );
+          const mockJobs = jobsMap[convId].filter((j) => j.status === "completed" && j.outputFile);
           return {
             ...prev,
             [convId]: {
@@ -196,9 +174,7 @@ export function TabConversoes({
 
       try {
         const state = await conversionsApi.get(convId);
-        const completedJobs = state.jobs.filter(
-          (j) => j.status === "completed" && j.outputFile,
-        );
+        const completedJobs = state.jobs.filter((j) => j.status === "completed" && j.outputFile);
         setExpandedMap((prev) => ({
           ...prev,
           [convId]: {
@@ -252,9 +228,7 @@ export function TabConversoes({
     return (
       <div className="text-center py-12">
         <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-20" />
-        <p className="font-display text-lg uppercase text-ink/30">
-          Nenhuma conversao encontrada.
-        </p>
+        <p className="font-display text-lg uppercase text-ink/30">Nenhuma conversao encontrada.</p>
       </div>
     );
   }
@@ -274,8 +248,12 @@ export function TabConversoes({
         const filteredJobs = q
           ? jobs.filter(
               (j) =>
-                String(j.title ?? "").toLowerCase().includes(q) ||
-                String(j.outputFile ?? "").toLowerCase().includes(q),
+                String(j.title ?? "")
+                  .toLowerCase()
+                  .includes(q) ||
+                String(j.outputFile ?? "")
+                  .toLowerCase()
+                  .includes(q),
             )
           : jobs;
 
@@ -288,12 +266,7 @@ export function TabConversoes({
 
         return (
           <div key={conv.conversionId}>
-            <div
-              className={cn(
-                "border-l-[8px] pl-6",
-                SPINE_BORDER[conv.status],
-              )}
-            >
+            <div className={cn("border-l-[8px] pl-6", SPINE_BORDER[conv.status])}>
               <div className="flex items-center gap-3 py-3">
                 <BookOpen className="h-5 w-5 shrink-0 opacity-20" />
 
@@ -314,24 +287,18 @@ export function TabConversoes({
                   <p className="text-xs font-medium opacity-70 mt-1">
                     {conv.completedJobs}/{conv.totalJobs} volumes
                     {"  •  "}
-                    {conv.progress}%
-                    {"  •  "}
+                    {conv.progress}%{"  •  "}
                     {relativeTime(conv.updatedAt)}
                   </p>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
-                  <ExpandBtn
-                    open={isOpen}
-                    onClick={() => toggleExpand(conv.conversionId)}
-                  />
+                  <ExpandBtn open={isOpen} onClick={() => toggleExpand(conv.conversionId)} />
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => reconvert(conv.conversionId)}
-                      disabled={
-                        conv.status === "queued" || conv.status === "processing"
-                      }
+                      disabled={conv.status === "queued" || conv.status === "processing"}
                       className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-7 w-7 rounded-md bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Reconverter todos os volumes"
                     >
@@ -380,9 +347,7 @@ export function TabConversoes({
                           autoFocus
                           type="text"
                           value={filter}
-                          onChange={(e) =>
-                            setFilter(conv.conversionId, e.target.value)
-                          }
+                          onChange={(e) => setFilter(conv.conversionId, e.target.value)}
                           placeholder="Filtrar por nome ou numero..."
                           className="w-full pl-3 pr-8 py-1.5 font-display text-xs uppercase tracking-wider border-[2px] border-ink rounded-lg bg-white placeholder:text-ink/20 focus:outline-none focus:ring-2 focus:ring-comic-yellow focus:ring-offset-1 transition-all"
                         />
@@ -407,93 +372,78 @@ export function TabConversoes({
 
                   {jobsError && (
                     <div className="text-center py-4">
-                      <p className="font-display text-sm text-comic-red">
-                        {jobsError}
-                      </p>
+                      <p className="font-display text-sm text-comic-red">{jobsError}</p>
                     </div>
                   )}
 
-                  {!loadingJobs &&
-                    !jobsError &&
-                    filteredJobs.length > 0 && (
-                      <div className="max-h-64 overflow-y-auto pr-4 space-y-1.5">
-                        {filteredJobs.map((job) => (
-                          <div
-                            key={job.jobId}
-                            className="flex items-center gap-3 py-2 px-2.5 border-2 border-ink rounded bg-muted/20 hover:bg-muted/40 transition-colors"
-                          >
-                            <div className="shrink-0 border-[2px] border-ink rounded overflow-hidden bg-muted aspect-[2/3] h-20">
-                              <JobRowCover sourceId={sourceId} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-display text-base truncate">
-                                {job.title}
-                              </h4>
-                              <p className="text-[11px] opacity-40 truncate">
-                                {job.outputFile}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigate({
-                                  to: "/biblioteca/reader/$conversionId",
-                                  params: {
-                                    conversionId: conv.conversionId,
-                                  },
-                                  search: { jobId: job.jobId },
-                                });
-                              }}
-                              title="Ler"
-                              className="inline-flex items-center gap-1 font-display text-xs uppercase tracking-wider px-2.5 py-1.5 border-[2.5px] border-ink rounded-md bg-comic-blue/10 text-ink hover:bg-comic-blue/20 shadow-comic-sm transition-all shrink-0"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              Ler
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toast.info("Reconversão de volume em breve")
-                              }
-                              title="Reconverter este volume"
-                              className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-muted transition-all shrink-0"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toast.info("Exclusão de volume em breve")
-                              }
-                              title="Excluir este volume"
-                              className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-comic-red/10 hover:text-comic-red transition-all shrink-0"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => reconvert(conv.conversionId)}
-                              title="Configurar"
-                              className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-comic-yellow/30 transition-all shrink-0"
-                            >
-                              <Settings className="h-4 w-4" />
-                            </button>
+                  {!loadingJobs && !jobsError && filteredJobs.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto pr-4 space-y-1.5">
+                      {filteredJobs.map((job) => (
+                        <div
+                          key={job.jobId}
+                          className="flex items-center gap-3 py-2 px-2.5 border-2 border-ink rounded bg-muted/20 hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="shrink-0 border-[2px] border-ink rounded overflow-hidden bg-muted aspect-[2/3] h-20">
+                            <JobRowCover sourceId={sourceId} />
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-display text-base truncate">{job.title}</h4>
+                            <p className="text-[11px] opacity-40 truncate">{job.outputFile}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigate({
+                                to: "/biblioteca/reader/$conversionId",
+                                params: {
+                                  conversionId: conv.conversionId,
+                                },
+                                search: { jobId: job.jobId },
+                              });
+                            }}
+                            title="Ler"
+                            className="inline-flex items-center gap-1 font-display text-xs uppercase tracking-wider px-2.5 py-1.5 border-[2.5px] border-ink rounded-md bg-comic-blue/10 text-ink hover:bg-comic-blue/20 shadow-comic-sm transition-all shrink-0"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Ler
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toast.info("Reconversão de volume em breve")}
+                            title="Reconverter este volume"
+                            className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-muted transition-all shrink-0"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toast.info("Exclusão de volume em breve")}
+                            title="Excluir este volume"
+                            className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-comic-red/10 hover:text-comic-red transition-all shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => reconvert(conv.conversionId)}
+                            title="Configurar"
+                            className="inline-flex items-center justify-center border-[2.5px] border-ink shadow-comic-sm h-8 w-8 rounded-md bg-card hover:bg-comic-yellow/30 transition-all shrink-0"
+                          >
+                            <Settings className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                  {!loadingJobs &&
-                    !jobsError &&
-                    jobs.length > 0 &&
-                    filteredJobs.length === 0 && (
-                      <div className="py-10 text-center border-t border-ink/10">
-                        <BookOpen className="h-8 w-8 mx-auto opacity-20 mb-2" />
-                        <p className="font-display text-sm uppercase tracking-wider text-ink/30">
-                          Nenhum volume encontrado
-                        </p>
-                      </div>
-                    )}
+                  {!loadingJobs && !jobsError && jobs.length > 0 && filteredJobs.length === 0 && (
+                    <div className="py-10 text-center border-t border-ink/10">
+                      <BookOpen className="h-8 w-8 mx-auto opacity-20 mb-2" />
+                      <p className="font-display text-sm uppercase tracking-wider text-ink/30">
+                        Nenhum volume encontrado
+                      </p>
+                    </div>
+                  )}
 
                   {!loadingJobs && !jobsError && jobs.length === 0 && (
                     <div className="py-10 text-center">

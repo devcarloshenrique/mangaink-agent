@@ -931,7 +931,12 @@ function StepCovers({
                   >
                     <div className="aspect-[2/3] relative">
                       <img
-                        src={conversionsApi.coverUrl(series.sourceId, { kind: "gallery", coverId: c.id }) ?? ""}
+                        src={
+                          conversionsApi.coverUrl(series.sourceId, {
+                            kind: "gallery",
+                            coverId: c.id,
+                          }) ?? ""
+                        }
                         alt={c.label}
                         className="absolute inset-0 h-full w-full object-cover"
                       />

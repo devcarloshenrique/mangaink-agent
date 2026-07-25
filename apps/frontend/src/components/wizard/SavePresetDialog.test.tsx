@@ -117,9 +117,7 @@ describe("SavePresetDialog", () => {
     const input = screen.getByPlaceholderText("Ex: Meu Kindle");
     fireEvent.change(input, { target: { value: "Novo Preset" } });
 
-    const descInput = screen.getByPlaceholderText(
-      "Ex: Configuracao otimizada para Kindle",
-    );
+    const descInput = screen.getByPlaceholderText("Ex: Configuracao otimizada para Kindle");
     fireEvent.change(descInput, { target: { value: "Desc" } });
 
     const checkbox = screen.getByRole("checkbox");

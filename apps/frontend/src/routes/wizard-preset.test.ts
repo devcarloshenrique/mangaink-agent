@@ -153,27 +153,19 @@ describe("wizard preset logic", () => {
     ];
 
     it("retorna false quando lastUserPresetId e null", () => {
-      expect(
-        hasUnsavedChanges(null, userPresets, { gamma: 3.0 }),
-      ).toBe(false);
+      expect(hasUnsavedChanges(null, userPresets, { gamma: 3.0 })).toBe(false);
     });
 
     it("retorna false quando preset nao existe", () => {
-      expect(
-        hasUnsavedChanges("inexistente", userPresets, { gamma: 3.0 }),
-      ).toBe(false);
+      expect(hasUnsavedChanges("inexistente", userPresets, { gamma: 3.0 })).toBe(false);
     });
 
     it("retorna false quando valores batem exatamente", () => {
-      expect(
-        hasUnsavedChanges("p1", userPresets, { mangaMode: true, gamma: 2.0 }),
-      ).toBe(false);
+      expect(hasUnsavedChanges("p1", userPresets, { mangaMode: true, gamma: 2.0 })).toBe(false);
     });
 
     it("retorna true quando valor do preset foi modificado", () => {
-      expect(
-        hasUnsavedChanges("p1", userPresets, { mangaMode: true, gamma: 3.0 }),
-      ).toBe(true);
+      expect(hasUnsavedChanges("p1", userPresets, { mangaMode: true, gamma: 3.0 })).toBe(true);
     });
 
     it("retorna true quando campo extra foi adicionado", () => {
@@ -188,9 +180,7 @@ describe("wizard preset logic", () => {
 
     it("retorna true quando campo do preset foi removido", () => {
       // gamma estava no preset mas foi removido de fieldOptions
-      expect(
-        hasUnsavedChanges("p1", userPresets, { mangaMode: true }),
-      ).toBe(true);
+      expect(hasUnsavedChanges("p1", userPresets, { mangaMode: true })).toBe(true);
     });
 
     it("retorna false quando fieldOptions vazio e nenhum campo no preset", () => {

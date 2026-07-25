@@ -19,9 +19,7 @@ export function TabDetalhes({ details }: TabDetalhesProps) {
               <ScrollText className="h-5 w-5" /> Sinopse
             </h3>
             <div className="text-sm leading-relaxed text-muted-foreground">
-              <p className={expanded ? "" : "line-clamp-4"}>
-                {details.description}
-              </p>
+              <p className={expanded ? "" : "line-clamp-4"}>{details.description}</p>
               <button
                 type="button"
                 onClick={() => setExpanded(!expanded)}

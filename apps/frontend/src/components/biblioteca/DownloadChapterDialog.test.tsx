@@ -22,9 +22,7 @@ describe("DownloadChapterDialog", () => {
 
     expect(screen.getByText("Baixar Capitulo")).toBeTruthy();
     expect(screen.getByText(/Capítulo 42/)).toBeTruthy();
-    expect(
-      screen.getByText(/nao esta em cache. Deseja baixar para ler?/),
-    ).toBeTruthy();
+    expect(screen.getByText(/nao esta em cache. Deseja baixar para ler?/)).toBeTruthy();
   });
 
   it("deve chamar onConfirm e fechar ao clicar em Baixar e Ler", () => {

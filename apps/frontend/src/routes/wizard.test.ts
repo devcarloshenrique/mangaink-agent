@@ -55,8 +55,16 @@ function buildBooks(
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function makeChapter(id: string): Chapter {
-  const num = id.replace('chap_', '');
-  return { id, number: num, title: `Capítulo ${num}`, url: `https://site/${num}`, pages: 20, volume: null, isDownloaded: false };
+  const num = id.replace("chap_", "");
+  return {
+    id,
+    number: num,
+    title: `Capítulo ${num}`,
+    url: `https://site/${num}`,
+    pages: 20,
+    volume: null,
+    isDownloaded: false,
+  };
 }
 
 describe("computeVolumes", () => {

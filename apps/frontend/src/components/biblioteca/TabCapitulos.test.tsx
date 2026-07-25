@@ -46,11 +46,7 @@ describe("TabCapitulos", () => {
 
   it("deve exibir mensagem quando lista vazia", () => {
     render(
-      <TabCapitulos
-        chapters={[]}
-        sourceId="src-test"
-        onDownloadRequest={onDownloadRequest}
-      />,
+      <TabCapitulos chapters={[]} sourceId="src-test" onDownloadRequest={onDownloadRequest} />,
     );
 
     expect(screen.getByText("Nenhum capitulo disponivel.")).toBeTruthy();
