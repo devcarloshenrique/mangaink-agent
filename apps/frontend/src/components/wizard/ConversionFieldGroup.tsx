@@ -82,9 +82,10 @@ function RenderSubcategories({
 
         return (
           <div key={sub.label}>
-            {idx > 0 && <Separator className="my-3 border-[2px] border-dashed border-ink/30" />}
+            {idx > 0 && <Separator className="my-4 bg-ink/25" />}
             <p className="font-display text-xs font-bold text-muted-foreground mb-2">{sub.label}</p>
-            <div className="space-y-1.5">
+            <div className="[&>*]:rounded-md [&>*]:px-2.5 [&>*+*]:mt-1 [&>*:nth-child(odd)]:bg-muted/50 [&>*]:transition-colors">
+
               {subFields.map((f) => (
                 <ConversionFieldRenderer
                   key={f.id}
@@ -101,20 +102,26 @@ function RenderSubcategories({
           </div>
         );
       })}
-      {fields
-        .filter((f) => !renderedIds.has(f.id))
-        .map((f) => (
-          <ConversionFieldRenderer
-            key={f.id}
-            field={f}
-            value={values[f.id] ?? f.default}
-            onChange={onChange}
-            onReset={onReset}
-            disabled={disabled || disabledFieldIds?.has(f.id)}
-            hasOverride={f.id in values}
-            conflictReason={conflictReasons?.get(f.id)}
-          />
-        ))}
+      {(() => {
+        const rest = fields.filter((f) => !renderedIds.has(f.id));
+        if (rest.length === 0) return null;
+        return (
+          <div className="mt-1 [&>*]:rounded-md [&>*]:px-2.5 [&>*+*]:mt-1 [&>*:nth-child(odd)]:bg-muted/50 [&>*]:transition-colors">
+            {rest.map((f) => (
+              <ConversionFieldRenderer
+                key={f.id}
+                field={f}
+                value={values[f.id] ?? f.default}
+                onChange={onChange}
+                onReset={onReset}
+                disabled={disabled || disabledFieldIds?.has(f.id)}
+                hasOverride={f.id in values}
+                conflictReason={conflictReasons?.get(f.id)}
+              />
+            ))}
+          </div>
+        );
+      })()}
     </>
   );
 }
@@ -152,14 +159,14 @@ export const ConversionFieldGroup = React.memo(function ConversionFieldGroup({
   return (
     <AccordionItem
       value={groupId}
-      className="border-[3px] border-ink rounded-lg mb-3 shadow-comic-sm overflow-hidden"
+      className="border-[2.5px] border-ink rounded-lg mb-3 overflow-hidden bg-card"
       data-testid={`conversion-group-${groupId}`}
-      onToggle={handleToggle}
+      onToggle={handleToggle as unknown as React.ToggleEventHandler<HTMLDivElement>}
     >
       <AccordionTrigger
         className={cn(
           "font-display text-base px-4 py-3 hover:no-underline",
-          "data-[state=open]:bg-secondary/30",
+          "data-[state=open]:bg-comic-yellow data-[state=open]:border-b-[2.5px] data-[state=open]:border-ink",
         )}
       >
         <span className="flex items-center gap-2">
@@ -201,7 +208,7 @@ export const ConversionFieldGroup = React.memo(function ConversionFieldGroup({
         )}
       </AccordionTrigger>
       <AccordionContent>
-        <div ref={contentRef} className="px-4 pb-3">
+        <div ref={contentRef} className="px-4 pt-4 pb-3">
           {isImageGroup ? (
             <RenderSubcategories
               fields={fields}
@@ -213,7 +220,7 @@ export const ConversionFieldGroup = React.memo(function ConversionFieldGroup({
               conflictReasons={conflictReasons}
             />
           ) : (
-            <div className="space-y-1.5">
+            <div className="[&>*]:rounded-md [&>*]:px-2.5 [&>*+*]:mt-1 [&>*:nth-child(odd)]:bg-muted/50 [&>*]:transition-colors">
               {fields.map((f) => (
                 <ConversionFieldRenderer
                   key={f.id}

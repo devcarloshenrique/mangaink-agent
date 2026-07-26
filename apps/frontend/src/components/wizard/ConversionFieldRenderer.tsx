@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import type { ConversionField } from "@/types/conversion";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -25,6 +25,74 @@ interface ConversionFieldRendererProps {
   conflictReason?: string;
 }
 
+const FieldInfoCtx = createContext<{ open: boolean; toggle: () => void } | null>(null);
+
+/**
+ * Descrições e textos de ajuda ficam ocultos atrás de um badge de info,
+ * exibidos inline (sem portal) logo abaixo do campo.
+ */
+function FieldInfo({ field }: { field: ConversionField }) {
+  const ctx = useContext(FieldInfoCtx);
+  if (!field.description && !field.help) return null;
+  return (
+    <button
+      type="button"
+      aria-label={`O que faz "${field.label}"?`}
+      aria-expanded={!!ctx?.open}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ctx?.toggle();
+      }}
+      className={cn(
+        "inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-ink text-[11px] font-bold leading-none shrink-0 transition-colors",
+        ctx?.open
+          ? "bg-comic-ink text-comic-cream"
+          : "bg-card text-muted-foreground hover:bg-comic-yellow hover:text-comic-ink",
+      )}
+    >
+      ?
+    </button>
+  );
+
+}
+
+function FieldInfoNote({ field, open }: { field: ConversionField; open: boolean }) {
+  if (!open || (!field.description && !field.help)) return null;
+  return (
+    <div className="mb-2 mt-1 rounded-md border-l-[3px] border-ink bg-muted px-2.5 py-2 space-y-1">
+      {field.description && <p className="text-xs font-medium">{field.description}</p>}
+      {field.help && (
+        <p id={`${field.id}-help`} className="text-[11px] font-medium opacity-70 italic">
+          {field.help}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ResetBtn({
+  field,
+  onReset,
+  hasOverride,
+}: Pick<ConversionFieldRendererProps, "field" | "onReset" | "hasOverride">) {
+  if (!hasOverride || !onReset) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-5 w-5 p-0 hover:bg-muted"
+      onClick={(e) => {
+        e.preventDefault();
+        onReset(field.id);
+      }}
+      title="Restaurar padrão"
+    >
+      <RotateCcw className="h-3 w-3 text-muted-foreground" />
+    </Button>
+  );
+}
+
 function BooleanField({
   field,
   value,
@@ -35,35 +103,18 @@ function BooleanField({
 }: ConversionFieldRendererProps) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <Label
-            htmlFor={field.id}
-            className={cn(
-              "font-display text-sm cursor-pointer",
-              disabled && "cursor-not-allowed opacity-50",
-            )}
-          >
-            {field.label}
-          </Label>
-          {hasOverride && onReset && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 w-5 p-0 hover:bg-muted"
-              onClick={(e) => {
-                e.preventDefault();
-                onReset(field.id);
-              }}
-              title="Restaurar padrão"
-            >
-              <RotateCcw className="h-3 w-3 text-muted-foreground" />
-            </Button>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Label
+          htmlFor={field.id}
+          className={cn(
+            "font-display text-sm cursor-pointer",
+            disabled && "cursor-not-allowed opacity-50",
           )}
-        </div>
-        {field.description && (
-          <p className="text-xs font-medium opacity-70 mt-0.5">{field.description}</p>
-        )}
+        >
+          {field.label}
+        </Label>
+        <FieldInfo field={field} />
+        <ResetBtn field={field} onReset={onReset} hasOverride={hasOverride} />
       </div>
       <Switch
         id={field.id}
@@ -96,24 +147,9 @@ function EnumField({
         >
           {field.label}
         </Label>
-        {hasOverride && onReset && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 hover:bg-muted"
-            onClick={(e) => {
-              e.preventDefault();
-              onReset(field.id);
-            }}
-            title="Restaurar padrão"
-          >
-            <RotateCcw className="h-3 w-3 text-muted-foreground" />
-          </Button>
-        )}
+        <FieldInfo field={field} />
+        <ResetBtn field={field} onReset={onReset} hasOverride={hasOverride} />
       </div>
-      {field.description && (
-        <p className="text-xs font-medium opacity-70 mt-0.5">{field.description}</p>
-      )}
       <Select
         value={String(value ?? "")}
         onValueChange={(v) => onChange(field.id, v)}
@@ -167,20 +203,8 @@ function SliderField({
           <span className={cn("font-display text-sm", disabled && "cursor-not-allowed opacity-50")}>
             {field.label}
           </span>
-          {hasOverride && onReset && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 w-5 p-0 hover:bg-muted"
-              onClick={(e) => {
-                e.preventDefault();
-                onReset(field.id);
-              }}
-              title="Restaurar padrão"
-            >
-              <RotateCcw className="h-3 w-3 text-muted-foreground" />
-            </Button>
-          )}
+          <FieldInfo field={field} />
+          <ResetBtn field={field} onReset={onReset} hasOverride={hasOverride} />
         </div>
         <span
           className={cn(
@@ -262,24 +286,9 @@ function NumberInputField({
         >
           {field.label}
         </Label>
-        {hasOverride && onReset && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 hover:bg-muted"
-            onClick={(e) => {
-              e.preventDefault();
-              onReset(field.id);
-            }}
-            title="Restaurar padrão"
-          >
-            <RotateCcw className="h-3 w-3 text-muted-foreground" />
-          </Button>
-        )}
+        <FieldInfo field={field} />
+        <ResetBtn field={field} onReset={onReset} hasOverride={hasOverride} />
       </div>
-      {field.description && (
-        <p className="text-xs font-medium opacity-70 mt-0.5">{field.description}</p>
-      )}
       <Input
         ref={inputRef}
         id={field.id}
@@ -310,15 +319,6 @@ function FallbackField({ field }: { field: ConversionField }) {
   );
 }
 
-function HelpText({ field }: { field: ConversionField }) {
-  if (!field.help) return null;
-  return (
-    <p id={`${field.id}-help`} className="text-[11px] font-medium opacity-50 italic mt-1">
-      {field.help}
-    </p>
-  );
-}
-
 function ConflictReason({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
@@ -331,7 +331,8 @@ function ConflictReason({ reason }: { reason?: string }) {
 
 export const ConversionFieldRenderer = React.memo(
   function ConversionFieldRenderer(props: ConversionFieldRendererProps) {
-    const { field, disabled, hasOverride, conflictReason } = props;
+    const { field, disabled, conflictReason } = props;
+    const [infoOpen, setInfoOpen] = useState(false);
 
     const renderField = () => {
       switch (true) {
@@ -348,16 +349,20 @@ export const ConversionFieldRenderer = React.memo(
       }
     };
 
+    const isToggleRow = field.type === "boolean" && field.component === "switch";
+
     return (
       <div
         className={cn(
-          "transition-colors",
+          "block w-full rounded-md transition-colors",
+          isToggleRow && !disabled && "hover:!bg-comic-yellow/30",
           disabled && "opacity-50 cursor-not-allowed pointer-events-none",
-          hasOverride && !disabled && "border-l-[3px] border-comic-yellow pl-2 -ml-1",
         )}
       >
-        {renderField()}
-        <HelpText field={field} />
+        <FieldInfoCtx.Provider value={{ open: infoOpen, toggle: () => setInfoOpen((v) => !v) }}>
+          {renderField()}
+        </FieldInfoCtx.Provider>
+        <FieldInfoNote field={field} open={infoOpen} />
         <ConflictReason reason={disabled ? conflictReason : undefined} />
       </div>
     );
