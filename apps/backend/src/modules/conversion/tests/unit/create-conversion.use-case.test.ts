@@ -3,6 +3,7 @@ import { CreateConversionUseCase } from '../../use-cases/create-conversion.use-c
 import { InMemoryConversionRepository } from '../helpers/in-memory-conversion.repository'
 import { MockJobRepository } from '../helpers/mock-job.repository'
 import { MockConversionQueueService } from '../helpers/mock-conversion-queue.service'
+import { MockDownloadOnlyQueueService } from '../helpers/mock-download-only-queue.service'
 import { MockConversionEventsService } from '../helpers/mock-conversion-events.service'
 import { makeConversionConfig, makeSourceMetadata } from '../helpers/fixtures'
 import type { SourceMetadataFile } from '../../../scraping/types/metadata.types'
@@ -15,9 +16,17 @@ import {
 
 const shared = vi.hoisted(() => {
   const sourceStore = new Map<string, SourceMetadataFile>()
+  const sourceUpdateFn = vi.fn()
+  const sourceUpdatePlaceholderFn = vi.fn().mockResolvedValue(undefined)
   return {
     sourceStore,
-    resetSources: () => sourceStore.clear(),
+    sourceUpdateFn,
+    sourceUpdatePlaceholderFn,
+    resetSources: () => {
+      sourceStore.clear()
+      sourceUpdateFn.mockClear()
+      sourceUpdatePlaceholderFn.mockClear()
+    },
     setSource: (sourceId: string, metadata: SourceMetadataFile) => sourceStore.set(sourceId, metadata),
   }
 })
@@ -30,10 +39,10 @@ vi.mock('../../../../shared/database/repositories', async () => {
       load: async (sourceId: string) => shared.sourceStore.get(sourceId) ?? null,
       exists: async (sourceId: string) => shared.sourceStore.has(sourceId),
       save: vi.fn(),
-      update: vi.fn(),
+      update: shared.sourceUpdateFn,
       delete: vi.fn(),
       getPlaceholderIndices: vi.fn().mockResolvedValue([]),
-      updatePlaceholderIndices: vi.fn(),
+      updatePlaceholderIndices: shared.sourceUpdatePlaceholderFn,
     })),
   }
 })
@@ -55,6 +64,7 @@ function makeSourceMetadataFile(chapterIds: string[]): SourceMetadataFile {
 let conversions: InMemoryConversionRepository
 let jobs: MockJobRepository
 let queue: MockConversionQueueService
+let downloadOnlyQueue: MockDownloadOnlyQueueService
 let events: MockConversionEventsService
 let useCase: CreateConversionUseCase
 
@@ -63,8 +73,9 @@ beforeEach(() => {
   conversions = new InMemoryConversionRepository()
   jobs = new MockJobRepository()
   queue = new MockConversionQueueService()
+  downloadOnlyQueue = new MockDownloadOnlyQueueService()
   events = new MockConversionEventsService()
-  useCase = new CreateConversionUseCase(conversions, jobs, queue, events)
+  useCase = new CreateConversionUseCase(conversions, jobs, queue, events, downloadOnlyQueue)
 })
 
 describe('CreateConversionUseCase (Planner)', () => {
@@ -235,5 +246,115 @@ describe('CreateConversionUseCase (Planner)', () => {
     })
     await useCase.execute(config)
     expect(jobs.created[0].config.errorHandlingStrategy).toBeUndefined()
+  })
+
+  // ── downloadOnly ────────────────────────────────────────────────────
+
+  it('deve criar conversion download-only sem validar output', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig({
+      downloadOnly: true,
+      // output ausente — downloadOnly não exige
+    }) as any
+    const result = await useCase.execute(config)
+    expect(result.status).toBe('queued')
+    expect(result.totalJobs).toBe(1)
+    // Deve enfileirar na fila download-only
+    expect(downloadOnlyQueue.enqueued).toHaveLength(1)
+    expect(queue.enqueued).toHaveLength(0)
+  })
+
+  it('download-only deve aceitar output undefined', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001']))
+    const config = {
+      sourceId: 'src-hunter-x-hunter-cb3c9071',
+      downloadOnly: true,
+      cover: { kind: 'original' as const },
+      metadata: { title: 'Test', author: 'Test Author' },
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+      options: {},
+      userId: 'test-user-001',
+    } as any
+    const result = await useCase.execute(config)
+    expect(result.status).toBe('queued')
+    expect(downloadOnlyQueue.enqueued).toHaveLength(1)
+  })
+
+  it('download-only deve usar effectiveOutput dummy', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig({
+      downloadOnly: true,
+    }) as any
+    await useCase.execute(config)
+    const jobData = downloadOnlyQueue.enqueued[0]
+    expect(jobData.downloadOnly).toBe(true)
+    expect(jobData.output).toBeDefined()
+    expect(jobData.output.deviceId).toBe('kindle_pw')
+    expect(jobData.output.format).toBe('epub')
+  })
+
+  it('conversao normal deve ser enfileirada na fila conversion-job', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig()
+    await useCase.execute(config)
+    expect(queue.enqueued).toHaveLength(1)
+    expect(downloadOnlyQueue.enqueued).toHaveLength(0)
+  })
+
+  it('deve chamar extendRetention ao criar conversao normal', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig()
+    await useCase.execute(config)
+    expect(shared.sourceUpdateFn).toHaveBeenCalledWith(
+      'src-hunter-x-hunter-cb3c9071',
+      expect.objectContaining({
+        cacheTtlHours: 720,
+        retentionDays: 30,
+      }),
+    )
+  })
+
+  it('deve chamar extendRetention ao criar download-only', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig({
+      downloadOnly: true,
+    }) as any
+    await useCase.execute(config)
+    expect(shared.sourceUpdateFn).toHaveBeenCalledWith(
+      'src-hunter-x-hunter-cb3c9071',
+      expect.objectContaining({
+        cacheTtlHours: 720,
+        retentionDays: 30,
+      }),
+    )
+  })
+
+  it('extendRetention não deve bloquear criação em caso de erro', async () => {
+    shared.sourceUpdateFn.mockRejectedValueOnce(new Error('DB error'))
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig()
+    const result = await useCase.execute(config)
+    expect(result.status).toBe('queued')
+  })
+
+  it('evento conversion.created deve incluir downloadOnly quando true', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001']))
+    const config = makeConversionConfig({
+      downloadOnly: true,
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+    }) as any
+    await useCase.execute(config)
+    const createdEvents = events.emitted.filter((e) => e.event.type === 'conversion.created')
+    expect(createdEvents[0].event.data.downloadOnly).toBe(true)
+  })
+
+  it('evento conversion.created nao deve incluir downloadOnly quando false', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001']))
+    const config = makeConversionConfig({
+      books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+    })
+    await useCase.execute(config)
+    const createdEvents = events.emitted.filter((e) => e.event.type === 'conversion.created')
+    expect(createdEvents[0].event.data.downloadOnly).toBeUndefined()
   })
 })

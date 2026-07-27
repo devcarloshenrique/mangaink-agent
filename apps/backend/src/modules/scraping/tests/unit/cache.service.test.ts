@@ -136,6 +136,47 @@ describe('CacheService', () => {
     })
   })
 
+  describe('extendRetention', () => {
+    it('deve atualizar cacheTtlHours e retentionDays para o valor solicitado', async () => {
+      const fixedDate = new Date('2026-07-08T12:00:00Z')
+      vi.setSystemTime(fixedDate)
+
+      await repository.save('src-test-12345678', makeMetadata())
+
+      await cacheService.extendRetention('src-test-12345678', 30)
+
+      const updated = await repository.load('src-test-12345678')
+      expect(updated?.cache.cacheTtlHours).toBe(720) // 30 * 24
+      expect(updated?.cache.retentionDays).toBe(30)
+    })
+
+    it('deve atualizar updatedAt e lastAccessAt', async () => {
+      const fixedDate = new Date('2026-07-08T12:00:00Z')
+      vi.setSystemTime(fixedDate)
+
+      await repository.save(
+        'src-test-12345678',
+        makeMetadata({
+          cache: {
+            createdAt: '2026-07-07T12:00:00Z',
+            updatedAt: '2026-07-07T12:00:00Z',
+            lastAccessAt: '2026-07-07T12:00:00Z',
+            cacheTtlHours: 24,
+            retentionDays: 30,
+          },
+        }),
+      )
+
+      await cacheService.extendRetention('src-test-12345678', 7)
+
+      const updated = await repository.load('src-test-12345678')
+      expect(updated?.cache.updatedAt).toBe('2026-07-08T12:00:00.000Z')
+      expect(updated?.cache.lastAccessAt).toBe('2026-07-08T12:00:00.000Z')
+      expect(updated?.cache.cacheTtlHours).toBe(168) // 7 * 24
+      expect(updated?.cache.retentionDays).toBe(7)
+    })
+  })
+
   describe('createFreshCache', () => {
     it('deve criar objeto MetadataCache com valores padrão', () => {
       const fixedDate = new Date('2026-07-08T12:00:00Z')

@@ -34,4 +34,41 @@ describe('PlaceholderService', () => {
     const buffer = await service.generate('K11', 'Cap. 5, Pág. 12')
     expect(buffer.length).toBeGreaterThan(0)
   })
+
+  it('generateDefault deve retornar Buffer PNG não vazio', async () => {
+    const buffer = await service.generateDefault('Cap. 1, Pág. 20')
+    expect(buffer).toBeInstanceOf(Buffer)
+    expect(buffer.length).toBeGreaterThan(0)
+    expect(buffer[0]).toBe(0x89)
+    expect(buffer[1]).toBe(0x50)
+    expect(buffer[2]).toBe(0x4e)
+    expect(buffer[3]).toBe(0x47)
+  })
+
+  it('generateDefault usa resolução default (1072x1448)', async () => {
+    const bufferDefault = await service.generateDefault('test')
+    const kpw5buffer = await service.generate('KPW5', 'test') // 1236x1648
+    // KPW5 é maior que a resolução default 1072x1448
+    expect(kpw5buffer.length).toBeGreaterThan(bufferDefault.length)
+  })
+
+  it('deve escapar caracteres XML especiais no pageLabel sem quebrar (generate)', async () => {
+    const buffer = await service.generate('KPW5', 'Cap. <1> & "Pág. 20"')
+    expect(buffer).toBeInstanceOf(Buffer)
+    expect(buffer.length).toBeGreaterThan(0)
+    expect(buffer[0]).toBe(0x89)
+    expect(buffer[1]).toBe(0x50)
+    expect(buffer[2]).toBe(0x4e)
+    expect(buffer[3]).toBe(0x47)
+  })
+
+  it('deve escapar caracteres XML especiais no pageLabel sem quebrar (generateDefault)', async () => {
+    const buffer = await service.generateDefault("Cap. <10> & 'Pág. 5'")
+    expect(buffer).toBeInstanceOf(Buffer)
+    expect(buffer.length).toBeGreaterThan(0)
+    expect(buffer[0]).toBe(0x89)
+    expect(buffer[1]).toBe(0x50)
+    expect(buffer[2]).toBe(0x4e)
+    expect(buffer[3]).toBe(0x47)
+  })
 })

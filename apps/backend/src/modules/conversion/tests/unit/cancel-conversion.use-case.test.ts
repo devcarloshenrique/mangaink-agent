@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { CancelConversionUseCase } from '../../use-cases/cancel-conversion.use-case'
 import { InMemoryConversionRepository } from '../helpers/in-memory-conversion.repository'
 import { MockConversionQueueService } from '../helpers/mock-conversion-queue.service'
+import { MockDownloadOnlyQueueService } from '../helpers/mock-download-only-queue.service'
 import { MockConversionEventsService } from '../helpers/mock-conversion-events.service'
 import { makeConversionConfig } from '../helpers/fixtures'
 import {
@@ -114,6 +115,7 @@ const mockState = (overrides: Partial<ConversionState> = {}): ConversionState =>
 
 let conversions: InMemoryConversionRepository
 let queue: MockConversionQueueService
+let downloadOnlyQueue: MockDownloadOnlyQueueService
 let events: MockConversionEventsService
 let useCase: CancelConversionUseCase
 
@@ -121,8 +123,9 @@ beforeEach(() => {
   store.reset()
   conversions = new InMemoryConversionRepository()
   queue = new MockConversionQueueService()
+  downloadOnlyQueue = new MockDownloadOnlyQueueService()
   events = new MockConversionEventsService()
-  useCase = new CancelConversionUseCase(conversions, queue, events)
+  useCase = new CancelConversionUseCase(conversions, queue, events, downloadOnlyQueue)
 })
 
 describe('CancelConversionUseCase', () => {
@@ -328,5 +331,15 @@ describe('CancelConversionUseCase', () => {
     store.setJobStatus('job_002', 'downloading')
 
     await expect(useCase.execute('conv_test_001', OTHER_USER)).rejects.toThrow(ForbiddenError)
+  })
+
+  it('deve tentar remover job da fila download-only tambem', async () => {
+    const state = mockState()
+    await conversions.create(state)
+    store.setJobStatus('job_001', 'queued')
+    store.setJobStatus('job_002', 'completed')
+    await useCase.execute('conv_test_001', TEST_USER)
+    expect(queue.removed).toContain('job_001')
+    expect(downloadOnlyQueue.removed).toContain('job_001')
   })
 })

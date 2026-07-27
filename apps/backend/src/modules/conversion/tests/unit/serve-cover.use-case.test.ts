@@ -28,6 +28,10 @@ vi.mock('../../../../shared/config/env', () => ({
   },
 }))
 
+vi.mock('../../../scraping/utils/resolve-provider', () => ({
+  resolveProvider: vi.fn(async () => null),
+}))
+
 import { ServeCoverUseCase } from '../../use-cases/serve-cover.use-case'
 import type { SourceCacheRepository } from '../../../scraping/repositories/source-cache.repository'
 import type { SourceMetadataFile } from '../../../scraping/types/metadata.types'
@@ -40,19 +44,38 @@ function makeSource(overrides: Partial<SourceMetadataFile> = {}): SourceMetadata
     source: { url: 'https://test.example.com/manga/test/', language: 'pt-BR' },
     metadata: { title: 'Test', author: null, description: null, status: null, genres: [] },
     chapters: [
-      { id: 'chap_0001', number: '1', title: 'Cap 1', url: 'https://test.example.com/ch/1', pages: 20, volume: 1, isDownloaded: false },
+      {
+        id: 'chap_0001',
+        number: '1',
+        title: 'Cap 1',
+        url: 'https://test.example.com/ch/1',
+        pages: 20,
+        volume: 1,
+        isDownloaded: false,
+      },
     ],
     covers: [
-      { id: 'cover_001', type: 'original', label: 'Original', imageUrl: 'https://img.example.com/cover.jpg' },
+      {
+        id: 'cover_001',
+        type: 'original',
+        label: 'Original',
+        imageUrl: 'https://img.example.com/cover.jpg',
+      },
     ],
     statistics: { chapters: 1, covers: 1 },
-    cache: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastAccessAt: new Date().toISOString(), cacheTtlHours: 24, retentionDays: 30 },
+    cache: {
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastAccessAt: new Date().toISOString(),
+      cacheTtlHours: 24,
+      retentionDays: 30,
+    },
     ...overrides,
   }
 }
 
 describe('ServeCoverUseCase', () => {
-  it('retorna filePath para capa cacheda', async () => {
+  it('retorna filePath para capa cacheda em disco', async () => {
     const source = makeSource()
     const repo = {
       load: vi.fn(async () => source),
@@ -61,20 +84,44 @@ describe('ServeCoverUseCase', () => {
 
     const result = await useCase.execute('src-test-001', 'cover_001')
 
-    const expectedPath = hoisted.join(hoisted.STORAGE_BASE, 'sources', 'src-test-001', 'covers', 'cover_001.jpg')
+    const expectedPath = hoisted.join(
+      hoisted.STORAGE_BASE,
+      'sources',
+      'src-test-001',
+      'covers',
+      'cover_001.jpg',
+    )
     expect(result.filePath).toBe(expectedPath)
     expect(result.contentType).toMatch(/image\/(jpeg|png|webp)/)
   })
 
-  it('lanca erro para source inexistente', async () => {
+  it('resolve alias "original" para o cover.id real no path', async () => {
+    const source = makeSource()
+    const repo = {
+      load: vi.fn(async () => source),
+    } as unknown as SourceCacheRepository
+    const useCase = new ServeCoverUseCase(repo)
+
+    const result = await useCase.execute('src-test-001', 'original')
+
+    const expectedPath = hoisted.join(
+      hoisted.STORAGE_BASE,
+      'sources',
+      'src-test-001',
+      'covers',
+      'cover_001.jpg',
+    )
+    expect(result.filePath).toBe(expectedPath)
+  })
+
+  it('lanca erro para source inexistente e sem cache em disco', async () => {
+    const { readdir } = await import('node:fs/promises')
     const repo = {
       load: vi.fn(async () => null),
     } as unknown as SourceCacheRepository
     const useCase = new ServeCoverUseCase(repo)
 
-    await expect(
-      useCase.execute('src-nonexistent', 'cover_001'),
-    ).rejects.toThrow('encontrada')
+    await expect(useCase.execute('src-nonexistent', 'cover_001')).rejects.toThrow('encontrada')
   })
 
   it('lanca erro para cover nao encontrado', async () => {
@@ -84,8 +131,25 @@ describe('ServeCoverUseCase', () => {
     } as unknown as SourceCacheRepository
     const useCase = new ServeCoverUseCase(repo)
 
-    await expect(
-      useCase.execute('src-test-001', 'cover_999'),
-    ).rejects.toThrow('encontrada')
+    await expect(useCase.execute('src-test-001', 'cover_999')).rejects.toThrow('encontrada')
+  })
+
+  it('lanca erro para URL de capa malformada', async () => {
+    const source = makeSource({
+      covers: [
+        {
+          id: 'cover_001',
+          type: 'original' as const,
+          label: 'Original',
+          imageUrl: 'not a valid url',
+        },
+      ],
+    })
+    const repo = {
+      load: vi.fn(async () => source),
+    } as unknown as SourceCacheRepository
+    const useCase = new ServeCoverUseCase(repo)
+
+    await expect(useCase.execute('src-test-001', 'cover_001')).rejects.toThrow('URL de capa inválida')
   })
 })
