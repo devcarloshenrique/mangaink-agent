@@ -1,9 +1,9 @@
 import { join, extname } from 'node:path'
-import { readdir, writeFile } from 'node:fs/promises'
+import { readdir, writeFile, readFile } from 'node:fs/promises'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import type { SourceCacheRepository } from '../../scraping/repositories/source-cache.repository'
-import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
 import { ConversionNotFoundError } from '../errors/conversion.errors'
 
 const MIME_MAP: Record<string, string> = {
@@ -18,7 +18,10 @@ const MIME_MAP: Record<string, string> = {
 export class ServeCoverUseCase {
   constructor(private readonly sources: SourceCacheRepository) {}
 
-  async execute(sourceId: string, coverId: string): Promise<{ filePath: string; contentType: string }> {
+  async execute(
+    sourceId: string,
+    coverId: string,
+  ): Promise<{ filePath: string; contentType: string }> {
     const source = await this.sources.load(sourceId)
 
     if (!source) {
@@ -29,20 +32,34 @@ export class ServeCoverUseCase {
 
     const isOriginalAlias = coverId === 'original'
     const cover = isOriginalAlias
-      ? source.covers.find((c) => c.type === 'original') ?? source.covers[0]
+      ? (source.covers.find((c) => c.type === 'original') ?? source.covers[0])
       : source.covers.find((c) => c.id === coverId)
+
     if (!cover) {
       throw new ConversionNotFoundError(`Capa "${coverId}" não encontrada`)
     }
 
-    const urlExt = extname(new URL(cover.imageUrl).pathname).toLowerCase() || '.jpg'
-    const cachedPath = join(env.STORAGE_PATH, 'sources', sourceId, 'covers', `${coverId}${urlExt}`)
+    // Usa o cover.id real para o nome do arquivo (não o alias 'original')
+    const actualCoverId = isOriginalAlias ? cover.id : coverId
+    let urlExt = '.jpg'
+    try {
+      urlExt = extname(new URL(cover.imageUrl).pathname).toLowerCase() || '.jpg'
+    } catch {
+      throw new ConversionNotFoundError(`URL de capa inválida para source "${sourceId}"`)
+    }
+    const cachedPath = join(
+      env.STORAGE_PATH,
+      'sources',
+      sourceId,
+      'covers',
+      `${actualCoverId}${urlExt}`,
+    )
 
     if (await pathExists(cachedPath)) {
       return { filePath: cachedPath, contentType: MIME_MAP[urlExt] ?? 'image/jpeg' }
     }
 
-    const provider = await this.resolveProvider(source)
+    const provider = await resolveProvider(sourceId)
     if (!provider) {
       throw new ConversionNotFoundError(`Provider não disponível para source "${sourceId}"`)
     }
@@ -69,13 +86,5 @@ export class ServeCoverUseCase {
     } catch {
       return null
     }
-  }
-
-  private async resolveProvider(source: any): Promise<IProviderStrategy | null> {
-    const firstChapter = source.chapters?.[0]
-    if (!firstChapter?.url) return null
-    const { ProviderResolver } = await import('../../scraping/providers/provider-resolver')
-    const resolver = new ProviderResolver()
-    return resolver.resolve(firstChapter.url)
   }
 }

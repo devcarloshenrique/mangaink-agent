@@ -10,7 +10,7 @@ export function serveCoverHandler(useCase: ServeCoverUseCase) {
     const { filePath, contentType } = await useCase.execute(sourceId, coverId)
 
     reply.header('Content-Type', contentType)
-    reply.header('Cache-Control', 'public, max-age=86400')
+    reply.header('Cache-Control', 'public, max-age=86400, immutable')
     return reply.send(createReadStream(filePath))
   }
 }
