@@ -1,5 +1,8 @@
 import { Worker } from 'bullmq'
+import { join, extname } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
+import { mkdirp } from '../../../shared/utils/filesystem'
 import { ProviderResolver } from '../providers/provider-resolver'
 import { RateLimitRegistry } from '../rate-limit/rate-limit-registry'
 import { getSourceRepository } from '../../../shared/database/repositories'
@@ -62,6 +65,25 @@ export const inspectSourceWorker = new Worker<SourceInspectJob>(
       }
 
       await repository.save(sourceId, metadataFile)
+
+      // ── Download da capa original para cache em disco ─────────────
+      const originalCover = result.covers.find((c) => c.type === 'original') ?? result.covers[0]
+      if (originalCover?.imageUrl) {
+        try {
+          const urlExt = extname(new URL(originalCover.imageUrl).pathname).toLowerCase() || '.jpg'
+          const coversDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
+          const coverPath = join(coversDir, `${originalCover.id}${urlExt}`)
+          await mkdirp(coversDir)
+          const { buffer } = await provider.downloadImage(originalCover.imageUrl)
+          await writeFile(coverPath, buffer)
+          console.log(`[Worker] Capa baixada: ${coverPath}`)
+        } catch (err) {
+          console.warn(
+            `[Worker] Falha ao baixar capa de ${sourceId}:`,
+            err instanceof Error ? err.message : 'unknown',
+          )
+        }
+      }
 
       console.log(`[Worker] Scraping concluído: ${sourceId}`)
 

@@ -6,8 +6,9 @@ export function createConversionHandler(useCase: CreateConversionUseCase) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const body = request.body as {
       sourceId: string
+      downloadOnly?: boolean
       cover: CoverRef
-      output: { deviceId: string; format: string }
+      output?: { deviceId: string; format: string }
       metadata?: { title?: string; author?: string }
       books: Array<{ title: string; chapters: string[]; cover?: CoverRef }>
       options?: Record<string, string | number | boolean>
@@ -18,8 +19,9 @@ export function createConversionHandler(useCase: CreateConversionUseCase) {
 
     const config: ConversionConfig = {
       sourceId: body.sourceId,
+      downloadOnly: body.downloadOnly,
       cover: body.cover,
-      output: body.output,
+      output: body.output ?? { deviceId: 'kindle_pw', format: 'epub' },
       metadata: body.metadata ?? {},
       books: body.books as Book[],
       options: body.options ?? {},

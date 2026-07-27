@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { env } from '../../../shared/config/env'
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { createConversionId, createJobId } from '../../../shared/utils/id-generator'
+import { CacheService } from '../../scraping/services/cache.service'
 import { devices } from '../config/devices'
 import { formats } from '../config/formats'
 import type {
@@ -18,6 +19,7 @@ import type {
 import type { ConversionRepository } from '../repositories/conversion.repository'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
 import type { ConversionQueueService } from '../services/conversion-queue.service'
+import type { DownloadOnlyQueueService } from '../services/download-only-queue.service'
 import type { ConversionEventsService } from '../services/conversion-events.service'
 import {
   ValidationError,
@@ -39,6 +41,11 @@ import {
  *  - persiste a Conversion e cada Job via repositório;
  *  - enfileira cada Job no BullMQ;
  *  - emite evento `conversion.created`.
+ *
+ * Download-only:
+ *  - pula validação de dispositivo/formato;
+ *  - não define flags internas do KCC;
+ *  - enfileira na fila `download-only` em vez de `conversion-job`.
  */
 export class CreateConversionUseCase {
   constructor(
@@ -46,6 +53,7 @@ export class CreateConversionUseCase {
     private readonly jobs: ConversionJobRepository,
     private readonly queue: ConversionQueueService,
     private readonly events: ConversionEventsService,
+    private readonly downloadOnlyQueue?: DownloadOnlyQueueService,
   ) {}
 
   async execute(request: ConversionConfig): Promise<{
@@ -55,11 +63,18 @@ export class CreateConversionUseCase {
     createdAt: string
   }> {
     // ── Valida dispositivo/formato ──────────────────────────────────
-    if (!devices.some((d) => d.id === request.output.deviceId)) {
-      throw new ValidationError(`Dispositivo inválido: ${request.output.deviceId}`)
-    }
-    if (!formats.some((f) => f.id === request.output.format)) {
-      throw new ValidationError(`Formato inválido: ${request.output.format}`)
+    const isDownloadOnly = request.downloadOnly === true
+    const effectiveOutput = isDownloadOnly
+      ? { deviceId: 'kindle_pw', format: 'epub' } // Dummy para download-only — não usado pelo worker
+      : request.output
+
+    if (!isDownloadOnly) {
+      if (!devices.some((d) => d.id === effectiveOutput.deviceId)) {
+        throw new ValidationError(`Dispositivo inválido: ${effectiveOutput.deviceId}`)
+      }
+      if (!formats.some((f) => f.id === effectiveOutput.format)) {
+        throw new ValidationError(`Formato inválido: ${effectiveOutput.format}`)
+      }
     }
 
     // ── Valida existência da source e capítulos ─────────────────────
@@ -117,7 +132,7 @@ export class CreateConversionUseCase {
         sourceId: request.sourceId,
         chapters: book.chapters,
         cover: effectiveCover,
-        output: request.output,
+        output: effectiveOutput,
         metadata: {
           title: book.title,
           author: request.metadata.author,
@@ -146,11 +161,12 @@ export class CreateConversionUseCase {
         sourceId: request.sourceId,
         chapters: book.chapters,
         cover: effectiveCover,
-        output: request.output,
+        output: effectiveOutput,
         metadata: { title: book.title, author: request.metadata.author },
         options: jobOptions,
         storagePath,
         errorHandlingStrategy: request.errorHandlingStrategy,
+        downloadOnly: isDownloadOnly,
       })
 
       jobSummaries.push({
@@ -186,16 +202,27 @@ export class CreateConversionUseCase {
     }
 
     // ── Enfileira cada Job no BullMQ ────────────────────────────────
+    const targetQueue =
+      isDownloadOnly && this.downloadOnlyQueue ? this.downloadOnlyQueue : this.queue
+
     for (const data of jobDataList) {
-      await this.queue.enqueue(data)
+      await targetQueue.enqueue(data)
     }
 
+    // ── Estende TTL da source para 30 dias ──────────────────────────
+    const cacheService = new CacheService(sourceRepo)
+    await cacheService.extendRetention(request.sourceId, 30).catch(() => {})
+
     // ── Evento de criação ───────────────────────────────────────────
-    await this.events.emit(conversionId, this.events.createEvent('conversion.created', {
+    await this.events.emit(
       conversionId,
-      totalJobs: jobStates.length,
-      jobIds: jobStates.map((j) => j.jobId),
-    }))
+      this.events.createEvent('conversion.created', {
+        conversionId,
+        totalJobs: jobStates.length,
+        jobIds: jobStates.map((j) => j.jobId),
+        downloadOnly: isDownloadOnly || undefined,
+      }),
+    )
 
     return {
       conversionId,

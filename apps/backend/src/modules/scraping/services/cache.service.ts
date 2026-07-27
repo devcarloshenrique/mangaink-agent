@@ -37,6 +37,19 @@ export class CacheService {
   }
 
   /**
+   * Estende o TTL e retenção de uma source quando o usuário baixa/converte.
+   */
+  async extendRetention(sourceId: string, days: number): Promise<void> {
+    const now = new Date().toISOString()
+    await this.repository.update(sourceId, {
+      updatedAt: now,
+      lastAccessAt: now,
+      cacheTtlHours: days * 24,
+      retentionDays: days,
+    })
+  }
+
+  /**
    * Cria um objeto MetadataCache para uma nova inspeção.
    */
   createFreshCache(): MetadataCache {

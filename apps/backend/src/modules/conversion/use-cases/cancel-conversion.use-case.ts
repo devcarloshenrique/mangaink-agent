@@ -2,6 +2,7 @@ import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import { getConversionJobRepository } from '../../../shared/database/repositories'
 import type { ConversionRepository } from '../repositories/conversion.repository'
 import type { ConversionQueueService } from '../services/conversion-queue.service'
+import type { DownloadOnlyQueueService } from '../services/download-only-queue.service'
 import type { ConversionEventsService } from '../services/conversion-events.service'
 import {
   ConversionNotFoundError,
@@ -18,9 +19,13 @@ export class CancelConversionUseCase {
     private readonly conversions: ConversionRepository,
     private readonly queue: ConversionQueueService,
     private readonly events: ConversionEventsService,
+    private readonly downloadOnlyQueue?: DownloadOnlyQueueService,
   ) {}
 
-  async execute(conversionId: string, userId: string): Promise<{ conversionId: string; status: 'cancelled' }> {
+  async execute(
+    conversionId: string,
+    userId: string,
+  ): Promise<{ conversionId: string; status: 'cancelled' }> {
     const found = await this.conversions.findById(conversionId)
     if (!found) {
       throw new ConversionNotFoundError(conversionId)
@@ -58,10 +63,19 @@ export class CancelConversionUseCase {
         } catch {
           // melhor-esforço
         }
-        await store.set(jobId, {
-          status: 'cancelled',
-          updatedAt: now,
-        }).catch(() => {})
+        if (this.downloadOnlyQueue) {
+          try {
+            await this.downloadOnlyQueue.remove(jobId)
+          } catch {
+            // melhor-esforço
+          }
+        }
+        await store
+          .set(jobId, {
+            status: 'cancelled',
+            updatedAt: now,
+          })
+          .catch(() => {})
         await jobRepo.update(jobId, {
           status: 'cancelled',
           currentStep: 'Cancelled',
@@ -70,20 +84,25 @@ export class CancelConversionUseCase {
 
       if (isActive) {
         // Redis-first: worker detecta em próximo capítulo e faz persist terminal
-        await store.set(jobId, {
-          status: 'cancelled',
-          updatedAt: now,
-        }).catch(() => {})
+        await store
+          .set(jobId, {
+            status: 'cancelled',
+            updatedAt: now,
+          })
+          .catch(() => {})
       }
     }
 
     // Recomputa o agregado a partir dos jobs já cancelados.
     await this.conversions.syncStatus(conversionId)
 
-    await this.events.emit(conversionId, this.events.createEvent('conversion.cancelled', {
+    await this.events.emit(
       conversionId,
-      status: 'cancelled',
-    }))
+      this.events.createEvent('conversion.cancelled', {
+        conversionId,
+        status: 'cancelled',
+      }),
+    )
 
     return { conversionId, status: 'cancelled' }
   }

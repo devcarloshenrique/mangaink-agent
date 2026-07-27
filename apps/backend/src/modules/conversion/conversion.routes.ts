@@ -12,6 +12,7 @@ import { GetConversionUseCase } from './use-cases/get-conversion.use-case'
 import { CancelConversionUseCase } from './use-cases/cancel-conversion.use-case'
 import { ListConversionsUseCase } from './use-cases/list-conversions.use-case'
 import { ConversionQueueService } from './services/conversion-queue.service'
+import { DownloadOnlyQueueService } from './services/download-only-queue.service'
 import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
 import { getConversionRepository, getConversionJobRepository, getSourceRepository } from '../../shared/database/repositories'
@@ -52,12 +53,13 @@ import {
 const conversions = getConversionRepository()
 const jobRepository = getConversionJobRepository()
 const queue = new ConversionQueueService()
+const downloadOnlyQueue = new DownloadOnlyQueueService()
 const pubsub = new ConversionPubSubService()
 const events = new ConversionEventsService(pubsub)
 
-const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepository, queue, events)
+const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepository, queue, events, downloadOnlyQueue)
 const getConversionUseCase = new GetConversionUseCase(conversions)
-const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events)
+const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events, downloadOnlyQueue)
 const listConversionsUseCase = new ListConversionsUseCase(conversions)
 const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
 const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
