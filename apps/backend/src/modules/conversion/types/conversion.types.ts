@@ -4,12 +4,7 @@
 
 /** Status agregado de uma Conversion (computado a partir dos Jobs). */
 export type ConversionStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'partial'
+  'queued' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'partial'
 
 /** Referência a uma capa. Herdável: Book sem capa própria usa a capa global. */
 export type CoverRef =
@@ -61,6 +56,8 @@ export interface ConversionConfig {
   errorHandlingStrategy?: ErrorHandlingStrategy
   /** ID do usuário dono da conversão. */
   userId: string
+  /** Quando true, apenas baixa imagens sem gerar arquivo final (KCC). */
+  downloadOnly?: boolean
 }
 
 /** Resumo do estado de um Job dentro de uma Conversion. */
@@ -318,4 +315,5 @@ export interface ConversionJobData {
   options: Record<string, string | number | boolean | undefined>
   storagePath: string
   errorHandlingStrategy?: ErrorHandlingStrategy
+  downloadOnly?: boolean
 }

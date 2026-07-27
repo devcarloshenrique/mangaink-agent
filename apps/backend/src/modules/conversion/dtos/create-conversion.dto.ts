@@ -18,27 +18,38 @@ const bookSchema = z.object({
  * O contrato representa a intenção do usuário — quais livros ele deseja —
  * NUNCA conceitos internos do KCC como batchSplit ou fileFusion.
  */
-export const createConversionBodySchema = z.object({
-  sourceId: z.string().min(1, 'sourceId é obrigatório'),
-  cover: coverSchema,
-  output: z.object({
-    deviceId: z.string().min(1, 'deviceId é obrigatório'),
-    format: z.string().min(1, 'format é obrigatório'),
-  }),
-  metadata: z.object({
-    title: z.string().optional(),
-    author: z.string().optional(),
-  }).optional().default({}),
-  books: z.array(bookSchema).min(1, 'Pelo menos um book é obrigatório'),
-  options: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-    .optional()
-    .default({}),
-  errorHandlingStrategy: z
-    .enum(['ignore', 'skip_chapter', 'abort'])
-    .optional()
-    .default('ignore'),
-})
+export const createConversionBodySchema = z
+  .object({
+    sourceId: z.string().min(1, 'sourceId é obrigatório'),
+    downloadOnly: z.boolean().optional().default(false),
+    cover: coverSchema,
+    output: z
+      .object({
+        deviceId: z.string().min(1, 'deviceId é obrigatório'),
+        format: z.string().min(1, 'format é obrigatório'),
+      })
+      .optional(),
+    metadata: z
+      .object({
+        title: z.string().optional(),
+        author: z.string().optional(),
+      })
+      .optional()
+      .default({}),
+    books: z.array(bookSchema).min(1, 'Pelo menos um book é obrigatório'),
+    options: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+      .optional()
+      .default({}),
+    errorHandlingStrategy: z.enum(['ignore', 'skip_chapter', 'abort']).optional().default('ignore'),
+  })
+  .refine(
+    (data) => {
+      if (data.downloadOnly) return true
+      return !!data.output
+    },
+    { message: 'output é obrigatório para conversões normais', path: ['output'] },
+  )
 
 export type CreateConversionBody = z.infer<typeof createConversionBodySchema>
 

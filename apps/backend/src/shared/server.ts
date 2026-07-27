@@ -22,6 +22,7 @@ import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
 import '../modules/scraping/workers/inspect-source.worker'
 import '../modules/conversion/workers/conversion-job.worker'
+import '../modules/conversion/workers/download-only.worker'
 import { startMobiPreviewWorker } from '../modules/conversion/workers/mobi-preview.worker'
 import { startChapterDownloadWorker } from '../modules/scraping/workers/chapter-download.worker'
 
