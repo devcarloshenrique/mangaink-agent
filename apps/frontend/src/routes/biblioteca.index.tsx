@@ -28,8 +28,9 @@ import {
 } from "@/hooks/useConversions";
 import { conversionsApi } from "@/lib/api";
 import { AddMangaDialog } from "@/components/biblioteca/AddMangaDialog";
+import { InlineUrlBar } from "@/components/biblioteca/InlineUrlBar";
 import type { ConversionSummary, CoverRef } from "@/types/conversion";
-
+import type { SourceInspectResponse } from "@/types/scraping";
 
 export const Route = createFileRoute("/biblioteca/")({
   component: BibliotecaPage,
@@ -80,8 +81,12 @@ function BibliotecaPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-
+  const [urlBarOpen, setUrlBarOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [scrapedData, setScrapedData] = useState<{
+    sourceId: string;
+    metadata: SourceInspectResponse;
+  } | null>(null);
 
   const { data: allData, isLoading } = useConversionsList({ limit: 100 });
   const { data: activeData } = useActiveConversions();
@@ -129,11 +134,11 @@ function BibliotecaPage() {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="font-display text-4xl uppercase leading-none">Biblioteca</h1>
-            <p className="text-sm font-medium opacity-80 mt-1">Histórico de conversões</p>
+            <p className="text-sm font-medium opacity-80 mt-1">Histórico de obras</p>
           </div>
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => setUrlBarOpen((prev) => !prev)}
             className="inline-flex items-center gap-1.5 bg-comic-blue text-accent-foreground border-[3px] border-ink shadow-comic font-display text-sm px-3 py-1.5 rounded-md hover:-translate-y-0.5 transition-transform"
           >
             <BookPlus className="h-4 w-4" /> Adicionar obra
@@ -164,6 +169,16 @@ function BibliotecaPage() {
             </button>
           </div>
         </div>
+
+        <InlineUrlBar
+          open={urlBarOpen}
+          onClose={() => setUrlBarOpen(false)}
+          onReady={(sourceId, metadata) => {
+            setScrapedData({ sourceId, metadata });
+            setUrlBarOpen(false);
+            setDialogOpen(true);
+          }}
+        />
 
         <div className="space-y-3 mb-6">
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
@@ -326,8 +341,17 @@ function BibliotecaPage() {
           </div>
         )}
       </div>
-      <AddMangaDialog open={addOpen} onOpenChange={setAddOpen} />
+      {scrapedData && (
+        <AddMangaDialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setScrapedData(null);
+          }}
+          sourceId={scrapedData.sourceId}
+          metadata={scrapedData.metadata}
+        />
+      )}
     </div>
-
   );
 }

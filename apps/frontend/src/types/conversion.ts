@@ -132,12 +132,13 @@ export interface ConversionListResult {
 export interface ConversionConfig {
   sourceId: string;
   cover: CoverRef;
-  output: { deviceId: string; format: string };
+  output?: { deviceId: string; format: string };
   metadata: { title?: string; author?: string };
   books: Book[];
   options: Record<string, string | number | boolean | undefined>;
   errorHandlingStrategy?: "ignore" | "skip_chapter" | "abort";
   userId: string;
+  downloadOnly?: boolean;
 }
 
 /** Resposta do POST /api/conversions */
@@ -151,11 +152,12 @@ export interface CreateConversionResponse {
 /** Body do POST /api/conversions */
 export interface CreateConversionBody {
   sourceId: string;
+  downloadOnly?: boolean;
   cover: CoverRef;
-  output: { deviceId: string; format: string };
-  metadata: { title: string; author: string };
+  output?: { deviceId: string; format: string };
+  metadata?: { title?: string; author?: string };
   books: Book[];
-  options: Record<string, string | number | boolean>;
+  options?: Record<string, string | number | boolean>;
   errorHandlingStrategy?: "ignore" | "skip_chapter" | "abort";
 }
 

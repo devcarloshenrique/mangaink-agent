@@ -197,7 +197,11 @@ const INITIAL_PROGRESS: ProgressState = {
 };
 
 // ── Deriva stages a partir do ProgressState + apiJobs ─────────────────────────
-function deriveStages(progress: ProgressState, apiJobs: { status: string }[]): StageInfo[] {
+function deriveStages(
+  progress: ProgressState,
+  apiJobs: { status: string }[],
+  downloadOnly: boolean,
+): StageInfo[] {
   const allDone =
     apiJobs.length > 0 &&
     apiJobs.every((j) => ["completed", "failed", "cancelled"].includes(j.status));
@@ -212,10 +216,20 @@ function deriveStages(progress: ProgressState, apiJobs: { status: string }[]): S
       ? Math.round((progress.processedChapters / progress.totalChapters) * 100)
       : 0;
 
+  const downloadStage: StageInfo = {
+    id: "downloading",
+    label: downloadOnly ? "Baixando capítulos" : STAGE_LABELS.downloading,
+    status: downloadDone ? "completed" : downloadActive ? "active" : "pending",
+    progress: downloadProgress,
+  };
+
+  if (downloadOnly) {
+    return [downloadStage];
+  }
+
   // ── Conversion ───────────────────────────────────────────────────────
   const conversionDone = allDone;
   const conversionActive = progress.conversionActive && !conversionDone;
-  // Agregado: completedJobs * 100/totalJobs + currentJobProgress/totalJobs
   const conversionProgress =
     progress.totalJobs > 0
       ? Math.min(
@@ -230,14 +244,9 @@ function deriveStages(progress: ProgressState, apiJobs: { status: string }[]): S
         : 0;
 
   return [
+    downloadStage,
     {
-      id: "downloading" as StageId,
-      label: STAGE_LABELS.downloading,
-      status: downloadDone ? "completed" : downloadActive ? "active" : "pending",
-      progress: downloadProgress,
-    },
-    {
-      id: "converting" as StageId,
+      id: "converting",
       label: STAGE_LABELS.converting,
       status: conversionDone ? "completed" : conversionActive ? "active" : "pending",
       progress: conversionProgress,
@@ -257,6 +266,7 @@ interface UseConversionProgress {
   error: string | null;
   cancel: () => Promise<void>;
   isCancelled: boolean;
+  downloadOnly: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -576,14 +586,25 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
 
               case "job.finished":
                 dispatch({ type: "JOB_COMPLETED" });
-                dispatch({
-                  type: "ADD_LOG",
-                  entry: {
-                    timestamp: now(),
-                    type: "info",
-                    message: `Volume concluído — ${String(data.outputFile ?? "")}${((data.outputSize as number) ?? 0) > 0 ? ` (${((data.outputSize as number) / 1024 / 1024).toFixed(1)} MB)` : ""}`,
-                  },
-                });
+                if (data.downloadOnly) {
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "info",
+                      message: `Download concluído — ${data.successfulChapters ?? "?"} capítulos, ${data.totalImages ?? "?"} imagens`,
+                    },
+                  });
+                } else {
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "info",
+                      message: `Volume concluído — ${String(data.outputFile ?? "")}${((data.outputSize as number) ?? 0) > 0 ? ` (${((data.outputSize as number) / 1024 / 1024).toFixed(1)} MB)` : ""}`,
+                    },
+                  });
+                }
                 break;
             }
 
@@ -698,7 +719,8 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   }, [conversionId, closeSSE]);
 
   // ── Derived values ───────────────────────────────────────────────────────
-  const stages = deriveStages(progress, apiState?.jobs ?? []);
+  const downloadOnly = (apiState?.config as Record<string, unknown>)?.downloadOnly === true;
+  const stages = deriveStages(progress, apiState?.jobs ?? [], downloadOnly);
 
   // Aggregated conversion progress (same formula as deriveStages)
   const aggregatedConversion =
@@ -717,6 +739,15 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   const overallProgress = useMemo(() => {
     if (apiState && isTerminal(apiState.status)) return 100;
 
+    if (downloadOnly) {
+      const raw =
+        progress.totalChapters > 0
+          ? Math.round((progress.processedChapters / progress.totalChapters) * 100)
+          : 0;
+      overallProgressRef.current = Math.max(overallProgressRef.current, raw);
+      return overallProgressRef.current;
+    }
+
     const raw =
       progress.totalChapters > 0
         ? Math.round(
@@ -725,7 +756,13 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
         : 0;
     overallProgressRef.current = Math.max(overallProgressRef.current, raw);
     return overallProgressRef.current;
-  }, [apiState?.status, progress.processedChapters, progress.totalChapters, aggregatedConversion]);
+  }, [
+    apiState?.status,
+    progress.processedChapters,
+    progress.totalChapters,
+    aggregatedConversion,
+    downloadOnly,
+  ]);
 
   return {
     state: apiState,
@@ -738,5 +775,6 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
     error,
     cancel,
     isCancelled,
+    downloadOnly,
   };
 }

@@ -115,6 +115,7 @@ function ConverterPage() {
     isLoading,
     error,
     cancel,
+    downloadOnly,
   } = useConversionProgress(conversionId);
 
   // ── Loading ─────────────────────────────────────────────────────────────
@@ -213,8 +214,9 @@ function ConverterPage() {
               )}
             </div>
             <p className="text-sm font-medium opacity-70 mt-1">
-              {format && `${format} • `}
-              {state.jobs.length === 1 ? "Arquivo único" : `${state.jobs.length} volumes`}
+              {downloadOnly
+                ? `${(state.config as Record<string, unknown> & { books?: { chapters?: string[] }[] })?.books?.[0]?.chapters?.length ?? "?"} capítulos`
+                : `${format ? `${format} • ` : ""}${state.jobs.length === 1 ? "Arquivo único" : `${state.jobs.length} volumes`}`}
             </p>
           </div>
         </div>
@@ -267,7 +269,9 @@ function ConverterPage() {
               <SpeechBubble variant="yellow" tail="left" className="max-w-lg">
                 {activeStage.id === "downloading" && currentChapter
                   ? `Baixando ${formatChapterId(currentChapter.chapterId)} — ${currentChapter.currentImage}/${currentChapter.totalImages} imagens`
-                  : STAGE_MESSAGES[activeStage.id]}
+                  : downloadOnly
+                    ? "Baixando capítulos…"
+                    : STAGE_MESSAGES[activeStage.id]}
               </SpeechBubble>
             )}
           </div>
@@ -285,7 +289,7 @@ function ConverterPage() {
                 </p>
                 <p className="text-xs font-medium opacity-80 mt-0.5">
                   Substituída{corruptPages.length > 1 ? "s" : ""} por placeholder para evitar falha
-                  no KCC.
+                  {downloadOnly ? "." : " no KCC."}
                 </p>
                 <button
                   className="text-xs font-display underline mt-1.5 hover:opacity-70"
@@ -352,7 +356,7 @@ function ConverterPage() {
                 onClick={() => navigate({ to: "/biblioteca" })}
                 className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
               >
-                <Zap className="h-4 w-4 mr-1.5" /> Ver na biblioteca
+                <Zap className="h-4 w-4 mr-1.5" /> {downloadOnly ? "Ver na estante" : "Ver na biblioteca"}
               </Button>
             )}
 

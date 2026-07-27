@@ -9,55 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AgendamentosRouteImport } from './routes/agendamentos'
-import { Route as BibliotecaRouteImport } from './routes/biblioteca'
-import { Route as CadastroRouteImport } from './routes/cadastro'
-import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
-import { Route as FontesRouteImport } from './routes/fontes'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as WizardRouteImport } from './routes/wizard'
+import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as FontesRouteImport } from './routes/fontes'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as BibliotecaRouteImport } from './routes/biblioteca'
+import { Route as AgendamentosRouteImport } from './routes/agendamentos'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as BibliotecaIndexRouteImport } from './routes/biblioteca.index'
-import { Route as BibliotecaSourceIdRouteImport } from './routes/biblioteca.$sourceId'
 import { Route as BibliotecaProgressoRouteImport } from './routes/biblioteca.progresso'
-import { Route as BibliotecaConverterJobIdRouteImport } from './routes/biblioteca.converter.$jobId'
-import { Route as BibliotecaReaderChapterSourceIdRouteImport } from './routes/biblioteca.reader-chapter.$sourceId'
+import { Route as BibliotecaSourceIdRouteImport } from './routes/biblioteca.$sourceId'
 import { Route as BibliotecaReaderConversionIdRouteImport } from './routes/biblioteca.reader.$conversionId'
+import { Route as BibliotecaReaderChapterSourceIdRouteImport } from './routes/biblioteca.reader-chapter.$sourceId'
+import { Route as BibliotecaConverterJobIdRouteImport } from './routes/biblioteca.converter.$jobId'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AgendamentosRoute = AgendamentosRouteImport.update({
-  id: '/agendamentos',
-  path: '/agendamentos',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BibliotecaRoute = BibliotecaRouteImport.update({
-  id: '/biblioteca',
-  path: '/biblioteca',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CadastroRoute = CadastroRouteImport.update({
-  id: '/cadastro',
-  path: '/cadastro',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
-  id: '/configuracoes',
-  path: '/configuracoes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FontesRoute = FontesRouteImport.update({
-  id: '/fontes',
-  path: '/fontes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const WizardRoute = WizardRouteImport.update({
+  id: '/wizard',
+  path: '/wizard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -65,9 +35,39 @@ const PerfilRoute = PerfilRouteImport.update({
   path: '/perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WizardRoute = WizardRouteImport.update({
-  id: '/wizard',
-  path: '/wizard',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FontesRoute = FontesRouteImport.update({
+  id: '/fontes',
+  path: '/fontes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CadastroRoute = CadastroRouteImport.update({
+  id: '/cadastro',
+  path: '/cadastro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BibliotecaRoute = BibliotecaRouteImport.update({
+  id: '/biblioteca',
+  path: '/biblioteca',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendamentosRoute = AgendamentosRouteImport.update({
+  id: '/agendamentos',
+  path: '/agendamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BibliotecaIndexRoute = BibliotecaIndexRouteImport.update({
@@ -75,20 +75,20 @@ const BibliotecaIndexRoute = BibliotecaIndexRouteImport.update({
   path: '/',
   getParentRoute: () => BibliotecaRoute,
 } as any)
-const BibliotecaSourceIdRoute = BibliotecaSourceIdRouteImport.update({
-  id: '/$sourceId',
-  path: '/$sourceId',
-  getParentRoute: () => BibliotecaRoute,
-} as any)
 const BibliotecaProgressoRoute = BibliotecaProgressoRouteImport.update({
   id: '/progresso',
   path: '/progresso',
   getParentRoute: () => BibliotecaRoute,
 } as any)
-const BibliotecaConverterJobIdRoute =
-  BibliotecaConverterJobIdRouteImport.update({
-    id: '/converter/$jobId',
-    path: '/converter/$jobId',
+const BibliotecaSourceIdRoute = BibliotecaSourceIdRouteImport.update({
+  id: '/$sourceId',
+  path: '/$sourceId',
+  getParentRoute: () => BibliotecaRoute,
+} as any)
+const BibliotecaReaderConversionIdRoute =
+  BibliotecaReaderConversionIdRouteImport.update({
+    id: '/reader/$conversionId',
+    path: '/reader/$conversionId',
     getParentRoute: () => BibliotecaRoute,
   } as any)
 const BibliotecaReaderChapterSourceIdRoute =
@@ -97,10 +97,10 @@ const BibliotecaReaderChapterSourceIdRoute =
     path: '/reader-chapter/$sourceId',
     getParentRoute: () => BibliotecaRoute,
   } as any)
-const BibliotecaReaderConversionIdRoute =
-  BibliotecaReaderConversionIdRouteImport.update({
-    id: '/reader/$conversionId',
-    path: '/reader/$conversionId',
+const BibliotecaConverterJobIdRoute =
+  BibliotecaConverterJobIdRouteImport.update({
+    id: '/converter/$jobId',
+    path: '/converter/$jobId',
     getParentRoute: () => BibliotecaRoute,
   } as any)
 
@@ -222,53 +222,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/agendamentos': {
-      id: '/agendamentos'
-      path: '/agendamentos'
-      fullPath: '/agendamentos'
-      preLoaderRoute: typeof AgendamentosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/biblioteca': {
-      id: '/biblioteca'
-      path: '/biblioteca'
-      fullPath: '/biblioteca'
-      preLoaderRoute: typeof BibliotecaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cadastro': {
-      id: '/cadastro'
-      path: '/cadastro'
-      fullPath: '/cadastro'
-      preLoaderRoute: typeof CadastroRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/configuracoes': {
-      id: '/configuracoes'
-      path: '/configuracoes'
-      fullPath: '/configuracoes'
-      preLoaderRoute: typeof ConfiguracoesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/fontes': {
-      id: '/fontes'
-      path: '/fontes'
-      fullPath: '/fontes'
-      preLoaderRoute: typeof FontesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/wizard': {
+      id: '/wizard'
+      path: '/wizard'
+      fullPath: '/wizard'
+      preLoaderRoute: typeof WizardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -278,11 +236,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/wizard': {
-      id: '/wizard'
-      path: '/wizard'
-      fullPath: '/wizard'
-      preLoaderRoute: typeof WizardRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fontes': {
+      id: '/fontes'
+      path: '/fontes'
+      fullPath: '/fontes'
+      preLoaderRoute: typeof FontesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cadastro': {
+      id: '/cadastro'
+      path: '/cadastro'
+      fullPath: '/cadastro'
+      preLoaderRoute: typeof CadastroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/biblioteca': {
+      id: '/biblioteca'
+      path: '/biblioteca'
+      fullPath: '/biblioteca'
+      preLoaderRoute: typeof BibliotecaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agendamentos': {
+      id: '/agendamentos'
+      path: '/agendamentos'
+      fullPath: '/agendamentos'
+      preLoaderRoute: typeof AgendamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/biblioteca/': {
@@ -292,13 +292,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaIndexRouteImport
       parentRoute: typeof BibliotecaRoute
     }
-    '/biblioteca/$sourceId': {
-      id: '/biblioteca/$sourceId'
-      path: '/$sourceId'
-      fullPath: '/biblioteca/$sourceId'
-      preLoaderRoute: typeof BibliotecaSourceIdRouteImport
-      parentRoute: typeof BibliotecaRoute
-    }
     '/biblioteca/progresso': {
       id: '/biblioteca/progresso'
       path: '/progresso'
@@ -306,11 +299,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaProgressoRouteImport
       parentRoute: typeof BibliotecaRoute
     }
-    '/biblioteca/converter/$jobId': {
-      id: '/biblioteca/converter/$jobId'
-      path: '/converter/$jobId'
-      fullPath: '/biblioteca/converter/$jobId'
-      preLoaderRoute: typeof BibliotecaConverterJobIdRouteImport
+    '/biblioteca/$sourceId': {
+      id: '/biblioteca/$sourceId'
+      path: '/$sourceId'
+      fullPath: '/biblioteca/$sourceId'
+      preLoaderRoute: typeof BibliotecaSourceIdRouteImport
+      parentRoute: typeof BibliotecaRoute
+    }
+    '/biblioteca/reader/$conversionId': {
+      id: '/biblioteca/reader/$conversionId'
+      path: '/reader/$conversionId'
+      fullPath: '/biblioteca/reader/$conversionId'
+      preLoaderRoute: typeof BibliotecaReaderConversionIdRouteImport
       parentRoute: typeof BibliotecaRoute
     }
     '/biblioteca/reader-chapter/$sourceId': {
@@ -320,11 +320,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaReaderChapterSourceIdRouteImport
       parentRoute: typeof BibliotecaRoute
     }
-    '/biblioteca/reader/$conversionId': {
-      id: '/biblioteca/reader/$conversionId'
-      path: '/reader/$conversionId'
-      fullPath: '/biblioteca/reader/$conversionId'
-      preLoaderRoute: typeof BibliotecaReaderConversionIdRouteImport
+    '/biblioteca/converter/$jobId': {
+      id: '/biblioteca/converter/$jobId'
+      path: '/converter/$jobId'
+      fullPath: '/biblioteca/converter/$jobId'
+      preLoaderRoute: typeof BibliotecaConverterJobIdRouteImport
       parentRoute: typeof BibliotecaRoute
     }
   }
