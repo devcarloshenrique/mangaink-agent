@@ -141,6 +141,7 @@ describe('PrismaSourceRepository', () => {
           url: `https://example.com/manga/test/capitulo-${num}/`,
           pages: 20,
           volume: 1,
+          isDownloaded: false,
         }
       })
       base.statistics = { chapters: 35, covers: 1 }
@@ -153,6 +154,88 @@ describe('PrismaSourceRepository', () => {
       expect(loaded!.statistics.chapters).toBe(35)
       expect(loaded!.chapters[0].number).toBe('1')
       expect(loaded!.chapters[34].number).toBe('35')
+    })
+  })
+
+  describe('cross-source isolation', () => {
+    it('nao deve misturar chapters entre sources com ids iguais', async () => {
+      const payloadA = makeSourcePayload('src-cross-a')
+      payloadA.chapters = [
+        { id: 'chap_0001', number: '1', title: 'A - Cap 1', url: 'https://a.com/manga/1', pages: 10, volume: null, isDownloaded: false },
+        { id: 'chap_0002', number: '2', title: 'A - Cap 2', url: 'https://a.com/manga/2', pages: 12, volume: null, isDownloaded: false },
+      ]
+      payloadA.covers = [
+        { id: 'cover_001', type: 'original', label: 'A Cover', imageUrl: 'https://a.com/cover.jpg' },
+      ]
+      payloadA.statistics = { chapters: 2, covers: 1 }
+
+      const payloadB = makeSourcePayload('src-cross-b')
+      payloadB.chapters = [
+        { id: 'chap_0001', number: '1', title: 'B - Cap 1', url: 'https://b.com/manga/1', pages: 20, volume: null, isDownloaded: false },
+        { id: 'chap_0002', number: '2', title: 'B - Cap 2', url: 'https://b.com/manga/2', pages: 22, volume: null, isDownloaded: false },
+      ]
+      payloadB.covers = [
+        { id: 'cover_001', type: 'original', label: 'B Cover', imageUrl: 'https://b.com/cover.jpg' },
+      ]
+      payloadB.statistics = { chapters: 2, covers: 1 }
+
+      await repository.save('src-cross-a', payloadA)
+      await repository.save('src-cross-b', payloadB)
+
+      const loadedA = await repository.load('src-cross-a')
+      const loadedB = await repository.load('src-cross-b')
+
+      expect(loadedA).not.toBeNull()
+      expect(loadedB).not.toBeNull()
+      expect(loadedA!.chapters).toHaveLength(2)
+      expect(loadedB!.chapters).toHaveLength(2)
+
+      expect(loadedA!.chapters[0].title).toBe('A - Cap 1')
+      expect(loadedA!.chapters[1].title).toBe('A - Cap 2')
+      expect(loadedB!.chapters[0].title).toBe('B - Cap 1')
+      expect(loadedB!.chapters[1].title).toBe('B - Cap 2')
+
+      expect(loadedA!.covers[0].imageUrl).toBe('https://a.com/cover.jpg')
+      expect(loadedB!.covers[0].imageUrl).toBe('https://b.com/cover.jpg')
+    })
+
+    it('nao deve perder chapters ao re-salvar uma source com ids iguais a outra', async () => {
+      const payloadA = makeSourcePayload('src-cross-resave-a')
+      payloadA.chapters = [
+        { id: 'chap_0001', number: '1', title: 'A - Cap 1', url: 'https://a.com/1', pages: 10, volume: null, isDownloaded: false },
+      ]
+      payloadA.statistics = { chapters: 1, covers: 2 }
+
+      const payloadB = makeSourcePayload('src-cross-resave-b')
+      payloadB.chapters = [
+        { id: 'chap_0001', number: '1', title: 'B - Cap 1', url: 'https://b.com/1', pages: 20, volume: null, isDownloaded: false },
+        { id: 'chap_0002', number: '2', title: 'B - Cap 2', url: 'https://b.com/2', pages: 20, volume: null, isDownloaded: false },
+      ]
+      payloadB.statistics = { chapters: 2, covers: 1 }
+
+      // Save both
+      await repository.save('src-cross-resave-a', payloadA)
+      await repository.save('src-cross-resave-b', payloadB)
+
+      // Re-save A — should not affect B's chapters
+      payloadA.chapters = [
+        { id: 'chap_0001', number: '1', title: 'A - Cap 1 (updated)', url: 'https://a.com/1-v2', pages: 15, volume: null, isDownloaded: false },
+        { id: 'chap_0003', number: '3', title: 'A - Cap 3', url: 'https://a.com/3', pages: 10, volume: null, isDownloaded: false },
+      ]
+      payloadA.statistics = { chapters: 2, covers: 2 }
+      await repository.save('src-cross-resave-a', payloadA)
+
+      const loadedA = await repository.load('src-cross-resave-a')
+      const loadedB = await repository.load('src-cross-resave-b')
+
+      expect(loadedA!.chapters).toHaveLength(2)
+      expect(loadedA!.chapters[0].title).toBe('A - Cap 1 (updated)')
+      expect(loadedA!.chapters[1].title).toBe('A - Cap 3')
+
+      // B must remain untouched
+      expect(loadedB!.chapters).toHaveLength(2)
+      expect(loadedB!.chapters[0].title).toBe('B - Cap 1')
+      expect(loadedB!.chapters[1].title).toBe('B - Cap 2')
     })
   })
 

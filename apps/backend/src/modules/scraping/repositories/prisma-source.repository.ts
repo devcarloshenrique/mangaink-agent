@@ -134,7 +134,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
 
         for (const ch of data.chapters) {
           await tx.chapter.upsert({
-            where: { chapterId: ch.id },
+            where: { sourceId_chapterId: { sourceId, chapterId: ch.id } },
             create: {
               chapterId: ch.id,
               sourceId,
@@ -150,13 +150,14 @@ export class PrismaSourceRepository implements SourceCacheRepository {
               url: ch.url,
               pages: ch.pages,
               volume: ch.volume,
+              sourceId,
             },
           })
         }
 
         for (const cv of data.covers) {
           await tx.cover.upsert({
-            where: { coverId: cv.id },
+            where: { sourceId_coverId: { sourceId, coverId: cv.id } },
             create: {
               coverId: cv.id,
               sourceId,
@@ -168,6 +169,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
               type: cv.type,
               label: cv.label,
               imageUrl: cv.imageUrl,
+              sourceId,
             },
           })
         }

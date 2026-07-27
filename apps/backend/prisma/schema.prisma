@@ -53,7 +53,7 @@ model Source {
 
 model Chapter {
   id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  chapterId             String   @unique @map("chapter_id") @db.VarChar(100)
+  chapterId             String   @map("chapter_id") @db.VarChar(100)
   sourceId              String   @map("source_id") @db.VarChar(255)
   number                String   @db.VarChar(20)
   title                 String   @db.VarChar(500)
@@ -65,13 +65,14 @@ model Chapter {
 
   source                Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
 
+  @@unique([sourceId, chapterId])
   @@index([sourceId, number])
   @@map("chapters")
 }
 
 model Cover {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  coverId   String   @unique @map("cover_id") @db.VarChar(100)
+  coverId   String   @map("cover_id") @db.VarChar(100)
   sourceId  String   @map("source_id") @db.VarChar(255)
   type      String   @db.VarChar(20)
   label     String   @db.VarChar(255)
@@ -80,6 +81,7 @@ model Cover {
 
   source    Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
 
+  @@unique([sourceId, coverId])
   @@index([sourceId])
   @@map("covers")
 }
