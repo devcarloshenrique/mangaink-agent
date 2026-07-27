@@ -14,6 +14,7 @@ import {
   List,
   Wand2,
   Plus,
+  BookPlus,
   Loader2,
   Clock,
   RefreshCw,
@@ -26,7 +27,9 @@ import {
   type SeriesGroup,
 } from "@/hooks/useConversions";
 import { conversionsApi } from "@/lib/api";
+import { AddMangaDialog } from "@/components/biblioteca/AddMangaDialog";
 import type { ConversionSummary, CoverRef } from "@/types/conversion";
+
 
 export const Route = createFileRoute("/biblioteca/")({
   component: BibliotecaPage,
@@ -77,6 +80,8 @@ function BibliotecaPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+
 
   const { data: allData, isLoading } = useConversionsList({ limit: 100 });
   const { data: activeData } = useActiveConversions();
@@ -126,12 +131,20 @@ function BibliotecaPage() {
             <h1 className="font-display text-4xl uppercase leading-none">Biblioteca</h1>
             <p className="text-sm font-medium opacity-80 mt-1">Histórico de conversões</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="inline-flex items-center gap-1.5 bg-comic-blue text-accent-foreground border-[3px] border-ink shadow-comic font-display text-sm px-3 py-1.5 rounded-md hover:-translate-y-0.5 transition-transform"
+          >
+            <BookPlus className="h-4 w-4" /> Adicionar obra
+          </button>
           <Link
             to="/wizard"
             className="inline-flex items-center gap-1.5 bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-sm px-3 py-1.5 rounded-md hover:-translate-y-0.5 transition-transform"
           >
             <Plus className="h-4 w-4" /> Converter novo
           </Link>
+
           <div className="flex border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm">
             <button
               type="button"
@@ -313,6 +326,8 @@ function BibliotecaPage() {
           </div>
         )}
       </div>
+      <AddMangaDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
+
   );
 }

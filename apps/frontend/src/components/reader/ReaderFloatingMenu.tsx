@@ -1,4 +1,5 @@
 import { ArrowUp, ArrowDown, List, Plus, Minus, Settings } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Props {
   showUI: boolean;
@@ -24,26 +25,27 @@ export function ReaderFloatingMenu({
   onZoomOut,
 }: Props) {
   const btnBase =
-    "p-2 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/5 transition-all";
+    "p-2 rounded-md text-reader-muted hover:text-reader-foreground hover:bg-reader-surface transition-colors";
 
   return (
     <div
       data-testid="floating-menu"
-      className={`fixed right-4 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-300 ${
-        showUI ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
+      className={cn(
+        "fixed right-4 top-1/2 -translate-y-1/2 z-30 transition-opacity duration-200",
+        showUI ? "opacity-100" : "opacity-0 pointer-events-none",
+      )}
     >
-      <div className="bg-black/60 backdrop-blur-sm rounded-xl px-2 py-2 flex flex-col items-center gap-1">
+      <div className="rounded-lg border border-reader-border bg-reader-bg/80 backdrop-blur-sm p-1 flex flex-col items-center gap-0.5">
         <button
           disabled={!hasPrevChapter}
           onClick={(e) => {
             e.stopPropagation();
             onPrevChapter();
           }}
-          className={`${btnBase} ${!hasPrevChapter ? "opacity-20 cursor-default" : ""}`}
+          className={cn(btnBase, !hasPrevChapter && "opacity-25 cursor-default")}
           title="Capítulo anterior"
         >
-          <ArrowUp className="w-5 h-5" />
+          <ArrowUp className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         <button
@@ -54,7 +56,7 @@ export function ReaderFloatingMenu({
           className={btnBase}
           title="Índice de capítulos"
         >
-          <List className="w-5 h-5" />
+          <List className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         <button
@@ -65,7 +67,7 @@ export function ReaderFloatingMenu({
           className={btnBase}
           title="Zoom +"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         <button
@@ -76,7 +78,7 @@ export function ReaderFloatingMenu({
           className={btnBase}
           title="Zoom -"
         >
-          <Minus className="w-5 h-5" />
+          <Minus className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         <button
@@ -87,7 +89,7 @@ export function ReaderFloatingMenu({
           className={btnBase}
           title="Configurações"
         >
-          <Settings className="w-5 h-5" />
+          <Settings className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         <button
@@ -96,10 +98,10 @@ export function ReaderFloatingMenu({
             e.stopPropagation();
             onNextChapter();
           }}
-          className={`${btnBase} ${!hasNextChapter ? "opacity-20 cursor-default" : ""}`}
+          className={cn(btnBase, !hasNextChapter && "opacity-25 cursor-default")}
           title="Próximo capítulo"
         >
-          <ArrowDown className="w-5 h-5" />
+          <ArrowDown className="w-4 h-4" strokeWidth={1.75} />
         </button>
       </div>
     </div>

@@ -84,7 +84,7 @@ function ChapterReaderPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
+    <div className="fixed inset-0 z-50 bg-reader-bg">
       <Toaster richColors position="top-right" />
       <ChapterReader
         sourceId={sourceId}

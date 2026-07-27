@@ -44,6 +44,15 @@
   --color-comic-cream: var(--comic-cream);
   --color-comic-ink: var(--comic-ink);
 
+  /* Leitor: paleta minimalista derivada do design system */
+  --color-reader-bg: var(--reader-bg);
+  --color-reader-surface: var(--reader-surface);
+  --color-reader-foreground: var(--reader-foreground);
+  --color-reader-muted: var(--reader-muted);
+  --color-reader-border: var(--reader-border);
+  --color-reader-accent: var(--reader-accent);
+
+
   --font-display: "Bangers", "Impact", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
 
@@ -64,6 +73,16 @@
   --comic-blue: oklch(0.5 0.22 260);
   --comic-cream: oklch(0.97 0.025 90);
   --comic-ink: oklch(0.15 0.02 260);
+
+  /* Leitor imersivo: mesmos matizes do design system, sem peso visual */
+  --reader-bg: oklch(0.12 0.015 260);
+  --reader-surface: oklch(0.18 0.018 260);
+  --reader-foreground: var(--comic-cream);
+  --reader-muted: oklch(0.62 0.012 260);
+  --reader-border: oklch(0.28 0.015 260);
+  --reader-accent: var(--comic-yellow);
+
+
 
   --background: var(--comic-cream);
   --foreground: var(--comic-ink);
@@ -136,11 +155,28 @@
   * {
     border-color: var(--color-border);
   }
+  /* Evita o "pulo" de layout quando Radix trava o scroll do body
+     (selects, dropdowns, dialogs) — a calha da scrollbar fica reservada. */
+  html {
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+  /* Radix compensa a scrollbar com padding inline; como a calha já é
+     estável, anulamos para o conteúdo não deslocar ao abrir overlays. */
+  body[data-scroll-locked] {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    /* Evita que o body vire container recortado ao abrir selects/dialogs,
+       o que fazia a top bar sticky sumir. */
+    overflow: visible !important;
+  }
+
+
   h1,
   h2,
   h3,

@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, BookOpen, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useChapterPages } from "@/hooks/useChapterPages";
+
 import { useChapterDownload } from "@/hooks/useChapterDownload";
 import { ReaderFloatingMenu } from "@/components/reader/ReaderFloatingMenu";
 import { ReaderSettingsDrawer } from "@/components/reader/ReaderSettingsDrawer";
@@ -67,7 +69,7 @@ export function ChapterReader({
   const [saturation, setSaturation] = useState(100);
   
   const [containToWidth, setContainToWidth] = useState(true);
-  const [containToHeight, setContainToHeight] = useState(false);
+  const [containToHeight, setContainToHeight] = useState(true);
   const [stretchSmallPages, setStretchSmallPages] = useState(false);
   const [limitMaxWidth, setLimitMaxWidth] = useState(false);
   const [maxWidthPixels, setMaxWidthPixels] = useState(800);
@@ -396,38 +398,39 @@ export function ChapterReader({
 
   if (effectiveTotal === 0) {
     return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6">
-        <BookOpen className="w-14 h-14 text-comic-blue/20 animate-pulse" strokeWidth={1.5} />
-        <p className="text-xl font-display tracking-[0.3em] text-white/[0.15]">MANGAINK</p>
+      <div className="fixed inset-0 z-50 bg-reader-bg flex flex-col items-center justify-center gap-5">
+        <BookOpen className="w-8 h-8 text-reader-muted/50 animate-pulse" strokeWidth={1.25} />
+        <p className="text-[11px] uppercase tracking-[0.3em] text-reader-muted/70">Mangaink</p>
         {hasDownloadFailed ? (
-          <div className="flex flex-col items-center gap-4 mt-4">
-            <p className="text-sm text-white/50">Nao foi possivel carregar as paginas</p>
+          <div className="flex flex-col items-center gap-3 mt-2">
+            <p className="text-sm text-reader-muted">Não foi possível carregar as páginas</p>
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 px-4 py-2 rounded-md border border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-colors text-sm"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-reader-border text-reader-muted hover:text-reader-foreground hover:border-reader-muted transition-colors text-sm"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4" strokeWidth={1.75} />
                 Tentar novamente
               </button>
             )}
           </div>
         ) : (
-          <p className="text-xs text-white/[0.12]">Carregando capítulo...</p>
+          <p className="text-xs text-reader-muted/60">Carregando capítulo…</p>
         )}
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black select-none">
+    <div className="fixed inset-0 z-50 bg-reader-bg select-none">
       {chapterTransitioning && (
-        <div className="fixed inset-0 z-60 bg-black flex flex-col items-center justify-center gap-6">
-          <BookOpen className="w-14 h-14 text-comic-blue/20 animate-pulse" strokeWidth={1.5} />
-          <p className="text-xl font-display tracking-[0.3em] text-white/[0.15]">MANGAINK</p>
-          <p className="text-xs text-white/[0.12]">Carregando capítulo...</p>
+        <div className="fixed inset-0 z-60 bg-reader-bg flex flex-col items-center justify-center gap-5">
+          <BookOpen className="w-8 h-8 text-reader-muted/50 animate-pulse" strokeWidth={1.25} />
+          <p className="text-[11px] uppercase tracking-[0.3em] text-reader-muted/70">Mangaink</p>
+          <p className="text-xs text-reader-muted/60">Carregando capítulo…</p>
         </div>
       )}
+
       {showProgressBar && progressStyle === "segmented" && effectiveTotal > 0 && (
         progressPosition === "bottom" ? (
           <div
@@ -445,46 +448,36 @@ export function ChapterReader({
                   transform: "translateX(-50%)",
                 }}
               >
-                <div className="bg-zinc-700 text-white text-xs font-bold rounded-full w-7 h-7 flex items-center justify-center shadow-lg">
+                <div className="rounded-md border border-reader-border bg-reader-surface text-reader-foreground text-xs tabular-nums px-2 py-1">
                   {hoverPage + 1}
                 </div>
               </div>
             )}
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] group-hover:h-[42px] transition-all duration-200 ease-in-out overflow-hidden">
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] group-hover:h-9 transition-all duration-200 ease-in-out overflow-hidden">
               <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-0 bg-white/[0.04]" />
+                <div className="absolute inset-0 bg-reader-surface" />
                 <div
-                  className="absolute inset-y-0 left-0"
-                  style={{
-                    width: `${progressPct}%`,
-                    background: "var(--theme-primary, oklch(0.88 0.18 95))",
-                  }}
+                  className="absolute inset-y-0 left-0 bg-reader-accent"
+                  style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <div className="absolute inset-0 z-10 bg-zinc-800/95 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="absolute inset-0 z-10 bg-reader-bg/90 backdrop-blur-sm border-t border-reader-border opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <div className="flex items-center gap-3 px-3 h-full">
-                  <span className="text-white/60 text-xs font-medium tabular-nums min-w-[1.5rem] text-right">
+                  <span className="text-reader-muted text-xs tabular-nums min-w-[1.5rem] text-right">
                     {currentPage + 1}
                   </span>
-                  <div
-                    ref={barRef}
-                    className="flex-1 h-4 flex gap-[2px]"
-                  >
+                  <div ref={barRef} className="flex-1 h-[3px] flex gap-px">
                     {Array.from({ length: effectiveTotal }).map((_, i) => (
                       <div
                         key={i}
-                        className="flex-1"
-                        style={{
-                          background:
-                            i <= currentPage
-                              ? "var(--theme-primary, oklch(0.88 0.18 95))"
-                              : "rgba(255,255,255,0.06)",
-                          opacity: i <= currentPage ? 0.8 : undefined,
-                        }}
+                        className={cn(
+                          "flex-1",
+                          i <= currentPage ? "bg-reader-accent" : "bg-reader-border",
+                        )}
                       />
                     ))}
                   </div>
-                  <span className="text-white/60 text-xs font-medium tabular-nums min-w-[1.5rem]">
+                  <span className="text-reader-muted text-xs tabular-nums min-w-[1.5rem]">
                     {effectiveTotal}
                   </span>
                 </div>
@@ -492,51 +485,50 @@ export function ChapterReader({
             </div>
           </div>
         ) : (
-          <div className="fixed top-0 left-0 right-0 z-20 h-[36px] flex gap-px items-start">
+          <div className="fixed top-0 left-0 right-0 z-20 h-[24px] flex gap-px items-start">
             {Array.from({ length: effectiveTotal }).map((_, i) => (
               <div
                 key={i}
-                className="flex-1 transition-all duration-200 relative group cursor-pointer h-[2px] hover:h-[24px]"
-                style={{
-                  background:
-                    i <= currentPage
-                      ? "var(--theme-primary, oklch(0.88 0.18 95))"
-                      : "rgba(255,255,255,0.04)",
-                  opacity: i <= currentPage ? 0.5 : undefined,
-                }}
+                className={cn(
+                  "flex-1 transition-all duration-200 relative group cursor-pointer h-[2px] hover:h-[18px]",
+                  i <= currentPage ? "bg-reader-accent" : "bg-reader-border",
+                )}
                 onClick={() => updatePage(i)}
               >
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black/80 text-white/90 text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 border border-reader-border bg-reader-surface text-reader-foreground text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                   {i + 1} / {effectiveTotal}
                 </div>
               </div>
             ))}
           </div>
         )
+
       )}
 
       {showProgressBar && progressStyle === "circular" && effectiveTotal > 1 && (
         <svg
-          className={`fixed z-20 w-7 h-7 ${
-            progressPosition === "top" ? "top-3" : "bottom-6"
-          } ${progressPosition === "top" ? "right-3" : "right-6"}`}
+          className={cn(
+            "fixed z-20 w-6 h-6",
+            progressPosition === "top" ? "top-3 right-3" : "bottom-6 right-6",
+          )}
           viewBox="0 0 36 36"
         >
           <path
             fill="none"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="2.5"
+            stroke="var(--reader-border)"
+            strokeWidth="2"
             d="M18 3a15 15 0 1 1 0 30 15 15 0 1 1 0-30"
           />
           <path
             fill="none"
-            stroke="rgba(255,255,255,0.3)"
-            strokeWidth="2.5"
+            stroke="var(--reader-accent)"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeDasharray={`${progressPct}, 100`}
             d="M18 3a15 15 0 1 1 0 30 15 15 0 1 1 0-30"
           />
         </svg>
+
       )}
 
       <div
@@ -554,8 +546,8 @@ export function ChapterReader({
             {!imageLoaded && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <BookOpen
-                  className="w-10 h-10 text-comic-blue/20 animate-pulse"
-                  strokeWidth={1.5}
+                  className="w-8 h-8 text-reader-muted/40 animate-pulse"
+                  strokeWidth={1.25}
                 />
               </div>
             )}
@@ -574,8 +566,11 @@ export function ChapterReader({
             </div>
           </>
         ) : (
-          <p className="text-white/60 font-display text-lg">Pagina indisponivel</p>
+          <p className="grid place-items-center h-full text-sm text-reader-muted">
+            Página indisponível
+          </p>
         )}
+
 
         <div
           data-testid="zone-prev"
@@ -596,24 +591,25 @@ export function ChapterReader({
 
       <div
         data-testid="reader-topbar"
-        className={`absolute top-0 left-0 right-0 z-10 transition-transform duration-300 ${
+        className={`absolute top-0 left-0 right-0 z-10 transition-transform duration-200 ${
           showUI ? "translate-y-0" : "-translate-y-full"
         }`}
       >
-        <div className="bg-black/95 px-4 sm:px-6 py-3 sm:py-4 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-4">
+        <div className="bg-reader-bg/90 backdrop-blur-sm border-b border-reader-border px-3 sm:px-4 py-2.5 grid grid-cols-[auto_1fr_auto] items-center gap-3">
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleBack();
             }}
-            className="h-10 w-10 border-[3px] border-ink rounded-lg bg-white flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform shrink-0 justify-self-start"
+            className="h-8 w-8 rounded-md flex items-center justify-center text-reader-muted hover:text-reader-foreground hover:bg-reader-surface transition-colors shrink-0 justify-self-start"
+            aria-label="Voltar"
           >
-            <ArrowLeft className="w-5 h-5 text-comic-ink" />
+            <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
           </button>
-          <span className="font-display text-base sm:text-lg text-white/90 truncate text-center min-w-0">
+          <span className="text-sm text-reader-foreground truncate text-center min-w-0">
             {mangaTitle ?? ""}
           </span>
-          <span className="text-xs sm:text-sm text-white/55 truncate text-right justify-self-end font-display tracking-wider">
+          <span className="text-xs text-reader-muted truncate text-right justify-self-end max-w-[40vw]">
             {chapterTitle ?? ""}
           </span>
         </div>
@@ -621,16 +617,17 @@ export function ChapterReader({
 
       <div
         data-testid="reader-bubble"
-        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-10 transition-all duration-300 ${
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-10 transition-opacity duration-200 ${
           showUI ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="bg-black/70 backdrop-blur-sm rounded-full px-4 py-1.5 shadow-[2px_2px_0_0_rgba(0,0,0,0.4)] flex items-center gap-2">
-          <span className="font-display text-sm text-white/90 tracking-wider whitespace-nowrap">
+        <div className="rounded-full border border-reader-border bg-reader-bg/80 backdrop-blur-sm px-3 py-1">
+          <span className="text-xs tabular-nums text-reader-muted whitespace-nowrap">
             {currentPage + 1} / {effectiveTotal}
           </span>
         </div>
       </div>
+
 
       <ReaderFloatingMenu
         showUI={showUI}

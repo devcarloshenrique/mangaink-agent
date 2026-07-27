@@ -12,21 +12,21 @@ export function ReaderToolbar({ currentPage, totalPages, className }: Props) {
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 border-t-[3px] border-ink bg-comic-yellow shadow-[0_-4px_0_0_var(--comic-ink)]",
+        "fixed bottom-0 left-0 right-0 z-50 border-t border-reader-border bg-reader-bg/90 backdrop-blur-sm",
         className,
       )}
     >
       <div className="mx-auto max-w-3xl px-4 py-2 flex items-center gap-3">
-        <span className="font-display text-sm shrink-0">
+        <span className="text-xs tabular-nums text-reader-muted shrink-0">
           {currentPage + 1} / {totalPages}
         </span>
-        <div className="flex-1 h-2.5 border-[2px] border-ink rounded-full bg-card overflow-hidden">
+        <div className="flex-1 h-[3px] rounded-full bg-reader-surface overflow-hidden">
           <div
-            className="h-full bg-comic-red transition-all duration-200"
+            className="h-full bg-reader-accent transition-all duration-200"
             style={{ width: `${pct}%` }}
           />
         </div>
-        <span className="font-display text-xs opacity-60 shrink-0">{pct}%</span>
+        <span className="text-xs tabular-nums text-reader-muted shrink-0">{pct}%</span>
       </div>
     </div>
   );

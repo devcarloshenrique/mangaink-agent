@@ -49,26 +49,26 @@ export function PresetSelector({
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="border-[3px] border-ink shadow-comic-sm font-display w-full justify-between h-11"
+          className="border-[2.5px] border-ink font-sans text-sm font-medium tracking-normal w-full justify-between h-11 shadow-none"
         >
           <span className="truncate">{displayName}</span>
           <ChevronDown className="h-4 w-4 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="w-[var(--radix-dropdown-menu-trigger-width)] border-[3px] border-ink shadow-comic-lg"
+        className="w-[var(--radix-dropdown-menu-trigger-width)] border-[2.5px] border-ink shadow-none"
         align="start"
       >
         <DropdownMenuItem
           onSelect={onCustomMode}
-          className={cn("font-display", !activePresetId && "bg-comic-yellow/20 font-bold")}
+          className={cn("font-sans font-medium", !activePresetId && "bg-comic-yellow text-comic-ink font-bold")}
         >
           Personalizado
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuLabel className="font-display text-xs text-muted-foreground">
+        <DropdownMenuLabel className="font-sans text-xs uppercase tracking-wide text-muted-foreground">
           Presets do sistema
         </DropdownMenuLabel>
         {presets.map((preset) => (
@@ -76,10 +76,10 @@ export function PresetSelector({
             key={preset.id}
             onSelect={() => onSelectPreset(preset.id, "system")}
             className={cn(
-              "font-display cursor-pointer",
+              "font-sans font-medium cursor-pointer",
               activePresetId === preset.id &&
                 activePresetSource === "system" &&
-                "bg-comic-yellow/20 font-bold",
+                "bg-comic-yellow text-comic-ink font-bold",
             )}
           >
             {preset.name}
@@ -88,7 +88,7 @@ export function PresetSelector({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuLabel className="font-display text-xs text-muted-foreground">
+        <DropdownMenuLabel className="font-sans text-xs uppercase tracking-wide text-muted-foreground">
           Meus presets
         </DropdownMenuLabel>
 
@@ -103,10 +103,10 @@ export function PresetSelector({
               "flex items-center justify-between group cursor-pointer",
               activePresetId === preset.id &&
                 activePresetSource === "user" &&
-                "bg-comic-yellow/20 font-bold",
+                "bg-comic-yellow text-comic-ink font-bold",
             )}
           >
-            <span className="flex-1 font-display" onClick={() => onSelectPreset(preset.id, "user")}>
+            <span className="flex-1 font-sans font-medium" onClick={() => onSelectPreset(preset.id, "user")}>
               {preset.name}
             </span>
             <span className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -160,7 +160,7 @@ export function PresetSelector({
         <DropdownMenuItem
           onClick={onSaveAsPreset}
           disabled={isAtLimit}
-          className="font-display cursor-pointer"
+          className="font-sans font-medium cursor-pointer"
         >
           <Plus className="h-4 w-4 mr-1" />
           Salvar como preset
