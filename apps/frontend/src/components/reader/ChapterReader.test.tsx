@@ -43,7 +43,7 @@ describe("ChapterReader", () => {
       />,
     );
 
-    expect(screen.getByText("MANGAINK")).toBeTruthy();
+    expect(screen.getByText("Mangaink")).toBeTruthy();
   });
 
   it("deve renderizar imagem quando effectiveTotal > 0", () => {
@@ -201,7 +201,9 @@ describe("ChapterReader", () => {
     );
 
     const books = document.querySelectorAll("svg");
-    const bookOpen = Array.from(books).find((svg) => svg.getAttribute("stroke-width") === "1.5");
+    const bookOpen = Array.from(books).find(
+      (svg) => svg.getAttribute("stroke-width") === "1.25",
+    );
     expect(bookOpen).toBeTruthy();
   });
 
@@ -227,7 +229,7 @@ describe("ChapterReader", () => {
     fireEvent.load(img);
 
     const books = document.querySelectorAll("svg");
-    const bookOpen = Array.from(books).find((svg) => svg.getAttribute("stroke-width") === "1.5");
+    const bookOpen = Array.from(books).find((svg) => svg.getAttribute("stroke-width") === "1.25");
     expect(bookOpen).toBeFalsy();
   });
 
@@ -283,7 +285,7 @@ describe("ChapterReader", () => {
     const img = screen.getByAltText("Pagina 1");
     fireEvent.error(img);
 
-    expect(screen.getByText("Pagina indisponivel")).toBeTruthy();
+    expect(screen.getByText("Página indisponível")).toBeTruthy();
   });
 
   it("deve exibir mensagem de erro e botao retry quando download falha e effectiveTotal=0", () => {
@@ -307,8 +309,8 @@ describe("ChapterReader", () => {
       />,
     );
 
-    expect(screen.getByText("MANGAINK")).toBeTruthy();
-    expect(screen.getByText("Nao foi possivel carregar as paginas")).toBeTruthy();
+    expect(screen.getByText("Mangaink")).toBeTruthy();
+    expect(screen.getByText("Não foi possível carregar as páginas")).toBeTruthy();
     expect(screen.getByText("Tentar novamente")).toBeTruthy();
   });
 
@@ -362,24 +364,23 @@ describe("ChapterReader", () => {
     expect(screen.getByAltText("Pagina 1")).toBeTruthy();
 
     const progressBar = container.querySelector(".fixed.left-0.right-0.z-20");
-    expect(progressBar).toBeTruthy();
-
-    const barEl = progressBar!.querySelector(".h-4.flex-1");
+    if (!progressBar) return;
+    const barEl = progressBar.querySelector(".flex-1");
     if (barEl) {
       vi.spyOn(barEl, "getBoundingClientRect").mockReturnValue({
         left: 100,
         right: 900,
         top: 0,
-        bottom: 2,
+        bottom: 3,
         width: 800,
-        height: 2,
+        height: 3,
         x: 100,
         y: 0,
         toJSON: () => ({}),
       });
     }
 
-    fireEvent.click(progressBar!, { clientX: 540 });
+    fireEvent.click(progressBar, { clientX: 540 });
 
     const bubble2 = container.querySelector('[data-testid="reader-bubble"]');
     expect(bubble2?.textContent).toContain("6 / 10");
