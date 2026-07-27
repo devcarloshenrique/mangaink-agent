@@ -46,3 +46,4 @@ opencode.json
 wizard-step1.yml
 apps/backend/storage/
 .opencode/
+apps/frontend/src/routeTree.gen.ts
