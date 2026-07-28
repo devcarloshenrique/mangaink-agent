@@ -1,5 +1,5 @@
-import { env } from '../../../shared/config/env'
-import Redis from 'ioredis'
+import { createSafeRedis } from '../../../shared/redis/safe-redis'
+import type Redis from 'ioredis'
 
 const LOCK_TTL_SECONDS = 120
 const LOCK_PREFIX = 'lock:source:'
@@ -14,7 +14,7 @@ export class RedisLockService {
 
   constructor() {
     this.workerId = `worker-${process.pid}-${Date.now()}`
-    this.redis = new Redis(env.REDIS_URL)
+    this.redis = createSafeRedis('lock')
   }
 
   private lockKey(sourceId: string): string {

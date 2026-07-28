@@ -1,5 +1,4 @@
-import Redis from 'ioredis'
-import { env } from '../../../shared/config/env'
+import { createSafeRedis } from '../../../shared/redis/safe-redis'
 import type { Redis as RedisType } from 'ioredis'
 
 const PREFIX = 'chapter-download-active:'
@@ -9,7 +8,7 @@ let _redis: RedisType | null = null
 
 function getRedis(): RedisType {
   if (!_redis) {
-    _redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
+    _redis = createSafeRedis('ch-download-status')
   }
   return _redis
 }

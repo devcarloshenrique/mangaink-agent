@@ -102,7 +102,14 @@ export const inspectSourceWorker = new Worker<SourceInspectJob>(
 
       throw err
     } finally {
-      await lockService.release(sourceId)
+      try {
+        await lockService.release(sourceId)
+      } catch (err) {
+        console.warn(
+          `[Worker] Falha ao liberar lock de ${sourceId}:`,
+          err instanceof Error ? err.message : 'unknown',
+        )
+      }
     }
   },
   {

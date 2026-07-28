@@ -1,5 +1,4 @@
-import Redis from 'ioredis'
-import { env } from '../../../shared/config/env'
+import { createSafeRedis } from '../../../shared/redis/safe-redis'
 import type { Redis as RedisType } from 'ioredis'
 
 export type PubSubCallback = (channel: string, message: string) => void
@@ -16,8 +15,8 @@ export class ChapterDownloadPubSubService {
   private readonly listeners = new Map<string, Set<PubSubCallback>>()
 
   constructor() {
-    this.publisher = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
-    this.subscriber = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
+    this.publisher = createSafeRedis('ch-download-pub')
+    this.subscriber = createSafeRedis('ch-download-sub')
 
     this.subscriber.on('message', (channel, message) => {
       const callbacks = this.listeners.get(channel)

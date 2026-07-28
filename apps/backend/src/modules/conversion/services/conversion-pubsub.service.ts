@@ -1,5 +1,4 @@
-import Redis from 'ioredis'
-import { env } from '../../../shared/config/env'
+import { createSafeRedis } from '../../../shared/redis/safe-redis'
 import type { Redis as RedisType } from 'ioredis'
 
 export type PubSubCallback = (channel: string, message: string) => void
@@ -20,8 +19,8 @@ export class ConversionPubSubService {
     // Conexões separadas: publisher e subscriber NÃO podem compartilhar
     // a mesma conexão Redis — subscribe() coloca a conexão em "subscriber mode"
     // e qualquer comando não-subscriber (como PUBLISH) falha.
-    this.publisher = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
-    this.subscriber = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
+    this.publisher = createSafeRedis('conv-pubsub-pub')
+    this.subscriber = createSafeRedis('conv-pubsub-sub')
 
     this.subscriber.on('message', (channel, message) => {
       const callbacks = this.listeners.get(channel)
