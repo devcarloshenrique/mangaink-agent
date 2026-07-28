@@ -15,7 +15,7 @@ export class InspectQueueService {
    */
   async enqueue(job: SourceInspectJob): Promise<void> {
     await this.queue.add(QUEUE_NAME, job, {
-      jobId: job.sourceId, // Idempotente: mesmo job não é duplicado
+      jobId: `${job.sourceId}-${Date.now()}`,
       removeOnComplete: true,
       removeOnFail: { count: 5 },
     })
