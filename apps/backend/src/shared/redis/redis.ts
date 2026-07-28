@@ -1,5 +1,5 @@
-import Redis from 'ioredis'
-import { env } from '../config/env'
+import type Redis from 'ioredis'
+import { createSafeRedis } from './safe-redis'
 
 let redisInstance: Redis | null = null
 
@@ -9,13 +9,8 @@ let redisInstance: Redis | null = null
  */
 export function getRedis(): Redis {
   if (!redisInstance) {
-    redisInstance = new Redis(env.REDIS_URL, {
-      maxRetriesPerRequest: null, // Necessário para BullMQ
+    redisInstance = createSafeRedis('singleton', {
       lazyConnect: true,
-    })
-
-    redisInstance.on('error', (err) => {
-      console.error('[Redis] Erro de conexão:', err.message)
     })
 
     redisInstance.on('connect', () => {
