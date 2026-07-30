@@ -64,6 +64,7 @@ function makeChapter(id: string): Chapter {
     pages: 20,
     volume: null,
     isDownloaded: false,
+    isRead: false,
   };
 }
 

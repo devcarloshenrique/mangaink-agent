@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { ComicHeader } from "@/components/comic/Header";
 import { Toaster } from "sonner";
 import { ArrowLeft } from "lucide-react";
@@ -11,9 +12,8 @@ import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
 import { TabConversoes } from "@/components/biblioteca/TabConversoes";
 import { DownloadChapterDialog } from "@/components/biblioteca/DownloadChapterDialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useScraping } from "@/hooks/useScraping";
-import { scrapingApi } from "@/lib/api";
-import { chaptersApi } from "@/lib/api";
+import { scrapingApi, chaptersApi } from "@/lib/api";
+import { useReadingProgress, useToggleRead } from "@/hooks/useReadingProgress";
 import { authGuard } from "./-authGuard";
 import type { SourceInspectResponse } from "@/types/scraping";
 import {
@@ -32,8 +32,17 @@ function MangaDetailPage() {
   const navigate = useNavigate();
 
   const [isFavorite, setIsFavorite] = useState(false);
-  const [readingProgress] = useState<{ chapterNumber: string } | null>(null);
-  const [source, setSource] = useState<SourceInspectResponse | null>(null);
+
+  const { data: source, isLoading: sourceLoading } = useQuery<SourceInspectResponse>({
+    queryKey: ["source", sourceId],
+    queryFn: () => scrapingApi.getSource(sourceId),
+    staleTime: 30_000,
+    enabled: !!sourceId,
+  });
+
+  const { data: progress, isLoading: progressLoading } = useReadingProgress(sourceId);
+
+  const toggleRead = useToggleRead(sourceId);
 
   const [downloadTarget, setDownloadTarget] = useState<{
     sourceId: string;
@@ -41,13 +50,15 @@ function MangaDetailPage() {
     title: string;
   } | null>(null);
 
-  useEffect(() => {
-    scrapingApi.getSource(sourceId).then(setSource).catch(console.error);
-  }, [sourceId]);
+  const readChapterIds = useMemo<Set<string>>(
+    () => new Set(progress?.readChapterIds ?? []),
+    [progress],
+  );
 
   const seriesTitle = source?.metadata.title ?? MOCK_MANGA_DETAILS.title;
   const chapters = source?.chapters ?? [];
   const chapterCount = chapters.length;
+  const isLoading = sourceLoading || progressLoading;
 
   const handleDownloadConfirm = async () => {
     if (!downloadTarget) return;
@@ -80,7 +91,12 @@ function MangaDetailPage() {
         <div className="grid md:grid-cols-[320px_1fr] gap-8">
           <div className="space-y-6 md:max-w-[320px] mx-auto md:mx-0 w-full">
             <MangaCover sourceId={sourceId} className="aspect-[2/3]" />
-            <ReadButton readingProgress={readingProgress} sourceId={sourceId} />
+            <ReadButton
+              sourceId={sourceId}
+              readChapterIds={readChapterIds}
+              chapters={chapters}
+              isLoading={isLoading}
+            />
             <FavoriteButton isFavorite={isFavorite} onToggle={() => setIsFavorite(!isFavorite)} />
           </div>
 
@@ -101,13 +117,13 @@ function MangaDetailPage() {
                   value="capitulos"
                   className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80"
                 >
-                  Capitulos ({chapterCount})
+                  Capítulos ({chapterCount})
                 </TabsTrigger>
                 <TabsTrigger
                   value="conversoes"
                   className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80"
                 >
-                  Conversoes
+                  Conversões
                 </TabsTrigger>
               </TabsList>
 
@@ -131,6 +147,8 @@ function MangaDetailPage() {
                 <TabCapitulos
                   chapters={chapters}
                   sourceId={sourceId}
+                  readChapterIds={readChapterIds}
+                  onToggleRead={(chapterId, isRead) => toggleRead.mutate({ chapterId, isRead })}
                   onDownloadRequest={(sid, cid, title) =>
                     setDownloadTarget({ sourceId: sid, chapterId: cid, title })
                   }
