@@ -4,6 +4,7 @@ import { createChapterDownload } from './controllers/create-chapter-download.con
 import { getChapterDownload } from './controllers/get-chapter-download.controller'
 import { chapterDownloadEvents } from './controllers/chapter-download-events.controller'
 import { serveChapterImage } from './controllers/serve-chapter-image.controller'
+import { deleteChapterCache } from './controllers/delete-chapter-cache.controller'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 
 const chapterParamsSchema = z.object({
@@ -104,5 +105,27 @@ export const chapterRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     serveChapterImage,
+  )
+
+  app.delete(
+    '/api/sources/:sourceId/chapters/:chapterId/cache',
+    {
+      onRequest: [verifyJwt],
+      schema: {
+        tags: ['Chapters'],
+        summary: 'Remove cache de imagens do capítulo',
+        description:
+          'Remove do disco todas as imagens cacheadas do capítulo. Retorna o status da operação.',
+        params: chapterParamsSchema,
+        response: {
+          200: z.object({
+            deleted: z.boolean(),
+            reason: z.string().optional(),
+          }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    deleteChapterCache,
   )
 }

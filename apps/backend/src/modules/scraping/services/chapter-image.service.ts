@@ -1,5 +1,5 @@
 import { join, extname } from 'node:path'
-import { writeFile, readdir } from 'node:fs/promises'
+import { writeFile, readdir, rm } from 'node:fs/promises'
 import { mkdirp, pathExists, readJson, writeJson } from '../../../shared/utils/filesystem'
 import type { IProviderStrategy } from '../interfaces/provider-strategy.interface'
 import type { ChapterManifest } from '../types/chapter-download.types'
@@ -140,6 +140,15 @@ export class ChapterImageService {
 
   async readManifest(): Promise<ChapterManifest | null> {
     return readJson<ChapterManifest>(join(this.getCacheDir(), 'manifest.json'))
+  }
+
+  async deleteCache(): Promise<{ deleted: boolean; reason?: string }> {
+    const cacheDir = this.getCacheDir()
+    if (!(await pathExists(cacheDir))) {
+      return { deleted: false, reason: 'cache_not_found' }
+    }
+    await rm(cacheDir, { recursive: true, force: true })
+    return { deleted: true }
   }
 }
 
