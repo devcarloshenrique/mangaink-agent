@@ -6,6 +6,7 @@ import { sourceEvents } from './controllers/source-events.controller'
 import { listProviders } from './controllers/providers.controller'
 import { inspectSourceBodySchema, inspectSourceQuerySchema } from './dtos/inspect-source.dto'
 import { sourceParamsSchema } from './dtos/preview-source.dto'
+import { verifyJwtOptional } from '../../shared/middlewares/verify-jwt-optional'
 
 const sourceStateSchema = z.object({
   sourceId: z.string(),
@@ -20,6 +21,7 @@ const chapterSchema = z.object({
   pages: z.number().nullable(),
   volume: z.number().nullable(),
   isDownloaded: z.boolean(),
+  isRead: z.boolean(),
 })
 
 const coverSchema = z.object({
@@ -101,6 +103,7 @@ export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
     '/api/conversions/source/inspect/:sourceId',
     {
+      preHandler: [verifyJwtOptional],
       schema: {
         tags: ['Scraping'],
         summary: 'Metadados de uma source inspecionada',

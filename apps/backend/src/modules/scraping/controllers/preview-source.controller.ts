@@ -1,18 +1,23 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { SourceParams } from '../dtos/preview-source.dto'
 import { GetSourceUseCase } from '../use-cases/get-source.use-case'
+import { getSourceRepository } from '../../../shared/database/repositories'
+import { getUserChapterProgressRepository } from '../../../shared/database/repositories'
 import { SourceNotFoundError } from '../errors/scraping.errors'
-
-const useCase = new GetSourceUseCase()
 
 export async function getSource(
   request: FastifyRequest<{ Params: SourceParams }>,
   reply: FastifyReply,
 ) {
   const { sourceId } = request.params
+  const userId = request.user?.sub
+
+  const sourceRepo = getSourceRepository()
+  const readingRepo = getUserChapterProgressRepository()
+  const useCase = new GetSourceUseCase(sourceRepo, readingRepo)
 
   try {
-    const result = await useCase.execute(sourceId)
+    const result = await useCase.execute(sourceId, userId)
     return reply.send(result)
   } catch (error) {
     if (error instanceof SourceNotFoundError) {
