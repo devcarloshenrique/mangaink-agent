@@ -20,8 +20,9 @@ model User {
   createdAt    DateTime @default(now()) @db.Timestamptz @map("created_at")
   updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz @map("updated_at")
 
-  conversions  Conversion[]
-  userPresets  UserPreset[]
+  conversions    Conversion[]
+  userPresets    UserPreset[]
+  chapterProgress UserChapterProgress[]
 
   @@map("users")
 }
@@ -43,8 +44,9 @@ model Source {
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  chapters      Chapter[]
-  covers        Cover[]
+  chapters         Chapter[]
+  covers           Cover[]
+  readingProgress  UserChapterProgress[]
 
   @@index([providerSlug])
   @@index([ttlExpiresAt])
@@ -64,6 +66,7 @@ model Chapter {
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   source                Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+  readingProgress       UserChapterProgress[]
 
   @@unique([sourceId, chapterId])
   @@index([sourceId, number])
@@ -168,4 +171,21 @@ model UserPreset {
   @@unique([userId, name])
   @@index([userId])
   @@map("user_presets")
+}
+
+model UserChapterProgress {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sourceId  String   @map("source_id") @db.VarChar(255)
+  chapterId String   @map("chapter_id") @db.VarChar(100)
+  readAt    DateTime @default(now()) @map("read_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source  Source  @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+  chapter Chapter @relation(fields: [sourceId, chapterId], references: [sourceId, chapterId], onDelete: Cascade)
+
+  @@unique([userId, sourceId, chapterId])
+  @@index([userId, sourceId])
+  @@map("user_chapter_progress")
 }
