@@ -70,7 +70,9 @@ describe('RedisPubSubService', () => {
       pubsub.subscribe('src-test-12345678', callback)
 
       // Simular recebimento de mensagem
-      const messageHandler = mockRedis.on.mock.calls[0][1]
+      const messageHandler = mockRedis.on.mock.calls.find(
+        (call: string[]) => call[0] === 'message',
+      )?.[1]
       messageHandler('source:src-test-12345678', JSON.stringify({ stage: 'completed', progress: 100 }))
 
       expect(callback).toHaveBeenCalledWith({ stage: 'completed', progress: 100 })
@@ -80,7 +82,9 @@ describe('RedisPubSubService', () => {
       const callback = vi.fn()
       pubsub.subscribe('src-test-12345678', callback)
 
-      const messageHandler = mockRedis.on.mock.calls[0][1]
+      const messageHandler = mockRedis.on.mock.calls.find(
+        (call: string[]) => call[0] === 'message',
+      )?.[1]
       messageHandler('source:src-test-12345678', 'invalid json')
 
       expect(callback).not.toHaveBeenCalled()

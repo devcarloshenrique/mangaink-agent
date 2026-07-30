@@ -17,12 +17,17 @@ describe('InspectQueueService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    vi.spyOn(Date, 'now').mockReturnValue(1753891200000)
     queueService = new InspectQueueService()
     const { Queue } = await import('bullmq')
     mockAdd = (Queue as ReturnType<typeof vi.fn>).mock.results[0].value.add
   })
 
-  it('deve enfileirar job com sourceId como jobId', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('deve enfileirar job com sourceId e timestamp como jobId', async () => {
     await queueService.enqueue({
       sourceId: 'src-test-12345678',
       provider: 'mangalivre',
@@ -39,7 +44,7 @@ describe('InspectQueueService', () => {
         refresh: false,
       },
       {
-        jobId: 'src-test-12345678',
+        jobId: 'src-test-12345678-1753891200000',
         removeOnComplete: true,
         removeOnFail: { count: 5 },
       },

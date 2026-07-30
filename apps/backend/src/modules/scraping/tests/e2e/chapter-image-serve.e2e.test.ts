@@ -363,13 +363,13 @@ describe('Chapter Image Serve E2E', () => {
     expect(response.headers['cache-control']).toBe('public, max-age=86400, immutable')
   })
 
-  it('source inexistente retorna 500 (SourceNotFoundError não tratado pelo handler)', async () => {
+  it('source inexistente retorna 404', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/api/sources/src-nonexistent/chapters/chap_0001/images/1',
     })
 
-    expect(response.statusCode).toBe(500)
+    expect(response.statusCode).toBe(404)
     expect(response.json()).toHaveProperty('error')
   })
 

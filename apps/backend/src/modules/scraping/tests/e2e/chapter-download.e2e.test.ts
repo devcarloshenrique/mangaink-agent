@@ -270,14 +270,14 @@ describe('Chapter Download E2E', () => {
       expect(response.statusCode).toBe(401)
     })
 
-    it('com source inexistente retorna 500 (SourceNotFoundError não tratado pelo handler)', async () => {
+    it('com source inexistente retorna 404', async () => {
       const response = await app.inject({
         method: 'POST',
         url: url('src-nonexistent', 'chap_0001'),
         headers: authHeader(),
       })
 
-      expect(response.statusCode).toBe(500)
+      expect(response.statusCode).toBe(404)
       expect(response.json()).toHaveProperty('error')
     })
 

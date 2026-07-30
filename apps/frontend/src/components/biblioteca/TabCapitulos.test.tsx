@@ -1,14 +1,34 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
-// Mock do Chapter (não tem router real no teste)
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
-import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
+vi.mock("@/hooks/useReadingProgress", () => ({
+  useBatchMarkRead: () => ({
+    mutateAsync: vi.fn().mockResolvedValue({ updatedCount: 3, readChapterIds: [] }),
+    isPending: false,
+  }),
+}));
 
-const makeChapter = (overrides: Partial<any> = {}) => ({
+import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
+import type { Chapter } from "@/types/scraping";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false },
+    mutations: { retry: false },
+  },
+});
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
+
+const makeChapter = (overrides: Partial<Chapter> = {}) => ({
   id: "chap_0001",
   number: "1",
   title: "Capítulo 1",
@@ -16,11 +36,14 @@ const makeChapter = (overrides: Partial<any> = {}) => ({
   pages: 20,
   volume: null,
   isDownloaded: false,
+  isRead: false,
   ...overrides,
 });
 
 describe("TabCapitulos", () => {
   const onDownloadRequest = vi.fn();
+  const onToggleRead = vi.fn();
+  const emptySet = new Set<string>();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,8 +59,11 @@ describe("TabCapitulos", () => {
       <TabCapitulos
         chapters={chapters}
         sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
         onDownloadRequest={onDownloadRequest}
       />,
+      { wrapper: Wrapper },
     );
 
     expect(screen.getByText("Cap 1")).toBeTruthy();
@@ -46,10 +72,17 @@ describe("TabCapitulos", () => {
 
   it("deve exibir mensagem quando lista vazia", () => {
     render(
-      <TabCapitulos chapters={[]} sourceId="src-test" onDownloadRequest={onDownloadRequest} />,
+      <TabCapitulos
+        chapters={[]}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
     );
 
-    expect(screen.getByText("Nenhum capitulo disponivel.")).toBeTruthy();
+    expect(screen.getByText("Nenhum capítulo disponível.")).toBeTruthy();
   });
 
   it("deve filtrar capitulos por numero na barra de pesquisa", () => {
@@ -62,14 +95,16 @@ describe("TabCapitulos", () => {
       <TabCapitulos
         chapters={chapters}
         sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
         onDownloadRequest={onDownloadRequest}
       />,
+      { wrapper: Wrapper },
     );
 
     const input = screen.getByPlaceholderText("Buscar por título...");
     fireEvent.change(input, { target: { value: "10" } });
 
-    // highlightMatch pode quebrar o texto — verifica que "10" está visivel
     expect(screen.getByText((c) => c.includes("10"))).toBeTruthy();
     expect(screen.queryByText((c) => c.includes("Vinte"))).toBeNull();
     expect(screen.getByText("1 de 2 capítulos")).toBeTruthy();
@@ -82,8 +117,11 @@ describe("TabCapitulos", () => {
       <TabCapitulos
         chapters={chapters}
         sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
         onDownloadRequest={onDownloadRequest}
       />,
+      { wrapper: Wrapper },
     );
 
     const input = screen.getByPlaceholderText("Buscar por título...");
@@ -102,14 +140,16 @@ describe("TabCapitulos", () => {
       <TabCapitulos
         chapters={chapters}
         sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
         onDownloadRequest={onDownloadRequest}
       />,
+      { wrapper: Wrapper },
     );
 
     const input = screen.getByPlaceholderText("Buscar por título...");
     fireEvent.change(input, { target: { value: "Inicio" } });
 
-    // highlightMatch gera <mark>Inicio</mark> — verifica que o mark existe
     const marks = document.querySelectorAll("mark");
     expect(marks.length).toBeGreaterThan(0);
     expect(marks[0].textContent).toBe("Inicio");

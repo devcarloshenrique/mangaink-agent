@@ -99,6 +99,27 @@ describe('ChapterImageService', () => {
     })
   })
 
+  describe('deleteCache', () => {
+    it('deve deletar cache quando diretório existe com imagens', async () => {
+      const cacheDir = service.getCacheDir()
+      const { mkdirp } = await import('../../../../shared/utils/filesystem')
+      await mkdirp(cacheDir)
+      await writeFile(join(cacheDir, '0001.jpg'), Buffer.from([0xff, 0xd8, 0xff]))
+
+      const result = await service.deleteCache()
+
+      expect(result).toEqual({ deleted: true })
+      const exists = await service.isCached()
+      expect(exists).toBe(false)
+    })
+
+    it('deve retornar cache_not_found quando diretório não existe', async () => {
+      const result = await service.deleteCache()
+
+      expect(result).toEqual({ deleted: false, reason: 'cache_not_found' })
+    })
+  })
+
   describe('downloadAll', () => {
     it('deve baixar todas as imagens e salvar no cache', async () => {
       const urls = ['http://test.com/1.jpg', 'http://test.com/2.jpg']

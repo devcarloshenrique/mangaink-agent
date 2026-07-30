@@ -7,6 +7,7 @@ vi.mock('ioredis', () => {
     get: vi.fn(),
     eval: vi.fn(),
     quit: vi.fn(),
+    on: vi.fn(),
   }
   return {
     default: vi.fn(() => mockRedis),
