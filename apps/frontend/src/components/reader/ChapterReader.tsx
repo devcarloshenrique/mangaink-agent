@@ -67,7 +67,7 @@ export function ChapterReader({
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [saturation, setSaturation] = useState(100);
-  
+
   const [containToWidth, setContainToWidth] = useState(true);
   const [containToHeight, setContainToHeight] = useState(true);
   const [stretchSmallPages, setStretchSmallPages] = useState(false);
@@ -208,8 +208,6 @@ export function ChapterReader({
     }
   }, [zoomEnabled, isZoomed]);
 
-
-
   const handleCenterClick = useCallback(() => {
     if (!zoomEnabled) {
       toggleUI();
@@ -244,36 +242,42 @@ export function ChapterReader({
     });
   }, []);
 
-  const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Ignore clicks on the scrollbar
-    const target = e.target as HTMLElement;
-    const currentTarget = e.currentTarget;
-    if (e.clientX > currentTarget.getBoundingClientRect().left + currentTarget.clientWidth) {
-      return;
-    }
+  const handleContainerClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Ignore clicks on the scrollbar
+      const target = e.target as HTMLElement;
+      const currentTarget = e.currentTarget;
+      if (e.clientX > currentTarget.getBoundingClientRect().left + currentTarget.clientWidth) {
+        return;
+      }
 
-    const width = window.innerWidth;
-    const x = e.clientX;
-    const pct = x / width;
+      const width = window.innerWidth;
+      const x = e.clientX;
+      const pct = x / width;
 
-    if (pct < 0.3) {
-      handlePrevClick();
-    } else if (pct > 0.7) {
-      handleNextClick();
-    } else {
-      handleCenterClick();
-    }
-  }, [handlePrevClick, handleNextClick, handleCenterClick]);
+      if (pct < 0.3) {
+        handlePrevClick();
+      } else if (pct > 0.7) {
+        handleNextClick();
+      } else {
+        handleCenterClick();
+      }
+    },
+    [handlePrevClick, handleNextClick, handleCenterClick],
+  );
 
-  const handleContainerDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const width = window.innerWidth;
-    const x = e.clientX;
-    const pct = x / width;
+  const handleContainerDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const width = window.innerWidth;
+      const x = e.clientX;
+      const pct = x / width;
 
-    if (pct >= 0.3 && pct <= 0.7) {
-      handleDoubleClick();
-    }
-  }, [handleDoubleClick]);
+      if (pct >= 0.3 && pct <= 0.7) {
+        handleDoubleClick();
+      }
+    },
+    [handleDoubleClick],
+  );
 
   const imageStyle = useMemo(() => {
     const filters: string[] = [];
@@ -311,7 +315,7 @@ export function ChapterReader({
     if (isZoomed) {
       const scale = (val: string) =>
         val.replace(/(\d+)(%|dvh|px)/g, (_, p1, p2) => `${Number(p1) * zoomLevel}${p2}`);
-      
+
       if (w !== "auto") w = scale(w);
       if (h !== "auto") h = scale(h);
       if (mw !== "none") mw = scale(mw);
@@ -373,28 +377,34 @@ export function ChapterReader({
     setMaxHeightPixels(1200);
   }, []);
 
-  const handleHitboxMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!barRef.current) return;
-    const rect = barRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, x / rect.width));
-    setHoverPage(Math.round(pct * (effectiveTotal - 1)));
-    setHoverX(e.clientX);
-  }, [effectiveTotal]);
+  const handleHitboxMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!barRef.current) return;
+      const rect = barRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      setHoverPage(Math.round(pct * (effectiveTotal - 1)));
+      setHoverX(e.clientX);
+    },
+    [effectiveTotal],
+  );
 
   const handleHitboxMouseLeave = useCallback(() => {
     setHoverPage(null);
     setHoverX(null);
   }, []);
 
-  const handleHitboxClick = useCallback((e: React.MouseEvent) => {
-    if (!barRef.current) return;
-    const rect = barRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = x / rect.width;
-    const page = Math.round(pct * (effectiveTotal - 1));
-    updatePage(Math.max(0, Math.min(page, effectiveTotal - 1)));
-  }, [effectiveTotal, updatePage]);
+  const handleHitboxClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!barRef.current) return;
+      const rect = barRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = x / rect.width;
+      const page = Math.round(pct * (effectiveTotal - 1));
+      updatePage(Math.max(0, Math.min(page, effectiveTotal - 1)));
+    },
+    [effectiveTotal, updatePage],
+  );
 
   if (effectiveTotal === 0) {
     return (
@@ -431,8 +441,10 @@ export function ChapterReader({
         </div>
       )}
 
-      {showProgressBar && progressStyle === "segmented" && effectiveTotal > 0 && (
-        progressPosition === "bottom" ? (
+      {showProgressBar &&
+        progressStyle === "segmented" &&
+        effectiveTotal > 0 &&
+        (progressPosition === "bottom" ? (
           <div
             className="fixed bottom-0 left-0 right-0 z-20 h-[50px] cursor-pointer group"
             onMouseMove={handleHitboxMouseMove}
@@ -501,9 +513,7 @@ export function ChapterReader({
               </div>
             ))}
           </div>
-        )
-
-      )}
+        ))}
 
       {showProgressBar && progressStyle === "circular" && effectiveTotal > 1 && (
         <svg
@@ -528,7 +538,6 @@ export function ChapterReader({
             d="M18 3a15 15 0 1 1 0 30 15 15 0 1 1 0-30"
           />
         </svg>
-
       )}
 
       <div
@@ -571,21 +580,29 @@ export function ChapterReader({
           </p>
         )}
 
-
         <div
           data-testid="zone-prev"
           className="absolute inset-y-0 left-0 w-[30%] z-[1]"
-          onClick={(e) => { e.stopPropagation(); handlePrevClick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrevClick();
+          }}
         />
         <div
           data-testid="zone-toggle"
           className="absolute inset-y-0 left-[30%] w-[40%] z-[1]"
-          onClick={(e) => { e.stopPropagation(); handleCenterClick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCenterClick();
+          }}
         />
         <div
           data-testid="zone-next"
           className="absolute inset-y-0 right-0 w-[30%] z-[1]"
-          onClick={(e) => { e.stopPropagation(); handleNextClick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNextClick();
+          }}
         />
       </div>
 
@@ -627,7 +644,6 @@ export function ChapterReader({
           </span>
         </div>
       </div>
-
 
       <ReaderFloatingMenu
         showUI={showUI}

@@ -150,9 +150,7 @@ function MockProgressPage() {
     return { ...s, progress: value, status };
   });
 
-  const overall = Math.round(
-    stages.reduce((sum, s) => sum + s.progress, 0) / stages.length,
-  );
+  const overall = Math.round(stages.reduce((sum, s) => sum + s.progress, 0) / stages.length);
   const activeStage = stages.find((s) => s.status === "active");
   const completedCount = stages.filter((s) => s.status === "completed").length;
   const isDone = overall >= 100;

@@ -356,7 +356,8 @@ function ConverterPage() {
                 onClick={() => navigate({ to: "/biblioteca" })}
                 className="bg-comic-blue text-accent-foreground hover:bg-comic-blue border-[3px] border-ink shadow-comic font-display"
               >
-                <Zap className="h-4 w-4 mr-1.5" /> {downloadOnly ? "Ver na estante" : "Ver na biblioteca"}
+                <Zap className="h-4 w-4 mr-1.5" />{" "}
+                {downloadOnly ? "Ver na estante" : "Ver na biblioteca"}
               </Button>
             )}
 

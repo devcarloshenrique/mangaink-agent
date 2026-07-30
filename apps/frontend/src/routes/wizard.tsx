@@ -53,12 +53,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type {
-  ConversionField,
-  
-  FieldGroupId,
-  UserPresetResponse,
-} from "@/types/conversion";
+import type { ConversionField, FieldGroupId, UserPresetResponse } from "@/types/conversion";
 import { useUserPresets } from "@/hooks/useUserPresets";
 import { PresetSelector } from "@/components/wizard/PresetSelector";
 import { SavePresetDialog } from "@/components/wizard/SavePresetDialog";
@@ -1137,7 +1132,6 @@ function StepConvert({
       // evitando que valores do preset anterior se acumulem.
       update("fieldOptions", { ...preset.values });
 
-
       const changedKeys = Object.keys(preset.values);
       const sameAsBefore = changedKeys.every((k) => data.fieldOptions[k] === preset.values[k]);
       if (!sameAsBefore) {
@@ -1161,8 +1155,7 @@ function StepConvert({
   const handleFieldChange = useCallback(
     (id: string, value: string | number | boolean) => {
       const next = { ...data.fieldOptions, [id]: value };
-      const isTruthy =
-        typeof value === "boolean" ? value : value !== "" && value !== 0;
+      const isTruthy = typeof value === "boolean" ? value : value !== "" && value !== 0;
       if (isTruthy && FIELD_CONFLICTS[id]) {
         for (const conflictId of FIELD_CONFLICTS[id]) {
           delete next[conflictId];
@@ -1199,9 +1192,6 @@ function StepConvert({
       options?.presets.find((p) => p.id === currentPresetId) ??
       userPresets.find((p) => p.id === currentPresetId);
 
-
-
-
     if (currentPreset) {
       update("fieldOptions", { ...currentPreset.values });
       update("preset", currentPreset.id);
@@ -1211,7 +1201,6 @@ function StepConvert({
 
     update("fieldOptions", {});
   }, [options?.presets, userPresets, data.fieldOptions, data.preset, activePresetId, update]);
-
 
   const conflictDisabledFields = useMemo(() => {
     const disabled = new Set<string>();
@@ -1248,9 +1237,7 @@ function StepConvert({
   const selectedChapters =
     data.inspectData?.chapters.filter((c) => data.selectedChapters.has(c.id)) ?? [];
 
-
   const kindleLabel = options?.devices.find((d) => d.id === data.device)?.name ?? data.device ?? "";
-
 
   const presetOptions = options?.presets ?? [];
   const presetDisplayName = activePresetId
@@ -1334,7 +1321,6 @@ function StepConvert({
               </span>
             </div>
           </div>
-
 
           {/* 1. Arquivo & destino — o essencial primeiro */}
           <section className="border-[3px] border-ink rounded-lg bg-card overflow-hidden">
@@ -1565,10 +1551,8 @@ function StepConvert({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-
         </div>
       )}
-
 
       <SavePresetDialog
         open={savePresetOpen}

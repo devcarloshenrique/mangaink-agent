@@ -61,7 +61,10 @@ export function PresetSelector({
       >
         <DropdownMenuItem
           onSelect={onCustomMode}
-          className={cn("font-sans font-medium", !activePresetId && "bg-comic-yellow text-comic-ink font-bold")}
+          className={cn(
+            "font-sans font-medium",
+            !activePresetId && "bg-comic-yellow text-comic-ink font-bold",
+          )}
         >
           Personalizado
         </DropdownMenuItem>
@@ -106,7 +109,10 @@ export function PresetSelector({
                 "bg-comic-yellow text-comic-ink font-bold",
             )}
           >
-            <span className="flex-1 font-sans font-medium" onClick={() => onSelectPreset(preset.id, "user")}>
+            <span
+              className="flex-1 font-sans font-medium"
+              onClick={() => onSelectPreset(preset.id, "user")}
+            >
               {preset.name}
             </span>
             <span className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>

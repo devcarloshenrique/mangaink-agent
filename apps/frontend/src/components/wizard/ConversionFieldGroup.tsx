@@ -85,7 +85,6 @@ function RenderSubcategories({
             {idx > 0 && <Separator className="my-4 bg-ink/25" />}
             <p className="font-display text-xs font-bold text-muted-foreground mb-2">{sub.label}</p>
             <div className="[&>*]:rounded-md [&>*]:px-2.5 [&>*+*]:mt-1 [&>*:nth-child(odd)]:bg-muted/50 [&>*]:transition-colors">
-
               {subFields.map((f) => (
                 <ConversionFieldRenderer
                   key={f.id}

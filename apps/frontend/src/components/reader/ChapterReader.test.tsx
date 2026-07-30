@@ -201,9 +201,7 @@ describe("ChapterReader", () => {
     );
 
     const books = document.querySelectorAll("svg");
-    const bookOpen = Array.from(books).find(
-      (svg) => svg.getAttribute("stroke-width") === "1.25",
-    );
+    const bookOpen = Array.from(books).find((svg) => svg.getAttribute("stroke-width") === "1.25");
     expect(bookOpen).toBeTruthy();
   });
 

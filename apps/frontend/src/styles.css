@@ -52,7 +52,6 @@
   --color-reader-border: var(--reader-border);
   --color-reader-accent: var(--reader-accent);
 
-
   --font-display: "Bangers", "Impact", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
 
@@ -81,8 +80,6 @@
   --reader-muted: oklch(0.62 0.012 260);
   --reader-border: oklch(0.28 0.015 260);
   --reader-accent: var(--comic-yellow);
-
-
 
   --background: var(--comic-cream);
   --foreground: var(--comic-ink);
@@ -175,7 +172,6 @@
        o que fazia a top bar sticky sumir. */
     overflow: visible !important;
   }
-
 
   h1,
   h2,

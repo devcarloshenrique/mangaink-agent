@@ -54,7 +54,6 @@ function FieldInfo({ field }: { field: ConversionField }) {
       ?
     </button>
   );
-
 }
 
 function FieldInfoNote({ field, open }: { field: ConversionField; open: boolean }) {

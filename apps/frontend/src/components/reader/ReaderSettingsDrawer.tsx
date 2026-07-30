@@ -73,7 +73,6 @@ function SectionTitle({ children }: { children: string }) {
     <h3 className="text-[11px] font-medium text-reader-muted uppercase tracking-[0.18em] mb-3">
       {children}
     </h3>
-
   );
 }
 
@@ -142,7 +141,6 @@ export function ReaderSettingsDrawer({
           <SheetTitle className="text-sm font-medium uppercase tracking-[0.18em] text-reader-muted">
             Configurações
           </SheetTitle>
-
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-65px)]">
           <div className="px-5 py-4 space-y-0">
@@ -156,26 +154,39 @@ export function ReaderSettingsDrawer({
               >
                 <div className="flex items-center gap-2 py-1.5">
                   <RadioGroupItem className={readerRadio} value="horizontal" id="mode-h" />
-                  <Label htmlFor="mode-h" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <Label
+                    htmlFor="mode-h"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Horizontal
                   </Label>
                 </div>
                 <div className="flex items-center gap-2 py-1.5 opacity-40">
                   <RadioGroupItem className={readerRadio} value="vertical" id="mode-v" disabled />
-                  <Label htmlFor="mode-v" className="text-sm text-reader-muted/70 cursor-not-allowed">
+                  <Label
+                    htmlFor="mode-v"
+                    className="text-sm text-reader-muted/70 cursor-not-allowed"
+                  >
                     Vertical
                   </Label>
                 </div>
                 <div className="flex items-center gap-2 py-1.5 opacity-40">
                   <RadioGroupItem className={readerRadio} value="scroll" id="mode-s" disabled />
-                  <Label htmlFor="mode-s" className="text-sm text-reader-muted/70 cursor-not-allowed">
+                  <Label
+                    htmlFor="mode-s"
+                    className="text-sm text-reader-muted/70 cursor-not-allowed"
+                  >
                     Scroll infinito
                   </Label>
                 </div>
               </RadioGroup>
               <div className="mt-4">
                 <SettingRow label="Mostrar barra de rolagem">
-                  <Switch className={readerSwitch} checked={showScrollbar} onCheckedChange={onShowScrollbarChange} />
+                  <Switch
+                    className={readerSwitch}
+                    checked={showScrollbar}
+                    onCheckedChange={onShowScrollbarChange}
+                  />
                 </SettingRow>
               </div>
             </section>
@@ -186,7 +197,11 @@ export function ReaderSettingsDrawer({
             <section className="py-4">
               <SectionTitle>Controles de Zoom</SectionTitle>
               <SettingRow label="Duplo clique para zoom">
-                <Switch className={readerSwitch} checked={zoomEnabled} onCheckedChange={onZoomEnabledChange} />
+                <Switch
+                  className={readerSwitch}
+                  checked={zoomEnabled}
+                  onCheckedChange={onZoomEnabledChange}
+                />
               </SettingRow>
               <div className="mt-3">
                 <p className="text-xs text-reader-muted/80 mb-2">Nível de zoom</p>
@@ -214,7 +229,6 @@ export function ReaderSettingsDrawer({
                   </button>
                 </div>
               </div>
-
             </section>
 
             <Separator className="bg-reader-border" />
@@ -223,7 +237,11 @@ export function ReaderSettingsDrawer({
             <section className="py-4">
               <SectionTitle>Barra de Progresso</SectionTitle>
               <SettingRow label="Mostrar barra">
-                <Switch className={readerSwitch} checked={showProgress} onCheckedChange={onShowProgressChange} />
+                <Switch
+                  className={readerSwitch}
+                  checked={showProgress}
+                  onCheckedChange={onShowProgressChange}
+                />
               </SettingRow>
               <div className="mt-2">
                 <p className="text-xs text-reader-muted/80 mb-2">Posição</p>
@@ -254,7 +272,10 @@ export function ReaderSettingsDrawer({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <RadioGroupItem className={readerRadio} value="bottom" id="pos-bottom" />
-                    <Label htmlFor="pos-bottom" className="text-xs text-reader-muted cursor-pointer">
+                    <Label
+                      htmlFor="pos-bottom"
+                      className="text-xs text-reader-muted cursor-pointer"
+                    >
                       Inferior
                     </Label>
                   </div>
@@ -275,7 +296,10 @@ export function ReaderSettingsDrawer({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <RadioGroupItem className={readerRadio} value="circular" id="style-circ" />
-                    <Label htmlFor="style-circ" className="text-xs text-reader-muted cursor-pointer">
+                    <Label
+                      htmlFor="style-circ"
+                      className="text-xs text-reader-muted cursor-pointer"
+                    >
                       Circular
                     </Label>
                   </div>
@@ -292,33 +316,42 @@ export function ReaderSettingsDrawer({
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     className={readerCheckbox}
-                    id="contain-width" 
-                    checked={containToWidth} 
-                    onCheckedChange={(c) => onContainToWidthChange(c === true)} 
+                    id="contain-width"
+                    checked={containToWidth}
+                    onCheckedChange={(c) => onContainToWidthChange(c === true)}
                   />
-                  <label htmlFor="contain-width" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <label
+                    htmlFor="contain-width"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Conter na largura
                   </label>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     className={readerCheckbox}
-                    id="contain-height" 
-                    checked={containToHeight} 
-                    onCheckedChange={(c) => onContainToHeightChange(c === true)} 
+                    id="contain-height"
+                    checked={containToHeight}
+                    onCheckedChange={(c) => onContainToHeightChange(c === true)}
                   />
-                  <label htmlFor="contain-height" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <label
+                    htmlFor="contain-height"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Conter na altura
                   </label>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     className={readerCheckbox}
-                    id="stretch-small" 
-                    checked={stretchSmallPages} 
-                    onCheckedChange={(c) => onStretchSmallPagesChange(c === true)} 
+                    id="stretch-small"
+                    checked={stretchSmallPages}
+                    onCheckedChange={(c) => onStretchSmallPagesChange(c === true)}
                   />
-                  <label htmlFor="stretch-small" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <label
+                    htmlFor="stretch-small"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Esticar páginas pequenas
                   </label>
                 </div>
@@ -328,17 +361,22 @@ export function ReaderSettingsDrawer({
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     className={readerCheckbox}
-                    id="limit-max-width" 
-                    checked={limitMaxWidth} 
-                    onCheckedChange={(c) => onLimitMaxWidthChange(c === true)} 
+                    id="limit-max-width"
+                    checked={limitMaxWidth}
+                    onCheckedChange={(c) => onLimitMaxWidthChange(c === true)}
                   />
-                  <label htmlFor="limit-max-width" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <label
+                    htmlFor="limit-max-width"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Limitar largura máxima
                   </label>
                 </div>
                 {limitMaxWidth && (
                   <div className="pl-7 pt-1 pb-2">
-                    <p className="text-xs text-reader-muted/80 mb-2">Largura máxima ({maxWidthPixels}px)</p>
+                    <p className="text-xs text-reader-muted/80 mb-2">
+                      Largura máxima ({maxWidthPixels}px)
+                    </p>
                     <div className="flex items-center justify-center gap-2">
                       <Button
                         variant="outline"
@@ -373,23 +411,30 @@ export function ReaderSettingsDrawer({
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     className={readerCheckbox}
-                    id="limit-max-height" 
-                    checked={limitMaxHeight} 
-                    onCheckedChange={(c) => onLimitMaxHeightChange(c === true)} 
+                    id="limit-max-height"
+                    checked={limitMaxHeight}
+                    onCheckedChange={(c) => onLimitMaxHeightChange(c === true)}
                   />
-                  <label htmlFor="limit-max-height" className="text-sm text-reader-foreground/80 cursor-pointer">
+                  <label
+                    htmlFor="limit-max-height"
+                    className="text-sm text-reader-foreground/80 cursor-pointer"
+                  >
                     Limitar altura máxima
                   </label>
                 </div>
                 {limitMaxHeight && (
                   <div className="pl-7 pt-1 pb-2">
-                    <p className="text-xs text-reader-muted/80 mb-2">Altura máxima ({maxHeightPixels}px)</p>
+                    <p className="text-xs text-reader-muted/80 mb-2">
+                      Altura máxima ({maxHeightPixels}px)
+                    </p>
                     <div className="flex items-center justify-center gap-2">
                       <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 border-reader-border text-reader-muted hover:text-reader-foreground hover:border-reader-muted shrink-0"
-                        onClick={() => onMaxHeightPixelsChange(Math.max(200, maxHeightPixels - 100))}
+                        onClick={() =>
+                          onMaxHeightPixelsChange(Math.max(200, maxHeightPixels - 100))
+                        }
                         disabled={maxHeightPixels <= 200}
                       >
                         <Minus className="w-4 h-4" />
@@ -406,7 +451,9 @@ export function ReaderSettingsDrawer({
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 border-reader-border text-reader-muted hover:text-reader-foreground hover:border-reader-muted shrink-0"
-                        onClick={() => onMaxHeightPixelsChange(Math.min(4000, maxHeightPixels + 100))}
+                        onClick={() =>
+                          onMaxHeightPixelsChange(Math.min(4000, maxHeightPixels + 100))
+                        }
                         disabled={maxHeightPixels >= 4000}
                       >
                         <Plus className="w-4 h-4" />
@@ -436,10 +483,18 @@ export function ReaderSettingsDrawer({
               </div>
 
               <SettingRow label="Sépia">
-                <Switch className={readerSwitch} checked={filterSepia} onCheckedChange={onFilterSepiaChange} />
+                <Switch
+                  className={readerSwitch}
+                  checked={filterSepia}
+                  onCheckedChange={onFilterSepiaChange}
+                />
               </SettingRow>
               <SettingRow label="Preto e Branco">
-                <Switch className={readerSwitch} checked={filterBW} onCheckedChange={onFilterBWChange} />
+                <Switch
+                  className={readerSwitch}
+                  checked={filterBW}
+                  onCheckedChange={onFilterBWChange}
+                />
               </SettingRow>
 
               <div className="mt-4 space-y-4">
