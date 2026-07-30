@@ -2,11 +2,13 @@ import type { SourceCacheRepository } from '../../../modules/scraping/repositori
 import type { ConversionRepository } from '../../../modules/conversion/repositories/conversion.repository'
 import type { ConversionJobRepository } from '../../../modules/conversion/repositories/conversion-job.repository'
 import type { IUserPresetRepository } from '../../../modules/conversion/repositories/user-preset.repository'
+import type { UserChapterProgressRepository } from '../../../modules/reading/repositories/user-chapter-progress.repository'
 
 import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
 import { PrismaConversionRepository } from '../../../modules/conversion/repositories/prisma-conversion.repository'
 import { PrismaJobRepository } from '../../../modules/conversion/repositories/prisma-job.repository'
 import { PrismaUserPresetRepository } from '../../../modules/conversion/repositories/prisma-user-preset.repository'
+import { PrismaUserChapterProgressRepository } from '../../../modules/reading/repositories/prisma-user-chapter-progress.repository'
 
 export function getSourceRepository(): SourceCacheRepository {
   return new PrismaSourceRepository()
@@ -22,4 +24,8 @@ export function getConversionJobRepository(): ConversionJobRepository {
 
 export function getUserPresetRepository(): IUserPresetRepository {
   return new PrismaUserPresetRepository()
+}
+
+export function getUserChapterProgressRepository(): UserChapterProgressRepository {
+  return new PrismaUserChapterProgressRepository()
 }

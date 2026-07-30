@@ -17,9 +17,11 @@ import { scrapingRoutes } from '../modules/scraping/scraping.routes'
 import { conversionRoutes } from '../modules/conversion/conversion.routes'
 import { mobiPreviewRoutes } from '../modules/conversion/mobi-preview.routes'
 import { chapterRoutes } from '../modules/scraping/chapter.routes'
+import { readingRoutes } from '../modules/reading/reading.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
+import { SourceNotFoundError, ProviderNotFoundError } from '../modules/scraping/errors/scraping.errors'
 import '../modules/scraping/workers/inspect-source.worker'
 import '../modules/conversion/workers/conversion-job.worker'
 import '../modules/conversion/workers/download-only.worker'
@@ -66,7 +68,9 @@ export async function createServer() {
         { name: 'Health', description: 'Verificação do estado da API' },
         { name: 'Auth', description: 'Endpoints de autenticação' },
         { name: 'Scraping', description: 'Inspeção de fontes e scraping de obras' },
+        { name: 'Chapters', description: 'Download e cache de imagens de capítulos' },
         { name: 'Conversion', description: 'Conversão de obras para formatos e-reader' },
+        { name: 'Reading', description: 'Tracking de progresso de leitura' },
       ],
       components: {
         securitySchemes: {
@@ -148,6 +152,8 @@ export async function createServer() {
       readyPages: error.readyCount,
       totalPages: error.totalCount,
     })
+    if (error instanceof SourceNotFoundError) return reply.code(404).send({ error: error.message })
+    if (error instanceof ProviderNotFoundError) return reply.code(404).send({ error: error.message })
     if (error instanceof ChapterNotFoundError) return reply.code(404).send({ error: error.message })
     if (error instanceof PageNotFoundError) return reply.code(404).send({ error: error.message })
     if (error instanceof InvalidPageIndexError) return reply.code(400).send({ error: error.message })
@@ -169,6 +175,7 @@ export async function createServer() {
   await app.register(conversionRoutes)
   await app.register(mobiPreviewRoutes)
   await app.register(chapterRoutes)
+  await app.register(readingRoutes)
 
   // Inicia o worker BullMQ de extracao de preview MOBI (substrato do reader)
   if (env.NODE_ENV !== 'test') {
