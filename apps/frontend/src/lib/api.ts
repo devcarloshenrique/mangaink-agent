@@ -23,6 +23,13 @@ import type {
 } from "@/types/conversion";
 import type { SSEJournalEvent } from "@/types/conversion";
 import type { ChapterDownloadStatus, ChapterDownloadResponse } from "@/types/chapter-reader";
+import type {
+  ReadingProgress,
+  MarkReadResponse,
+  UnmarkReadResponse,
+  BatchMarkReadInput,
+  BatchMarkReadResponse,
+} from "@/types/reading";
 import { createSSEStream } from "@/lib/sse";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -341,5 +348,46 @@ export const chaptersApi = {
   /** URL da página (imagem) — endpoint público, sem auth */
   pageUrl(sourceId: string, chapterId: string, index: number): string {
     return `/api/sources/${sourceId}/chapters/${chapterId}/images/${index}`;
+  },
+
+  /** DELETE /api/sources/:sourceId/chapters/:chapterId/cache */
+  async deleteCache(
+    sourceId: string,
+    chapterId: string,
+  ): Promise<{ deleted: boolean; reason?: string }> {
+    return request(`/api/sources/${sourceId}/chapters/${chapterId}/cache`, {
+      method: "DELETE",
+    });
+  },
+};
+
+// ─── Reading API ────────────────────────────────────────────────────────────────
+
+export const readingApi = {
+  /** POST /api/reading/:sourceId/chapters/:chapterId — marca capítulo como lido */
+  async markRead(sourceId: string, chapterId: string): Promise<MarkReadResponse> {
+    return request<MarkReadResponse>(`/api/reading/${sourceId}/chapters/${chapterId}`, {
+      method: "POST",
+    });
+  },
+
+  /** DELETE /api/reading/:sourceId/chapters/:chapterId — desmarca capítulo */
+  async unmarkRead(sourceId: string, chapterId: string): Promise<UnmarkReadResponse> {
+    return request<UnmarkReadResponse>(`/api/reading/${sourceId}/chapters/${chapterId}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** GET /api/reading/:sourceId — lista progresso de leitura */
+  async getProgress(sourceId: string): Promise<ReadingProgress> {
+    return request<ReadingProgress>(`/api/reading/${sourceId}`);
+  },
+
+  /** PUT /api/reading/:sourceId/batch — marca/desmarca em lote */
+  async batchMarkRead(sourceId: string, body: BatchMarkReadInput): Promise<BatchMarkReadResponse> {
+    return request<BatchMarkReadResponse>(`/api/reading/${sourceId}/batch`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
   },
 };

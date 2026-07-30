@@ -15,6 +15,7 @@ export interface Chapter {
   pages: number | null;
   volume: number | null;
   isDownloaded: boolean;
+  isRead: boolean;
 }
 
 export interface Cover {
