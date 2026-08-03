@@ -1,3 +1,4 @@
+import { shutdownTracing } from './tracing'
 import { env } from './shared/config/env'
 import { createServer } from './shared/server'
 import { closeAllRedisConnections } from './shared/redis/safe-redis'
@@ -14,6 +15,8 @@ async function start() {
   // ── Graceful Shutdown ──────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     console.log(`\n[Shutdown] Recebido ${signal}, fechando conexões…`)
+
+    await shutdownTracing()
 
     try {
       await app.close()

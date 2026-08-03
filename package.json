@@ -19,7 +19,10 @@
     "kcc:build": "docker build -f docker/Dockerfile.kcc -t mangaink-kcc:10.3.0 .",
     "mobi:build": "docker build -f docker/Dockerfile.mobiunpack -t mangaink-unpack:0.4.1 .",
     "docker:up": "docker compose -f apps/backend/docker-compose.yml up -d",
-    "docker:down": "docker compose -f apps/backend/docker-compose.yml down"
+    "docker:down": "docker compose -f apps/backend/docker-compose.yml down",
+    "monitoring:up": "docker compose -f docker/monitoring/docker-compose.yml up -d",
+    "monitoring:down": "docker compose -f docker/monitoring/docker-compose.yml down",
+    "monitoring:logs": "docker compose -f docker/monitoring/docker-compose.yml logs -f"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"
