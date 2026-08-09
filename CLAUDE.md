@@ -6,7 +6,9 @@ Este arquivo fornece orientações ao Claude Code ao trabalhar com este reposit�
 
 Aplicação web self-hosted que converte mangás de fontes online em formatos compatíveis com Kindle (EPUB, MOBI, CBZ) e os envia ao dispositivo Kindle. A UI está em **Português Brasileiro** com design temático de quadrinhos pop-art.
 
-> **Dependência de infraestrutura:** O KCC é executado em um container Docker dedicado. Antes da primeira conversão, instale o Docker e construa a imagem: `pnpm kcc:build`. Para o preview de MOBI no navegador (extração de paginas), construa também: `pnpm mobi:build`. Formato KFX foi removido (requer Kindle Previewer, fora de escopo).
+> **Dependência de infraestrutura (stack web/self-hosted):** O KCC é executado em um container Docker dedicado. Antes da primeira conversão, instale o Docker e construa a imagem: `pnpm kcc:build`. Para o preview de MOBI no navegador (extração de paginas), construa também: `pnpm mobi:build`. Formato KFX foi removido (requer Kindle Previewer, fora de escopo). O app desktop **não** usa essas dependências — o runtime completo (PostgreSQL, Python + KCC + kindlegen, extract_mobi) é embutido via `pnpm desktop:prepare:runtime`.
+
+> **App desktop (`apps/desktop`):** Windows-only no 1º lançamento. Autossuficiente: no app empacotado o runtime completo vem embutido (PostgreSQL portable, Python 3.11 + KCC + kindlegen + extract_mobi), sem Docker/Redis/Postgres/Node no host. O backend é spawnado pelo processo main (Electron) com env controlado e settings persistidas em `%APPDATA%/MangaInk Agent/settings.json` (porta, `JWT_SECRET` gerado). Em dev, `pnpm desktop:dev:embedded` roda com `MI_EMBEDDED_MODE=1` e o runtime embutido (requer `pnpm desktop:prepare:runtime` + backend compilado via `pnpm build:backend`); `MI_EMBEDDED_MODE=0` força infra do host (debug). Sem runtime, o app exibe as telas de status `postgres_failed`/`migration_failed`/`backend_failed`.
 
 ---
 
@@ -70,6 +72,19 @@ mangaink-agent/
 │   │   │   └── conversions/      (convId/ → config.json + status.json + logs/ + jobs/)
 │   │   ├── package.json          (@mangaink/backend)
 │   │   └── tsconfig.json
+│   │
+│   ├── desktop/                  ← App desktop Electron (Windows-only, shell)
+│   │   ├── src/
+│   │   │   ├── main/             (index.ts, backend-manager.ts, app-protocol.ts, settings-store.ts, status-screen.ts + status-screen/index.html, postgres-manager.ts, embedded-mode.ts)
+│   │   │   ├── preload/          (index.ts, desktop-api.ts — window.desktop via contextBridge)
+│   │   │   └── tests/            (settings-store, backend-manager, app-protocol, status-screen, postgres-manager, embedded-mode, preload + e2e/smoke)
+│   │   ├── scripts/              (prepare-backend.mjs, prepare-frontend.mjs, prepare-runtime.mjs, runtime-manifest.json, patch_mobi_cover_runtime.py, generate-icon.mjs, after-pack.mjs, run-e2e.mjs)
+│   │   ├── electron-builder.yml  (appId com.mangaink.desktop, NSIS + portable x64)
+│   │   ├── build/icon.ico        (ícone pop-art gerado)
+│   │   ├── resources/            (backend/ + frontend/ + runtime/ — gerados via prepare, gitignored)
+│   │   ├── electron.vite.config.ts
+│   │   ├── vitest.config.ts
+│   │   └── package.json          (@mangaink/desktop)
 │   │
 │   └── shared/                   ← Pacote compartilhado para schemas e tipos
 │       ├── src/
@@ -146,6 +161,12 @@ pnpm dev:backend   # Backend em http://localhost:3333
 pnpm dev:full      # Frontend + Backend simultaneamente
 pnpm build         # Build de produção do frontend
 pnpm build:backend # Build de produção do backend
+pnpm desktop:dev   # Frontend Vite + Electron em dev (janela desktop com backend spawnado)
+pnpm desktop:dev:embedded # Igual ao desktop:dev, mas roda em modo embedded — Postgres/KCC/kindlegen embutidos, SEM Docker/Redis (requer pnpm desktop:prepare:runtime + backend compilado via pnpm build:backend)
+pnpm desktop:build # Build do desktop (electron-vite: main + preload)
+pnpm desktop:prepare:backend # Prepara o bundle backend embutido (build + pnpm deploy → resources/backend)
+pnpm desktop:prepare:runtime # Baixa/valida SHA256/extrai Postgres+Python+KCC+kindlegen em apps/desktop/resources/runtime/ (gitignored)
+pnpm desktop:dist   # Cadeia completa: frontend build → prepare backend → empacota NSIS + portable (apps/desktop/dist)
 pnpm lint          # ESLint em todos os pacotes
 pnpm format        # Prettier em todos os pacotes
 pnpm test          # Testes do backend (Vitest)
@@ -178,6 +199,18 @@ pnpm test:watch    # vitest (modo watch)
 pnpm db:migrate    # prisma migrate dev
 pnpm db:push       # prisma db push
 pnpm db:studio     # prisma studio
+```
+
+### Dentro de `apps/desktop`
+
+```bash
+pnpm dev           # electron-vite dev (janela com backend spawnado)
+pnpm build         # electron-vite build (main + preload → out/)
+pnpm test          # vitest run (unitários)
+pnpm test:e2e      # smoke Playwright Electron (requer pnpm desktop:dist antes; MI_SMOKE_FULL=1 opcional com Docker)
+pnpm icon          # gera build/icon.ico (PNG pop-art → ICO)
+pnpm prepare:runtime # Prepara o runtime embutido (download + SHA256 + extração → resources/runtime)
+pnpm dist          # prepare frontend + electron-vite build + electron-builder (NSIS + portable)
 ```
 
 ---
@@ -273,7 +306,9 @@ Leitura de volumes `.mobi` no navegador via extração assincrona de paginas em 
 | `PORT`         | Porta do servidor Fastify          | `3333`                    |
 | `JWT_SECRET`   | Chave secreta JWT                  | (obrigatório)             |
 | `DATABASE_URL` | URL de conexão PostgreSQL          | (obrigatório)             |
-| `REDIS_URL`    | URL de conexão Redis               | `redis://localhost:6379`  |
+| `MI_EMBEDDED_MODE` | Modo embedded do backend (infra in-process, sem Redis/Docker/BullMQ). `1`/`true` ativa | `false` |
+| `MI_EMBEDDED_RUNTIME_PATH` | Raiz do runtime embutido (Postgres/Python/KCC/kindlegen/extract_mobi). O desktop injeta automaticamente no backend spawnado (`{resources}/runtime` no packaged, `apps/desktop/resources/runtime` em dev) | (opcional) |
+| `REDIS_URL`    | URL de conexão Redis (ignorado em `MI_EMBEDDED_MODE=1`) | `redis://localhost:6379`  |
 | `STORAGE_PATH` | Diretório raiz para cache local    | `./storage`               |
 | `KCC_DOCKER_IMAGE` | Imagem Docker do KCC (executada via `docker run`) | `mangaink-kcc:10.3.0` |
 | `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
@@ -326,8 +361,9 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 - `src/shared/config/env.ts` — parse e validação das env vars (Zod) — inclui `REDIS_URL`, `STORAGE_PATH`
 - `src/shared/database/repositories/index.ts` — composer de repositórios: factories `getSourceRepository()`, `getConversionRepository()`, `getConversionJobRepository()` que instanciam diretamente os adapters Prisma (Postgres é o único backend de persistência)
 - `src/shared/http/http-client.ts` — cliente HTTP com axios + retry automático e backoff exponencial
-- `src/shared/redis/redis.ts` — singleton Redis (ioredis) para locks e Pub/Sub
-- `src/shared/redis/bullmq.ts` — factory de filas BullMQ com configurações padrão
+- `src/shared/infra/` — contratos de infraestrutura desacoplados de Redis/BullMQ: `IQueueService`, `IPubSub`, `IJournalStore`, `IStatusStore`, `ILockService` (re-export em `index.ts`). Implementações em `redis/` (adapters BullMQ/ioredis — modo web) e `inmemory/` (fila in-process + EventEmitter + Map com TTL — modo embedded). `factory.ts` expõe `createRuntimeAdapters()` (seleciona por `env.MI_EMBEDDED_MODE`) e `queue-worker.ts` expõe `startQueueWorker()` (abstrai Worker BullMQ vs fila in-memory)
+- `src/shared/redis/redis.ts` — singleton Redis (ioredis) para locks e Pub/Sub — **modo web apenas**
+- `src/shared/redis/bullmq.ts` — factory de filas BullMQ com configurações padrão — **modo web apenas**
 - `src/shared/middlewares/verify-jwt.ts` — middleware de autenticação JWT
 - `src/shared/utils/filesystem.ts` — utilitários de I/O: `mkdirp()`, `writeJson()`, `readJson()`, `pathExists()`
 - `src/shared/utils/hash.ts` — `sha256()` para geração de IDs determinísticos
@@ -383,8 +419,8 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `mobi-preview.routes.ts` — 3 endpoints do preview MOBI: POST /preview (idempotente), GET /preview (status), GET /preview/pages/:index (stream)
   - `controllers/` — `conversion-options.controller.ts`, `create-conversion.controller.ts`, `get-conversion.controller.ts`, `conversion-events.controller.ts`, `cancel-conversion.controller.ts`, `mobi-preview.controller.ts` (start/status/page do preview MOBI)
   - `use-cases/` — `create-conversion.use-case.ts` (Planner: validação, herança de capa, geração de Jobs), `get-conversion.use-case.ts`, `get-conversion-options.use-case.ts`, `cancel-conversion.use-case.ts`, `mobi-preview.use-case.ts` (StartMobiPreviewUseCase, GetMobiPreviewStatusUseCase, GetMobiPreviewPageUseCase + interface `MobiPreviewQueue`)
-  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (spawn do KCC via `docker run mangaink-kcc:10.3.0` — bind mounts `/input:ro` e `/output`, paths do container nas flags KCC; `--user` aplicado apenas em Linux), `mobi-preview.service.ts` (resolução paths /temp/<file-base>/, TTL `MOBI_PREVIEW_TTL_SEC` por mtime do index.json, leitura/contagem de paginas), `mobi-unpack-runner.service.ts` (spawn `docker run mangaink-unpack:0.4.1` — bind mounts `/input.mobi:ro` e `/output`, poll images/ a cada 250ms chamando onTick), `mobi-preview-queue.service.ts` (fila BullMQ `mobi-preview`)
-  - `repositories/` — `conversion.repository.ts` + `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
+  - `services/` — `conversion-queue.service.ts` (BullMQ), `conversion-pubsub.service.ts` (Pub/Sub com `subscribeMany()`, `rpush`, `lrange`, `incr`), `conversion-events.service.ts` (bridge Redis → SSE fan-in com replay de eventos via journal), `image-downloader.service.ts` (download via `provider.downloadImage()` com validação de magic bytes — concorrência controlada pelo Bottleneck do provider), `placeholder.service.ts` (geração de PNG placeholder via sharp), `kcc-runner.service.ts` (impl docker: spawn do KCC via `docker run mangaink-kcc:10.3.0` — bind mounts `/input:ro` e `/output`, paths do container nas flags KCC; `--user` aplicado apenas em Linux), `kcc-runner-embedded.service.ts` (impl embedded: spawn `python.exe <runtime>/kcc/kcc-c2e.py` com `PYTHONPATH=<runtime>/kcc` e `<runtime>/kindlegen` no PATH do child — sem Docker), `kcc-runner.factory.ts` (`createKccRunner()` seleciona por `MI_EMBEDDED_MODE`, paths via `MI_EMBEDDED_RUNTIME_PATH`), `mobi-preview.service.ts` (resolução paths /temp/<file-base>/, TTL `MOBI_PREVIEW_TTL_SEC` por mtime do index.json, leitura/contagem de paginas), `mobi-unpack-runner.service.ts` (impl docker: spawn `docker run mangaink-unpack:0.4.1` — bind mounts `/input.mobi:ro` e `/output`, poll images/ a cada 250ms chamando onTick), `mobi-unpack-runner-embedded.service.ts` (impl embedded: spawn `python.exe <runtime>/extract_mobi.py` — sem Docker), `mobi-unpack-runner.factory.ts` (`createMobiUnpackRunner()` seleciona por `MI_EMBEDDED_MODE`), `mobi-preview-queue.service.ts` (fila BullMQ `mobi-preview`)
+  - `repositories/` — `conversion.repository.ts` (interface), `prisma-conversion.repository.ts` (impl Prisma com `syncStatus()` — em modo embedded consome o status store do runtime via `JobLiveStatusStore`, a MESMA instância `IStatusStore` compartilhada com workers e cancelamento), `filesystem-conversion.repository.ts` (com `syncStatus()`), `conversion-job.repository.ts` + `filesystem-job.repository.ts` (com `withConversion()` scoping)
   - `workers/` — `conversion-job.worker.ts` (BullMQ: download → hard links → ComicInfo.xml → cover → KCC → packaging), `mobi-preview.worker.ts` (BullMQ: clearTemp → status extracting → runner.run + onTick → ready/failed; `processMobiPreviewJob` isolado para testes; `startMobiPreviewWorker` instancia o Worker com deps de produção)
   - `config/` — `devices.ts`, `formats.ts`, `fields.ts`, `presets.ts`, `kcc-flag-mapper.ts` (mapeia opções semânticas → flags CLI do KCC)
   - `types/` — `conversion.types.ts` (ConversionConfig, Book, JobMetadata, ConversionJobSummary, etc.), `mobi-preview.types.ts` (MobiPreviewLiveStatus, MobiPreviewIndex, MobiPreviewPage, …)
@@ -408,6 +444,46 @@ Cada módulo segue uma **arquitetura em camadas**:
   - Metadados de placeholders são persistidos em `images.json` no diretório de cache do capítulo para reportar páginas faltantes mesmo em cache hits.
   - Progresso de conversão persiste entre navegações: ao re-navegar, `processedChapters` é computado a partir dos jobs completed via GET + SSE journal replay.
   - Preview MOBI no navegador: cache em `/temp/<file-base>/` ao lado do MOBI, TTL por `MOBI_PREVIEW_TTL_SEC` (24h) medido pelo mtime do `index.json`. Extracao roda em container dedicado `mangaink-unpack`. `PREVIEW_NOT_READY` → HTTP 425 com `{ readyPages, totalPages }` para o cliente refazer o fetch. Plan-first: o script Python escreve `index.json` antes das imagens para o Node worker anunciar totalPages cedo (primeira página disponível já libera o frontend).
+
+### Desktop (Electron)
+
+- `src/main/index.ts` — janela (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`), single-instance, boot do backend e lifecycle
+- `src/main/embedded-mode.ts` — `resolveEmbeddedMode()`: modo embedded por padrão no app empacotado; `MI_EMBEDDED_MODE=0` força infra do host (debug). Em dev, `pnpm desktop:dev:embedded` roda com `MI_EMBEDDED_MODE=1` + `desktop:prepare:runtime` habilita embedded.
+- `src/main/postgres-manager.ts` — PostgreSQL portable do runtime: `initdb` condicional (1ª execução), `pg_ctl` start/stop com porta livre, `createdb` garantido, `psql` readiness poll
+- `src/main/backend-manager.ts` — spawn/env/health/kill do backend compilado; estados `idle | starting | postgres_failed | migration_failed | backend_failed | ready` (embedded) e `prereq_failed` (infra do host). No packaged, backend e migrations são spawnados via `process.execPath` + `ELECTRON_RUN_AS_NODE=1` (sem Node no host); em dev, `node` do PATH. No modo embedded injeta `MI_EMBEDDED_RUNTIME_PATH` no env do backend (dep `runtimePath` — resolvida pelo main)
+- `src/main/app-protocol.ts` — proxy `app://`: `/api|/auth|/users/*` → backend via `net.fetch`; estáticos → `resources/frontend/`
+- `src/main/settings-store.ts` — `settings.json` em `%APPDATA%/MangaInk Agent/` (porta, jwtSecret; `databaseUrl`/`redisUrl` ignorados no modo embedded, `managedPostgresPort` persistido)
+- `src/preload/` — expõe `window.desktop` (getStatus/retry/openLogs/openExternal/getVersion) via `contextBridge`
+- `resources/runtime/` — runtime embutido (PostgreSQL portable + Python 3.11 + KCC + kindlegen + extract_mobi), materializado por `pnpm desktop:prepare:runtime` (download + SHA256 + extração; gitignored)
+- Backend embedded: env controlado (JWT_SECRET gerado, `OTEL_SDK_DISABLED=true`, `MI_DESKTOP_MANAGED=1`, `MI_EMBEDDED_MODE=1` + `MI_EMBEDDED_RUNTIME_PATH` no modo embedded); `desktop:dist` materializa `node_modules` no pacote via `after-pack.mjs`
+
+---
+
+## Armazenamento de arquivos
+
+Os arquivos baixados (cache de scraping) e gerados (saída da conversão, logs e preview MOBI) vivem sob a raiz definida por `STORAGE_PATH`. Na stack web self-hosted a raiz default é `apps/backend/storage` (`./storage`); no app desktop (modo embedded e portable) ela é `%APPDATA%/MangaInk Agent/storage`, definida pelo main do Electron (`storagePath: join(app.getPath('userData'), 'storage')` com `userData = %APPDATA%/MangaInk Agent`).
+
+```
+<raiz STORAGE_PATH>/
+├── sources/{sourceId}/           cache de scraping
+│   ├── metadata.json             metadados da obra (inspect)
+│   ├── covers/                   capas baixadas
+│   └── chapters/{chapterId}/     imagens baixadas por capítulo
+├── conversions/{conversionId}/   saída de conversão
+│   ├── config.json               config da conversão (userId, options, books)
+│   ├── status.json               status agregado persistido
+│   ├── logs/conversion.log       log da conversão
+│   └── jobs/{jobId}/
+│       └── output/{título}.{ext} arquivo final (EPUB/MOBI/CBZ)
+└── temp/{file-base}/             cache de preview MOBI no navegador (TTL `MOBI_PREVIEW_TTL_SEC`, default 24h)
+```
+
+No desktop, `temp/` também vive dentro de `%APPDATA%/MangaInk Agent/storage/`. Além do storage, `%APPDATA%/MangaInk Agent/` contém:
+
+- `settings.json` — porta, `JWT_SECRET` gerado, `managedPostgresPort`
+- `pgdata/` — data dir do PostgreSQL portable
+
+Logs do processo backend ficam em memória (`getLogs()`); `desktop:open-logs` abre o diretório `userData`.
 
 ---
 
