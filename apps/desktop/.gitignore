@@ -1,0 +1,12 @@
+node_modules
+dist/
+out/
+resources/
+test-results/
+playwright-report/
+coverage/
+
+# Ícones gerados são versionados (o root .gitignore ignora build/ genericamente)
+!build/
+!build/icon.ico
+!build/icon.png
