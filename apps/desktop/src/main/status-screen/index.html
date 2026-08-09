@@ -1,0 +1,168 @@
+<!doctype html>
+<!--
+  Referência estática da tela de status do MangaInk Agent (D4).
+  O HTML exibido em runtime é gerado por `src/main/status-screen.ts`
+  (renderStatusScreenHtml) — este arquivo é uma cópia visual com dados de
+  exemplo do estado `backend_failed`, para consulta/design sem rodar o app.
+  Não é importado pelo processo main.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src https://fonts.gstatic.com; style-src-elem https://fonts.googleapis.com 'unsafe-inline'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MangaInk Agent — Backend falhou</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;600&display=swap');
+      :root {
+        --comic-yellow: #f5c518;
+        --comic-red: #e63946;
+        --comic-blue: #1d3557;
+        --comic-cream: #fff8e1;
+        --comic-ink: #1d3557;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--comic-yellow);
+        background-image:
+          radial-gradient(circle at 20% 15%, rgba(29, 53, 87, 0.08) 0, rgba(29, 53, 87, 0.08) 24px, transparent 25px),
+          radial-gradient(circle at 80% 85%, rgba(230, 57, 70, 0.10) 0, rgba(230, 57, 70, 0.10) 18px, transparent 19px);
+        font-family: Inter, Arial, sans-serif;
+        color: var(--comic-ink);
+        padding: 24px;
+      }
+      .panel {
+        width: min(560px, 100%);
+        background: var(--comic-cream);
+        border: 4px solid var(--comic-ink);
+        border-radius: 16px;
+        box-shadow: 10px 10px 0 rgba(29, 53, 87, 0.85);
+        padding: 32px;
+      }
+      .badge {
+        display: inline-block;
+        background: var(--comic-red);
+        color: #fff;
+        font-family: Bangers, 'Arial Black', sans-serif;
+        font-size: 16px;
+        letter-spacing: 2px;
+        padding: 4px 12px;
+        border-radius: 6px;
+        transform: rotate(-2deg);
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-family: Bangers, 'Arial Black', sans-serif;
+        font-size: 52px;
+        line-height: 1;
+        color: var(--comic-red);
+        text-shadow: 3px 3px 0 var(--comic-yellow);
+        letter-spacing: 1px;
+      }
+      .subtitle {
+        font-family: Bangers, 'Arial Black', sans-serif;
+        font-size: 26px;
+        color: var(--comic-blue);
+        margin: 8px 0 20px;
+        letter-spacing: 1px;
+      }
+      .diagnosis {
+        background: #fff;
+        border: 2px dashed var(--comic-blue);
+        border-radius: 10px;
+        padding: 16px;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+      .diagnosis .message {
+        margin-top: 8px;
+        font-weight: 600;
+        color: var(--comic-red);
+      }
+      pre {
+        margin-top: 16px;
+        background: #1d3557;
+        color: #b8e6ff;
+        border-radius: 10px;
+        padding: 14px;
+        font-size: 12px;
+        line-height: 1.5;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      pre::-webkit-scrollbar { height: 8px; width: 8px; }
+      pre::-webkit-scrollbar-thumb { background: #456; border-radius: 4px; }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+      }
+      button, a.button {
+        font-family: Bangers, 'Arial Black', sans-serif;
+        font-size: 20px;
+        letter-spacing: 1px;
+        text-decoration: none;
+        cursor: pointer;
+        border: 3px solid var(--comic-ink);
+        border-radius: 10px;
+        padding: 10px 20px;
+        box-shadow: 4px 4px 0 var(--comic-ink);
+        transition: transform 80ms ease, box-shadow 80ms ease;
+      }
+      button:active, a.button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--comic-ink); }
+      button {
+        background: var(--comic-red);
+        color: #fff;
+      }
+      a.button {
+        background: var(--comic-yellow);
+        color: var(--comic-ink);
+      }
+      .version {
+        margin-top: 20px;
+        text-align: right;
+        font-size: 12px;
+        color: #6a7f9e;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <header>
+        <span class="badge">MANGAINK AGENT</span>
+        <h1>MangaInk Agent</h1>
+        <p class="subtitle">Backend falhou</p>
+      </header>
+      <section class="diagnosis">
+        <p>O processo do backend encerrou inesperadamente ou não respondeu no tempo limite. Confira o erro abaixo, abra os logs ou tente novamente.</p>
+        <p class="message">O backend encerrou inesperadamente (exit 1).</p>
+      </section>
+      <h2>Saída do backend</h2>
+      <pre id="logs">ERRO: EADDRINUSE :3333
+    at Server.setupListenHandle [as _listen2] (net.js:1358:14)</pre>
+      <footer class="actions">
+        <button id="retry" type="button">Tentar novamente</button>
+        <a id="browser" class="button" href="http://localhost:3333" rel="noopener">Abrir no navegador</a>
+      </footer>
+      <p class="version">v1.0.0</p>
+    </main>
+    <script>
+      document.getElementById('retry')?.addEventListener('click', () => {
+        window.desktop.retry()
+      })
+      const browserLink = document.getElementById('browser')
+      browserLink?.addEventListener('click', (event) => {
+        event.preventDefault()
+        window.desktop.openExternal(browserLink.getAttribute('href'))
+      })
+    </script>
+  </body>
+</html>
