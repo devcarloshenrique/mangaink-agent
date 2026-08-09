@@ -1,14 +1,19 @@
-import { Worker } from 'bullmq'
-import type { MobiPreviewJobData, MobiPreviewQueue } from '../use-cases/mobi-preview.use-case'
+import type { MobiPreviewJobData } from '../use-cases/mobi-preview.use-case'
 import type { MobiPreviewService } from '../services/mobi-preview.service'
 import type { MobiPreviewStatusStore } from '../../../shared/redis/mobi-preview-status-store'
 import type { MobiUnpackRunner } from '../services/mobi-unpack-runner.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
 import { MobiExtractionError } from '../errors/mobi-preview.errors'
-import { MobiUnpackRunnerService } from '../services/mobi-unpack-runner.service'
+import { createMobiUnpackRunner } from '../services/mobi-unpack-runner.factory'
 import { getConversionJobRepository } from '../../../shared/database/repositories'
 import { MobiPreviewService as MobiPreviewServiceImpl } from '../services/mobi-preview.service'
 import { MobiPreviewStatusStore as MobiPreviewStatusStoreImpl } from '../../../shared/redis/mobi-preview-status-store'
+import type { RuntimeAdapters } from '../../../shared/infra/factory'
+import {
+  startQueueWorker,
+  type QueueWorkerHandle,
+  type QueueWorkerJob,
+} from '../../../shared/infra/queue-worker'
 
 /** Dependencias injetaveis no processMobiPreviewJob (para teste). */
 export interface MobiPreviewWorkerDeps {
@@ -95,23 +100,30 @@ export async function processMobiPreviewJob(
 }
 
 /**
- * Worker BullMQ real, instanciado em module load do backend.
+ * Worker BullMQ real de preview MOBI (fila `mobi-preview`, concorrência 1).
+ *
+ * Factory: constrói service, status store (do runtime), runner e repo a partir
+ * das dependências injetadas — NENHUMA conexão é aberta no load do módulo.
  */
-export function startMobiPreviewWorker(): Worker<MobiPreviewJobData> {
-  const deps: MobiPreviewWorkerDeps = {
+export function startMobiPreviewWorker(deps: {
+  runtime: RuntimeAdapters
+  mobiUnpackRunnerFactory?: () => MobiUnpackRunner
+}): QueueWorkerHandle {
+  const { runtime, mobiUnpackRunnerFactory = createMobiUnpackRunner } = deps
+
+  const workerDeps: MobiPreviewWorkerDeps = {
     service: new MobiPreviewServiceImpl(),
-    store: new MobiPreviewStatusStoreImpl(),
-    runner: new MobiUnpackRunnerService(),
+    store: new MobiPreviewStatusStoreImpl(runtime.status),
+    runner: mobiUnpackRunnerFactory(),
     jobs: getConversionJobRepository(),
   }
 
-  return new Worker<MobiPreviewJobData>(
-    'mobi-preview',
-    async (job) => {
-      await processMobiPreviewJob(job.data, deps)
+  return startQueueWorker({
+    runtime,
+    queueName: 'mobi-preview',
+    concurrency: 1,
+    processor: async (job: QueueWorkerJob) => {
+      await processMobiPreviewJob(job.data as MobiPreviewJobData, workerDeps)
     },
-    {
-      connection: { url: process.env.REDIS_URL ?? 'redis://localhost:6379' },
-    },
-  )
+  })
 }

@@ -1,13 +1,26 @@
 import type { FastifyReply } from 'fastify'
-import { ConversionPubSubService } from './conversion-pubsub.service'
+import type { IPubSub, IJournalStore } from '../../../shared/infra'
 import type { SSEEvent, SSEEventType } from '../types/conversion.types'
 
+/**
+ * Bridge SSE para eventos de Conversion/Job.
+ *
+ * - Canal raw de Job: `conversion-job:{jobId}` (prefixo de responsabilidade
+ *   do call site). O payload publicado é SEMPRE string JSON (JSON.stringify),
+ *   compatível com o contrato dos adapters de IPubSub.
+ * - Journal (replay): `conversion-journal:{jobId}` + `conversion-event-id:{jobId}`
+ *   persistidos via IJournalStore com TTL de 1h.
+ */
 export class ConversionEventsService {
   private static readonly JOURNAL_TTL = 3600
   private static readonly JOURNAL_PREFIX = 'conversion-journal:'
   private static readonly ID_PREFIX = 'conversion-event-id:'
+  private static readonly CHANNEL_PREFIX = 'conversion-job:'
 
-  constructor(private readonly pubsub: ConversionPubSubService) {}
+  constructor(
+    private readonly pubsub: IPubSub,
+    private readonly journal: IJournalStore,
+  ) {}
 
   createEvent(type: SSEEventType, data: Record<string, unknown> = {}): SSEEvent {
     return { type, data, timestamp: new Date().toISOString() }
@@ -16,26 +29,26 @@ export class ConversionEventsService {
   async emit(jobId: string, event: SSEEvent): Promise<void> {
     const idKey = `${ConversionEventsService.ID_PREFIX}${jobId}`
     const journalKey = `${ConversionEventsService.JOURNAL_PREFIX}${jobId}`
-    const id = await this.pubsub.pubIncr(idKey)
+    const id = await this.journal.nextId(idKey)
     const journalEntry: SSEEvent = { ...event, id }
     const payload = JSON.stringify(journalEntry)
 
-    await this.pubsub.pubRpush(journalKey, payload)
-    await this.pubsub.publish(jobId, journalEntry)
-    await this.pubsub.pubExpire(journalKey, ConversionEventsService.JOURNAL_TTL)
-    await this.pubsub.pubExpire(idKey, ConversionEventsService.JOURNAL_TTL)
+    await this.journal.append(journalKey, payload)
+    await this.pubsub.publish(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, payload)
+    await this.journal.expire(journalKey, ConversionEventsService.JOURNAL_TTL)
+    await this.journal.expire(idKey, ConversionEventsService.JOURNAL_TTL)
   }
 
   async connectJobToSSE(jobId: string, reply: FastifyReply): Promise<void> {
     this.writeSseHeaders(reply)
 
     const onMessage = this.writeEvent(reply)
-    await this.pubsub.subscribe(jobId, onMessage)
+    await this.pubsub.subscribe(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, onMessage)
     const keepAlive = this.startKeepAlive(reply)
 
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribe(jobId, onMessage)
+      await this.pubsub.unsubscribe(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, onMessage)
     })
   }
 
@@ -59,7 +72,7 @@ export class ConversionEventsService {
     const onMessage = (channel: string, message: string) => {
       try {
         const event = JSON.parse(message) as SSEEvent
-        const jobId = channel.replace('conversion-job:', '')
+        const jobId = channel.replace(ConversionEventsService.CHANNEL_PREFIX, '')
 
         if (isReplaying) {
           liveBuffer.push({ jobId, event })
@@ -75,11 +88,14 @@ export class ConversionEventsService {
       }
     }
 
-    await this.pubsub.subscribeMany(jobIds, onMessage)
+    await this.pubsub.subscribeMany(
+      jobIds.map((j) => `${ConversionEventsService.CHANNEL_PREFIX}${j}`),
+      onMessage,
+    )
 
     for (const jobId of jobIds) {
       const journalKey = `${ConversionEventsService.JOURNAL_PREFIX}${jobId}`
-      const entries = await this.pubsub.pubLrange(journalKey, 0, -1)
+      const entries = await this.journal.range(journalKey, 0, -1)
       let maxId = 0
       for (const entry of entries) {
         try {
@@ -106,7 +122,9 @@ export class ConversionEventsService {
     const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribeMany(jobIds, onMessage)
+      await this.pubsub.unsubscribeMany(
+        jobIds.map((j) => `${ConversionEventsService.CHANNEL_PREFIX}${j}`),
+      )
     })
   }
 
@@ -119,8 +137,8 @@ export class ConversionEventsService {
     })
   }
 
-  private writeEvent(reply: FastifyReply): (channel: string, message: string) => void {
-    return (_channel: string, message: string) => {
+  private writeEvent(reply: FastifyReply): (message: string) => void {
+    return (message: string) => {
       try {
         const event = JSON.parse(message) as SSEEvent
         reply.raw.write(`event: ${event.type}\n`)

@@ -1,11 +1,14 @@
-import { createQueue } from '../../../shared/redis/bullmq'
+import type { IQueueService, QueueJob } from '../../../shared/infra/queue.service'
 import type { ConversionJobData } from '../types/conversion.types'
-import type { Job } from 'bullmq'
 
+/**
+ * Produtor de jobs de conversão download-only. A fila concreta
+ * (`IQueueService`) é injetada no constructor pelo composition root.
+ */
 export class DownloadOnlyQueueService {
-  private readonly queue = createQueue<ConversionJobData>('download-only')
+  constructor(private readonly queue: IQueueService<ConversionJobData>) {}
 
-  async enqueue(data: ConversionJobData): Promise<Job<ConversionJobData>> {
+  async enqueue(data: ConversionJobData): Promise<QueueJob<ConversionJobData>> {
     return this.queue.add(`download-only:${data.jobId}`, data, {
       jobId: data.jobId,
       attempts: 3,
@@ -16,18 +19,10 @@ export class DownloadOnlyQueueService {
   }
 
   async remove(jobId: string): Promise<void> {
-    const job = await this.queue.getJob(jobId)
-    if (job) {
-      await job.remove()
-    }
+    await this.queue.removeJob(jobId)
   }
 
-  async getJob(jobId: string): Promise<Job<ConversionJobData> | undefined> {
-    const job = await this.queue.getJob(jobId)
-    return job ?? undefined
-  }
-
-  async close(): Promise<void> {
-    await this.queue.close()
+  async getJob(jobId: string): Promise<QueueJob<ConversionJobData> | null> {
+    return this.queue.getJob(jobId)
   }
 }

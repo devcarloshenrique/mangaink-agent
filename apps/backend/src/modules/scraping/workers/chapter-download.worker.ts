@@ -1,4 +1,3 @@
-import { Worker } from 'bullmq'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { env } from '../../../shared/config/env'
@@ -6,15 +5,35 @@ import { mkdirp } from '../../../shared/utils/filesystem'
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { resolveProvider } from '../utils/resolve-provider'
 import { ChapterImageService } from '../services/chapter-image.service'
-import { ChapterDownloadPubSubService } from '../services/chapter-download-pubsub.service'
+import { RedisPubSubAdapter, RedisJournalAdapter } from '../../../shared/infra/redis'
 import { ChapterDownloadEventsService } from '../services/chapter-download-events.service'
-import { setJobStatus } from '../services/chapter-download-status-store'
+import { setJobStatus, setChapterDownloadStatusStore } from '../services/chapter-download-status-store'
+import type { RuntimeAdapters } from '../../../shared/infra/factory'
+import {
+  startQueueWorker,
+  type QueueWorkerHandle,
+  type QueueWorkerJob,
+} from '../../../shared/infra/queue-worker'
 import type { ChapterDownloadData } from '../types/chapter-download.types'
 
-const pubsub = new ChapterDownloadPubSubService()
-const events = new ChapterDownloadEventsService(pubsub)
+/**
+ * Events padrão (modo web) criados lazy — preserva a compatibilidade do
+ * `processChapterDownload` sem conexão no load do módulo.
+ */
+let defaultEvents: ChapterDownloadEventsService | null = null
 
-async function processChapterDownload(job: { data: ChapterDownloadData; id?: string }): Promise<void> {
+function getDefaultEvents(): ChapterDownloadEventsService {
+  if (!defaultEvents) {
+    defaultEvents = new ChapterDownloadEventsService(new RedisPubSubAdapter(), new RedisJournalAdapter())
+  }
+  return defaultEvents
+}
+
+export async function processChapterDownload(
+  job: { data: ChapterDownloadData; id?: string },
+  events?: ChapterDownloadEventsService,
+): Promise<void> {
+  const eventsService = events ?? getDefaultEvents()
   const { sourceId, chapterId } = job.data
   const jobId = job.id ?? ''
 
@@ -49,7 +68,7 @@ async function processChapterDownload(job: { data: ChapterDownloadData; id?: str
     const manifest = { totalImages: imageUrls.length, urls: imageUrls }
     await service.writeManifest(manifest)
 
-    await events.emit(sourceId, chapterId, events.createEvent('progress', { downloaded: 0, total: imageUrls.length }))
+    await eventsService.emit(sourceId, chapterId, eventsService.createEvent('progress', { downloaded: 0, total: imageUrls.length }))
 
     let downloaded = 0
     let errors = 0
@@ -66,7 +85,7 @@ async function processChapterDownload(job: { data: ChapterDownloadData; id?: str
         await writeFile(join(cacheDir, filename), buffer)
         downloaded++
 
-        await events.emit(sourceId, chapterId, events.createEvent('progress', { downloaded, total: imageUrls.length }))
+        await eventsService.emit(sourceId, chapterId, eventsService.createEvent('progress', { downloaded, total: imageUrls.length }))
       } catch {
         errors++
       }
@@ -80,13 +99,13 @@ async function processChapterDownload(job: { data: ChapterDownloadData; id?: str
       await setJobStatus(sourceId, chapterId, jobId, 'completed')
     }
 
-    await events.emit(sourceId, chapterId, events.createEvent('completed', { totalImages: imageUrls.length, downloaded, errors }))
+    await eventsService.emit(sourceId, chapterId, eventsService.createEvent('completed', { totalImages: imageUrls.length, downloaded, errors }))
   } catch (err) {
     if (jobId) {
       await setJobStatus(sourceId, chapterId, jobId, 'failed')
     }
     const message = err instanceof Error ? err.message : 'Erro desconhecido'
-    await events.emit(sourceId, chapterId, events.createEvent('failed', { error: message }))
+    await eventsService.emit(sourceId, chapterId, eventsService.createEvent('failed', { error: message }))
     throw err
   }
 }
@@ -103,16 +122,24 @@ function contentTypeToExt(contentType: string): string | null {
   return map[contentType] ?? null
 }
 
-export function startChapterDownloadWorker(): void {
-  new Worker<ChapterDownloadData>(
-    'chapter-download',
-    async (job) => {
-      await processChapterDownload(job)
-    },
-    {
-      connection: { url: env.REDIS_URL },
-    },
-  )
-}
+/**
+ * Worker de download de capítulos (fila `chapter-download`, concorrência 1).
+ *
+ * Factory: injeta o status store e o events service a partir do runtime —
+ * NENHUMA conexão é aberta no load do módulo.
+ */
+export function startChapterDownloadWorker(deps: { runtime: RuntimeAdapters }): QueueWorkerHandle {
+  const { runtime } = deps
 
-export { processChapterDownload }
+  setChapterDownloadStatusStore(runtime.status)
+  const events = new ChapterDownloadEventsService(runtime.pubsub, runtime.journal)
+
+  return startQueueWorker({
+    runtime,
+    queueName: 'chapter-download',
+    concurrency: 1,
+    processor: async (job: QueueWorkerJob) => {
+      await processChapterDownload({ data: job.data as ChapterDownloadData, id: job.id }, events)
+    },
+  })
+}

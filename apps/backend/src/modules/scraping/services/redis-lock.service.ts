@@ -1,5 +1,6 @@
 import { createSafeRedis } from '../../../shared/redis/safe-redis'
 import type Redis from 'ioredis'
+import type { ILockService } from '../../../shared/infra'
 
 const LOCK_TTL_SECONDS = 120
 const LOCK_PREFIX = 'lock:source:'
@@ -8,7 +9,7 @@ const LOCK_PREFIX = 'lock:source:'
  * Serviço responsável pelo lock distribuído via Redis.
  * Usa uma conexão ioredis própria para evitar conflitos com BullMQ.
  */
-export class RedisLockService {
+export class RedisLockService implements ILockService {
   private readonly redis: Redis
   private readonly workerId: string
 

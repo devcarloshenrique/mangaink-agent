@@ -51,6 +51,16 @@ const mockPubSub = vi.hoisted(() => {
   }
 })
 
+const mockJournal = vi.hoisted(() => {
+  return {
+    reset: () => {},
+    append: async () => {},
+    range: async () => [] as string[],
+    nextId: async () => 1,
+    expire: async () => {},
+  }
+})
+
 vi.mock('../../../../shared/database/repositories', async () => {
   const actual = await vi.importActual<typeof import('../../../../shared/database/repositories')>('../../../../shared/database/repositories')
   return {
@@ -67,9 +77,16 @@ vi.mock('../../services/inspect-queue.service', () => ({
   InspectQueueService: vi.fn(() => mockQueueService),
 }))
 
-vi.mock('../../services/redis-pubsub.service', () => ({
-  RedisPubSubService: vi.fn(() => mockPubSub),
-}))
+vi.mock('../../../../shared/infra/redis', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../../../shared/infra/redis')
+  >('../../../../shared/infra/redis')
+  return {
+    ...actual,
+    RedisPubSubAdapter: vi.fn(() => mockPubSub),
+    RedisJournalAdapter: vi.fn(() => mockJournal),
+  }
+})
 
 import { createServer } from '../../../../shared/server'
 import type { FastifyInstance } from 'fastify'

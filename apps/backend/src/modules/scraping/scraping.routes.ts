@@ -1,12 +1,17 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
-import { inspectSource } from './controllers/inspect-source.controller'
+import type { RuntimeAdapters } from '../../shared/infra/factory'
+import { createInspectSourceController } from './controllers/inspect-source.controller'
 import { getSource } from './controllers/preview-source.controller'
-import { sourceEvents } from './controllers/source-events.controller'
+import { createSourceEventsController } from './controllers/source-events.controller'
 import { listProviders } from './controllers/providers.controller'
 import { inspectSourceBodySchema, inspectSourceQuerySchema } from './dtos/inspect-source.dto'
 import { sourceParamsSchema } from './dtos/preview-source.dto'
 import { verifyJwtOptional } from '../../shared/middlewares/verify-jwt-optional'
+
+interface ScrapingRoutesOptions {
+  runtime?: RuntimeAdapters
+}
 
 const sourceStateSchema = z.object({
   sourceId: z.string(),
@@ -58,7 +63,10 @@ const sourceResponseSchema = z.object({
   }),
 })
 
-export const scrapingRoutes: FastifyPluginAsyncZod = async (app) => {
+export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = async (app, opts) => {
+  const inspectSource = createInspectSourceController(opts.runtime)
+  const sourceEvents = createSourceEventsController(opts.runtime)
+
   // POST /api/conversions/source/inspect
   app.post(
     '/api/conversions/source/inspect',

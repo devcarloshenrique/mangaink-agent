@@ -1,33 +1,36 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { InspectQueueService } from '../../services/inspect-queue.service'
+import type { IQueueService } from '../../../../shared/infra/queue.service'
+import type { SourceInspectJob } from '../../types/source.types'
 
-vi.mock('bullmq', () => {
-  const mockAdd = vi.fn()
+function makeMockQueue() {
   return {
-    Queue: vi.fn(() => ({
-      add: mockAdd,
-      close: vi.fn(),
+    add: vi.fn(async () => ({
+      id: 'job-1',
+      name: 'source-inspect',
+      data: {} as SourceInspectJob,
+      attemptsMade: 0,
     })),
+    getJob: vi.fn(),
+    removeJob: vi.fn(),
   }
-})
+}
 
 describe('InspectQueueService', () => {
+  let mockQueue: ReturnType<typeof makeMockQueue>
   let queueService: InspectQueueService
-  let mockAdd: ReturnType<typeof vi.fn>
 
-  beforeEach(async () => {
-    vi.clearAllMocks()
+  beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(1753891200000)
-    queueService = new InspectQueueService()
-    const { Queue } = await import('bullmq')
-    mockAdd = (Queue as ReturnType<typeof vi.fn>).mock.results[0].value.add
+    mockQueue = makeMockQueue()
+    queueService = new InspectQueueService(mockQueue as unknown as IQueueService<SourceInspectJob>)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('deve enfileirar job com sourceId e timestamp como jobId', async () => {
+  it('delega enqueue para queue.add com jobId timestamp, removeOnComplete e removeOnFail', async () => {
     await queueService.enqueue({
       sourceId: 'src-test-12345678',
       provider: 'mangalivre',
@@ -35,7 +38,7 @@ describe('InspectQueueService', () => {
       refresh: false,
     })
 
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(mockQueue.add).toHaveBeenCalledWith(
       'source-inspect',
       {
         sourceId: 'src-test-12345678',
@@ -63,7 +66,7 @@ describe('InspectQueueService', () => {
       refresh: true,
     })
 
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(mockQueue.add).toHaveBeenCalledWith(
       'source-inspect',
       expect.objectContaining({ refresh: true }),
       expect.any(Object),

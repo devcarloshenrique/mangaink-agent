@@ -3,6 +3,7 @@ import type { ConversionRepository } from '../../../modules/conversion/repositor
 import type { ConversionJobRepository } from '../../../modules/conversion/repositories/conversion-job.repository'
 import type { IUserPresetRepository } from '../../../modules/conversion/repositories/user-preset.repository'
 import type { UserChapterProgressRepository } from '../../../modules/reading/repositories/user-chapter-progress.repository'
+import type { IStatusStore } from '../../infra'
 
 import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
 import { PrismaConversionRepository } from '../../../modules/conversion/repositories/prisma-conversion.repository'
@@ -14,8 +15,8 @@ export function getSourceRepository(): SourceCacheRepository {
   return new PrismaSourceRepository()
 }
 
-export function getConversionRepository(): ConversionRepository {
-  return new PrismaConversionRepository()
+export function getConversionRepository(statusStore?: IStatusStore): ConversionRepository {
+  return new PrismaConversionRepository(statusStore)
 }
 
 export function getConversionJobRepository(): ConversionJobRepository {

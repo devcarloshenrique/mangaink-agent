@@ -1,9 +1,7 @@
-import { Worker } from 'bullmq'
 import { join, extname } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
-import { ConversionPubSubService } from '../services/conversion-pubsub.service'
 import { ConversionEventsService } from '../services/conversion-events.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
 import { PlaceholderService } from '../services/placeholder.service'
@@ -14,6 +12,12 @@ import {
 } from '../../../shared/database/repositories'
 import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
+import type { RuntimeAdapters } from '../../../shared/infra/factory'
+import {
+  startQueueWorker,
+  type QueueWorkerHandle,
+  type QueueWorkerJob,
+} from '../../../shared/infra/queue-worker'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
 
@@ -244,67 +248,60 @@ export async function processDownloadOnlyJob(
   return { jobId, status: 'completed', successfulChapters, totalImages: totalDownloaded }
 }
 
-// ── Worker (instância de produção com dependências reais) ──────────────
+/**
+ * Worker de download-only (fila `download-only`, concorrência 3).
+ *
+ * Factory: constrói as dependências a partir do runtime injetado — NENHUMA
+ * conexão é aberta no load do módulo. `onFailed` preserva a semântica do
+ * antigo `downloadOnlyWorker.on('failed')`.
+ */
+export function startDownloadOnlyWorker(deps: { runtime: RuntimeAdapters }): QueueWorkerHandle {
+  const { runtime } = deps
 
-const pubsub = new ConversionPubSubService()
-const events = new ConversionEventsService(pubsub)
+  const events = new ConversionEventsService(runtime.pubsub, runtime.journal)
+  const jobRepository = getConversionJobRepository()
+  const sourceRepository = getSourceRepository()
 
-export const downloadOnlyWorker = new Worker<ConversionJobData>(
-  'download-only',
-  async (job) => {
-    const deps: DownloadOnlyWorkerDeps = {
-      jobRepository: getConversionJobRepository(),
-      conversionRepository: getConversionRepository(),
-      sourceRepository: getSourceRepository(),
-      events,
-      jobLiveStatusStore: new JobLiveStatusStore(),
-      resolveProvider,
-      downloader: new ImageDownloaderService(
-        events,
-        getConversionJobRepository(),
-        getSourceRepository(),
-      ),
-      placeholderService: new PlaceholderService(),
-    }
-    return processDownloadOnlyJob(job.data, deps)
-  },
-  {
-    connection: { url: env.REDIS_URL },
-    concurrency: 3,
-    lockDuration: 120_000,
-    maxStalledCount: 2,
-  },
-)
-
-downloadOnlyWorker.on('completed', (job) => {
-  console.log(`[DownloadOnlyWorker] Job ${job.id} completed successfully`)
-})
-
-downloadOnlyWorker.on('failed', async (job, error) => {
-  const jobId = job?.id
-  const conversionId = job?.data?.conversionId
-  console.error(`[DownloadOnlyWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
-  if (jobId && conversionId) {
-    const failedRepo = getConversionJobRepository()
-    const convRepo = getConversionRepository()
-    await failedRepo.update(jobId, {
-      status: 'failed',
-      error: error.message.slice(0, 500),
-      currentStep: 'Failed',
-    })
-    const store = new JobLiveStatusStore()
-    await store.clear(jobId).catch(() => {})
-    await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
-    await convRepo.syncStatus(conversionId)
-    await events
-      .emit(jobId, events.createEvent('job.failed', { jobId, conversionId, error: error.message.slice(0, 500) }))
-      .catch(() => {})
+  const workerDeps: DownloadOnlyWorkerDeps = {
+    jobRepository,
+    conversionRepository: getConversionRepository(runtime.status),
+    sourceRepository,
+    events,
+    jobLiveStatusStore: new JobLiveStatusStore(runtime.status),
+    resolveProvider,
+    downloader: new ImageDownloaderService(events, jobRepository, sourceRepository),
+    placeholderService: new PlaceholderService(),
   }
-})
 
-downloadOnlyWorker.on('error', (error) => {
-  console.error('[DownloadOnlyWorker] Worker error:', error.message)
-})
+  return startQueueWorker({
+    runtime,
+    queueName: 'download-only',
+    concurrency: 3,
+    processor: async (job: QueueWorkerJob) => {
+      await processDownloadOnlyJob(job.data as ConversionJobData, workerDeps)
+    },
+    onFailed: async (job, error) => {
+      const jobId = job.id
+      const conversionId = (job.data as ConversionJobData | undefined)?.conversionId
+      console.error(`[DownloadOnlyWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
+      if (jobId && conversionId) {
+        const failedRepo = getConversionJobRepository()
+        const convRepo = getConversionRepository(runtime.status)
+        await failedRepo.update(jobId, {
+          status: 'failed',
+          error: error.message.slice(0, 500),
+          currentStep: 'Failed',
+        })
+        await workerDeps.jobLiveStatusStore.clear(jobId).catch(() => {})
+        await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
+        await convRepo.syncStatus(conversionId)
+        await events
+          .emit(jobId, events.createEvent('job.failed', { jobId, conversionId, error: error.message.slice(0, 500) }))
+          .catch(() => {})
+      }
+    },
+  })
+}
 
 async function getChapterImageUrls(
   provider: IProviderStrategy | null,

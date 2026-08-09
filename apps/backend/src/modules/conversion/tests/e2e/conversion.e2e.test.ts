@@ -10,12 +10,21 @@ vi.mock('../../../../shared/database/repositories', () => ({
   getSourceRepository: vi.fn(),
 }))
 
-vi.mock('../../services/conversion-pubsub.service', () => ({
-  ConversionPubSubService: vi.fn(() => ({
-    publish: vi.fn(), subscribe: vi.fn(), subscribeMany: vi.fn(),
-    unsubscribe: vi.fn(), unsubscribeMany: vi.fn(), close: vi.fn(),
-  })),
-}))
+vi.mock('../../../../shared/infra/redis', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../../../shared/infra/redis')
+  >('../../../../shared/infra/redis')
+  return {
+    ...actual,
+    RedisPubSubAdapter: vi.fn(() => ({
+      publish: vi.fn(), subscribe: vi.fn(), subscribeMany: vi.fn(),
+      unsubscribe: vi.fn(), unsubscribeMany: vi.fn(),
+    })),
+    RedisJournalAdapter: vi.fn(() => ({
+      append: vi.fn(), range: vi.fn(async () => []), nextId: vi.fn(), expire: vi.fn(),
+    })),
+  }
+})
 
 vi.mock('../../../../shared/redis/bullmq', () => ({
   createQueue: vi.fn(() => ({

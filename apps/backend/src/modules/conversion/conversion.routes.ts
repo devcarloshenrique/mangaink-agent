@@ -13,8 +13,12 @@ import { CancelConversionUseCase } from './use-cases/cancel-conversion.use-case'
 import { ListConversionsUseCase } from './use-cases/list-conversions.use-case'
 import { ConversionQueueService } from './services/conversion-queue.service'
 import { DownloadOnlyQueueService } from './services/download-only-queue.service'
-import { ConversionPubSubService } from './services/conversion-pubsub.service'
 import { ConversionEventsService } from './services/conversion-events.service'
+import { createRedisQueueAdapter, type RuntimeAdapters } from '../../shared/infra/factory'
+import { RedisPubSubAdapter, RedisJournalAdapter } from '../../shared/infra/redis'
+import type { IQueueService } from '../../shared/infra'
+import type { ConversionJobData } from './types/conversion.types'
+import { JobLiveStatusStore } from '../../shared/redis/job-status-store'
 import { getConversionRepository, getConversionJobRepository, getSourceRepository } from '../../shared/database/repositories'
 import { conversionLogsHandler } from './controllers/conversion-logs.controller'
 import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
@@ -50,21 +54,55 @@ import {
 } from './dtos/user-preset.dto'
 
 // ── Instâncias compartilhadas ──────────────────────────────────────────
-const conversions = getConversionRepository()
-const jobRepository = getConversionJobRepository()
-const queue = new ConversionQueueService()
-const downloadOnlyQueue = new DownloadOnlyQueueService()
-const pubsub = new ConversionPubSubService()
-const events = new ConversionEventsService(pubsub)
+// Com o `runtime` presente (composition root), os serviços usam as MESMAS
+// instâncias dos workers (getQueue/pubsub/journal/status). Sem runtime
+// (registro standalone), o default é o adapter Redis web — comportamento
+// legado preservado.
+function buildConversionDeps(opts?: { runtime?: RuntimeAdapters }) {
+  const runtime = opts?.runtime
+  const conversions = getConversionRepository(runtime?.status)
+  const jobRepository = getConversionJobRepository()
+  const queue = new ConversionQueueService(
+    (runtime ? runtime.getQueue('conversion-job') : createRedisQueueAdapter('conversion-job')) as IQueueService<ConversionJobData>,
+  )
+  const downloadOnlyQueue = new DownloadOnlyQueueService(
+    (runtime ? runtime.getQueue('download-only') : createRedisQueueAdapter('download-only')) as IQueueService<ConversionJobData>,
+  )
+  const pubsub = runtime ? runtime.pubsub : new RedisPubSubAdapter()
+  const journal = runtime ? runtime.journal : new RedisJournalAdapter()
+  const events = new ConversionEventsService(pubsub, journal)
 
-const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepository, queue, events, downloadOnlyQueue)
-const getConversionUseCase = new GetConversionUseCase(conversions)
-const cancelConversionUseCase = new CancelConversionUseCase(conversions, queue, events, downloadOnlyQueue)
-const listConversionsUseCase = new ListConversionsUseCase(conversions)
-const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, pubsub)
-const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
-const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
-const deleteConversionUseCase = new DeleteConversionUseCase(conversions)
+  const createConversionUseCase = new CreateConversionUseCase(conversions, jobRepository, queue, events, downloadOnlyQueue)
+  const getConversionUseCase = new GetConversionUseCase(conversions)
+  const cancelConversionUseCase = new CancelConversionUseCase(
+    conversions,
+    queue,
+    events,
+    downloadOnlyQueue,
+    runtime ? new JobLiveStatusStore(runtime.status) : undefined,
+  )
+  const listConversionsUseCase = new ListConversionsUseCase(conversions)
+  const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, journal)
+  const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
+  const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
+  const deleteConversionUseCase = new DeleteConversionUseCase(conversions)
+
+  return {
+    createConversionUseCase,
+    getConversionUseCase,
+    cancelConversionUseCase,
+    listConversionsUseCase,
+    getConversionLogsUseCase,
+    downloadJobUseCase,
+    serveCoverUseCase,
+    deleteConversionUseCase,
+    events,
+  }
+}
+
+interface ConversionRoutesOptions {
+  runtime?: RuntimeAdapters
+}
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
@@ -136,7 +174,19 @@ const sseEventSchema = z.object({
 
 const conversionLogsResponseSchema = z.array(sseEventSchema)
 
-export const conversionRoutes: FastifyPluginAsyncZod = async (app) => {
+export const conversionRoutes: FastifyPluginAsyncZod<ConversionRoutesOptions> = async (app, opts) => {
+  const {
+    createConversionUseCase,
+    getConversionUseCase,
+    cancelConversionUseCase,
+    listConversionsUseCase,
+    getConversionLogsUseCase,
+    downloadJobUseCase,
+    serveCoverUseCase,
+    deleteConversionUseCase,
+    events,
+  } = buildConversionDeps(opts)
+
   // GET /api/conversions/options
   app.get(
     '/api/conversions/options',

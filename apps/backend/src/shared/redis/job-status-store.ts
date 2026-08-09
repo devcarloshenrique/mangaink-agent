@@ -1,5 +1,7 @@
 import { env } from '../config/env'
-import { getRedis } from './redis'
+import type { IStatusStore } from '../infra'
+import { InMemoryStatusStore } from '../infra/inmemory'
+import { RedisStatusStoreAdapter } from '../infra/redis'
 import type { JobStatus } from '../../modules/conversion/types/conversion.types'
 
 export interface LiveJobStatus {
@@ -20,25 +22,30 @@ function key(jobId: string): string {
   return `conv:status:${jobId}`
 }
 
+/**
+ * Status live de Conversion Jobs — delega a persistência para um {@link IStatusStore}.
+ * Default: `InMemoryStatusStore` no modo embedded (`env.MI_EMBEDDED_MODE`),
+ * `RedisStatusStoreAdapter` (lazy) no modo web. Injeção explícita sobrepõe.
+ */
 export class JobLiveStatusStore {
+  constructor(
+    private readonly store: IStatusStore = env.MI_EMBEDDED_MODE
+      ? new InMemoryStatusStore()
+      : new RedisStatusStoreAdapter(),
+  ) {}
+
   async set(jobId: string, partial: Partial<LiveJobStatus>): Promise<void> {
-    const redis = getRedis()
-    const k = key(jobId)
-    const flat: string[] = []
+    const flat: Record<string, string | number | undefined> = {}
     for (const [field, value] of Object.entries(partial)) {
-      if (value !== undefined) {
-        flat.push(field, String(value))
-      }
+      if (value !== undefined) flat[field] = value
     }
-    if (flat.length === 0) return
-    await redis.hset(k, ...flat)
-    await redis.expire(k, env.JOB_STATUS_TTL_SEC)
+    if (Object.keys(flat).length === 0) return
+    await this.store.set(key(jobId), flat, env.JOB_STATUS_TTL_SEC)
   }
 
   async get(jobId: string): Promise<LiveJobStatus | null> {
-    const redis = getRedis()
-    const data = await redis.hgetall(key(jobId))
-    if (!Object.keys(data).length) return null
+    const data = await this.store.get(key(jobId))
+    if (!data) return null
 
     return {
       status: data.status as JobStatus,
@@ -56,8 +63,7 @@ export class JobLiveStatusStore {
   }
 
   async clear(jobId: string): Promise<void> {
-    const redis = getRedis()
-    await redis.del(key(jobId))
+    await this.store.clear(key(jobId))
   }
 
   async setTerminal(

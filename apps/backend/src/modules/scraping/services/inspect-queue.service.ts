@@ -1,13 +1,16 @@
-import { createQueue } from '../../../shared/redis/bullmq'
+import type { IQueueService } from '../../../shared/infra/queue.service'
 import type { SourceInspectJob } from '../types/source.types'
 
 const QUEUE_NAME = 'source-inspect'
 
 /**
- * Serviço responsável por enfileirar jobs de inspeção no BullMQ.
+ * Serviço responsável por enfileirar jobs de inspeção na fila.
+ *
+ * A fila concreta (`IQueueService<SourceInspectJob>`) é injetada no
+ * constructor — o nome da fila fica resolvido no composition root.
  */
 export class InspectQueueService {
-  private readonly queue = createQueue<SourceInspectJob>(QUEUE_NAME)
+  constructor(private readonly queue: IQueueService<SourceInspectJob>) {}
 
   /**
    * Adiciona um job de inspeção na fila.

@@ -38,10 +38,29 @@ from xml.etree import ElementTree as ET
 import mobi
 
 
+# Namespace do OPF pode vir com ou sem barra final: o KCC 10.3.0 escreve
+# `xmlns="http://www.idpf.org/2007/opf"` (sem barra); outras ferramentas usam
+# `http://www.idpf.org/2007/opf/`. O ElementTree casa o namespace por string
+# exata, então registramos ambas e tentamos as duas.
 OPF_NS = {
-    'opf': 'http://www.idpf.org/2007/opf/',
-    'opus': 'http://www.idpf.org/2007/opf/',
+    'opf': 'http://www.idpf.org/2007/opf',
+    'opus': 'http://www.idpf.org/2007/opf',
+    'opf_legacy': 'http://www.idpf.org/2007/opf/',
 }
+
+
+def _find_opf_child(root, tag):
+    """Busca `tag` no OPF aceitando o namespace com e sem barra final."""
+    el = root.find(f'opf:{tag}', OPF_NS)
+    if el is None:
+        el = root.find(f'opf_legacy:{tag}', OPF_NS)
+    return el
+
+
+def _zip_path(p: str) -> str:
+    """Caminho dentro de um zip usa sempre '/' — no Windows os.path.join()
+    gera '\\', o que quebra z.read()/namelist()."""
+    return p.replace('\\', '/')
 
 
 def _zip_text(data: bytes) -> str:
@@ -65,13 +84,13 @@ def _parse_opf(epub_zip: zipfile.ZipFile, opf_path: str, opf_dir: str):
     """Retorna (manifest_by_id, spine_idrefs)."""
     opf_xml = _zip_text(epub_zip.read(opf_path))
     root = ET.fromstring(opf_xml)
-    manifest_el = root.find('opf:manifest', OPF_NS)
-    spine_el = root.find('opf:spine', OPF_NS)
+    manifest_el = _find_opf_child(root, 'manifest')
+    spine_el = _find_opf_child(root, 'spine')
     if manifest_el is None or spine_el is None:
         raise RuntimeError('OPF sem manifest ou spine')
 
     manifest = {}
-    for item in manifest_el.findall('opf:item', OPF_NS):
+    for item in manifest_el.findall('opf:item', OPF_NS) + manifest_el.findall('opf_legacy:item', OPF_NS):
         iid = item.attrib.get('id')
         href = item.attrib.get('href')
         media_type = item.attrib.get('media-type', '')
@@ -79,10 +98,14 @@ def _parse_opf(epub_zip: zipfile.ZipFile, opf_path: str, opf_dir: str):
             manifest[iid] = {
                 'href': href,
                 'media_type': media_type,
-                'path': os.path.normpath(os.path.join(opf_dir, href)) if opf_dir else href,
+                'path': _zip_path(os.path.normpath(os.path.join(opf_dir, href))) if opf_dir else _zip_path(href),
             }
 
-    spine = [el.attrib['idref'] for el in spine_el.findall('opf:itemref', OPF_NS) if 'idref' in el.attrib]
+    spine = [
+        el.attrib['idref']
+        for el in spine_el.findall('opf:itemref', OPF_NS) + spine_el.findall('opf_legacy:itemref', OPF_NS)
+        if 'idref' in el.attrib
+    ]
     return manifest, spine
 
 
@@ -98,7 +121,9 @@ def _resolve_href(base_item_path: str, ref: str) -> str:
     # Remove fragment
     ref = ref.split('#')[0]
     base_dir = os.path.dirname(base_item_path)
-    return os.path.normpath(os.path.join(base_dir, ref)) if base_dir else ref
+    if base_dir:
+        return _zip_path(os.path.normpath(os.path.join(base_dir, ref)))
+    return _zip_path(ref)
 
 
 def _mime_to_ext(mime: str) -> str:

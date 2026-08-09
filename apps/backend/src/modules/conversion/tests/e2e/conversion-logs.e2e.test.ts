@@ -16,22 +16,29 @@ const journalEvents = [
   }),
 ]
 
-const mockPubsub = {
-  publish: vi.fn(),
-  subscribe: vi.fn(),
-  subscribeMany: vi.fn(),
-  unsubscribe: vi.fn(),
-  unsubscribeMany: vi.fn(),
-  close: vi.fn(),
-  pubLrange: vi.fn().mockResolvedValue(journalEvents),
-  pubRpush: vi.fn(),
-  pubIncr: vi.fn(),
-  pubExpire: vi.fn(),
+const mockJournal = {
+  append: vi.fn(),
+  range: vi.fn().mockResolvedValue(journalEvents),
+  nextId: vi.fn(),
+  expire: vi.fn(),
 }
 
-vi.mock('../../services/conversion-pubsub.service', () => ({
-  ConversionPubSubService: vi.fn(() => mockPubsub),
-}))
+vi.mock('../../../../shared/infra/redis', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../../../shared/infra/redis')
+  >('../../../../shared/infra/redis')
+  return {
+    ...actual,
+    RedisPubSubAdapter: vi.fn(() => ({
+      publish: vi.fn(),
+      subscribe: vi.fn(),
+      subscribeMany: vi.fn(),
+      unsubscribe: vi.fn(),
+      unsubscribeMany: vi.fn(),
+    })),
+    RedisJournalAdapter: vi.fn(() => mockJournal),
+  }
+})
 
 vi.mock('../../services/conversion-queue.service', () => ({
   ConversionQueueService: vi.fn(() => ({
@@ -148,7 +155,7 @@ let app: FastifyInstance
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  mockPubsub.pubLrange.mockResolvedValue(journalEvents)
+  mockJournal.range.mockResolvedValue(journalEvents)
   const mod = await import('../../../../shared/server')
   app = await mod.createServer()
 })
@@ -182,7 +189,7 @@ describe('GET /api/conversions/:id/logs — E2E', () => {
   })
 
   it('deve retornar 200 com array vazio quando journal não tem eventos', async () => {
-    mockPubsub.pubLrange.mockResolvedValue([])
+    mockJournal.range.mockResolvedValue([])
     const token = app.jwt.sign({ sub: 'test-user-001' })
 
     const res = await app.inject({

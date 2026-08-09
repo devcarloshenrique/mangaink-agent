@@ -66,6 +66,7 @@ vi.mock('../../utils/resolve-provider', () => ({
 
 vi.mock('../../services/chapter-download-queue.service', () => ({
   getChapterDownloadQueue: vi.fn(() => mockDownloadQueue),
+  setChapterDownloadQueue: vi.fn(),
 }))
 
 vi.mock('../../services/chapter-download-status-store', () => ({
@@ -76,20 +77,30 @@ vi.mock('../../services/chapter-download-status-store', () => ({
     (sourceId: string, chapterId: string, jobId: string, status: string) =>
       mockJobStatusStore.setJobStatus(sourceId, chapterId, jobId, status),
   ),
+  setChapterDownloadStatusStore: vi.fn(),
 }))
 
-vi.mock('../../services/chapter-download-pubsub.service', () => ({
-  ChapterDownloadPubSubService: vi.fn(() => ({
-    publish: vi.fn(async () => {}),
-    subscribe: vi.fn(async () => {}),
-    unsubscribe: vi.fn(async () => {}),
-    pubRpush: vi.fn(async () => {}),
-    pubLrange: vi.fn(async () => []),
-    pubIncr: vi.fn(async () => 1),
-    pubExpire: vi.fn(async () => {}),
-    close: vi.fn(async () => {}),
-  })),
-}))
+vi.mock('../../../../shared/infra/redis', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../../../shared/infra/redis')
+  >('../../../../shared/infra/redis')
+  return {
+    ...actual,
+    RedisPubSubAdapter: vi.fn(() => ({
+      publish: vi.fn(async () => {}),
+      subscribe: vi.fn(async () => ({ unsubscribe: vi.fn(async () => {}) })),
+      subscribeMany: vi.fn(async () => ({ unsubscribe: vi.fn(async () => {}) })),
+      unsubscribe: vi.fn(async () => {}),
+      unsubscribeMany: vi.fn(async () => {}),
+    })),
+    RedisJournalAdapter: vi.fn(() => ({
+      append: vi.fn(async () => {}),
+      range: vi.fn(async () => []),
+      nextId: vi.fn(async () => 1),
+      expire: vi.fn(async () => {}),
+    })),
+  }
+})
 
 vi.mock('../../services/chapter-download-events.service', () => ({
   ChapterDownloadEventsService: vi.fn(() => ({

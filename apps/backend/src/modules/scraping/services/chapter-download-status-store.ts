@@ -1,16 +1,25 @@
-import { createSafeRedis } from '../../../shared/redis/safe-redis'
-import type { Redis as RedisType } from 'ioredis'
+import type { IStatusStore } from '../../../shared/infra'
+import { RedisStatusStoreAdapter } from '../../../shared/infra/redis'
 
 const PREFIX = 'chapter-download-active:'
 const TTL = 86400 // 24h
 
-let _redis: RedisType | null = null
+let _store: IStatusStore | null = null
 
-function getRedis(): RedisType {
-  if (!_redis) {
-    _redis = createSafeRedis('ch-download-status')
+function getStore(): IStatusStore {
+  if (!_store) {
+    _store = new RedisStatusStoreAdapter()
   }
-  return _redis
+  return _store
+}
+
+/**
+ * Injeta a implementação de {@link IStatusStore} usada pelas funções abaixo.
+ * Usado pelo composition root para trocar o Redis por InMemoryStatusStore
+ * no modo embedded (desktop). Sem chamada, o default é o adapter Redis lazy.
+ */
+export function setChapterDownloadStatusStore(store: IStatusStore): void {
+  _store = store
 }
 
 function key(sourceId: string, chapterId: string): string {
@@ -18,7 +27,7 @@ function key(sourceId: string, chapterId: string): string {
 }
 
 /**
- * Armazena o status de um job de download no Redis Hash.
+ * Armazena o status de um job de download no StatusStore (Hash).
  * Usado pelo worker (start/completed/failed) e pelo POST /download (idempotência).
  */
 export async function setJobStatus(
@@ -27,21 +36,18 @@ export async function setJobStatus(
   jobId: string,
   status: string,
 ): Promise<void> {
-  const redis = getRedis()
-  await redis.hmset(key(sourceId, chapterId), { jobId, status })
-  await redis.expire(key(sourceId, chapterId), TTL)
+  await getStore().set(key(sourceId, chapterId), { jobId, status }, TTL)
 }
 
 /**
- * Recupera o status de um job de download do Redis Hash.
+ * Recupera o status de um job de download do StatusStore (Hash).
  * Retorna null se não existir registro ativo.
  */
 export async function getJobStatus(
   sourceId: string,
   chapterId: string,
 ): Promise<{ jobId: string; status: string } | null> {
-  const redis = getRedis()
-  const data = await redis.hgetall(key(sourceId, chapterId))
+  const data = await getStore().get(key(sourceId, chapterId))
   if (!data || Object.keys(data).length === 0) return null
   return { jobId: data.jobId, status: data.status }
 }

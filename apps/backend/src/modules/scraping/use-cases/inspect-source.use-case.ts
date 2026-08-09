@@ -1,5 +1,7 @@
 import { normalizeUrl } from '../../../shared/utils/url-normalizer'
 import { createSourceId } from '../../../shared/utils/id-generator'
+import { createRedisQueueAdapter } from '../../../shared/infra/factory'
+import type { ILockService } from '../../../shared/infra'
 import { ProviderResolver } from '../providers/provider-resolver'
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
@@ -9,10 +11,45 @@ import type { SourceInspectState } from '../types/source.types'
 import { InvalidUrlError } from '../errors/scraping.errors'
 
 const resolver = new ProviderResolver()
-const repository = getSourceRepository()
-const cacheService = new CacheService(repository)
-const lockService = new RedisLockService()
-const queueService = new InspectQueueService()
+
+let repository: ReturnType<typeof getSourceRepository> | undefined
+let cacheService: CacheService | undefined
+let queueService: InspectQueueService | undefined
+let lockService: ILockService | undefined
+
+function getRepository(): ReturnType<typeof getSourceRepository> {
+  return (repository ??= getSourceRepository())
+}
+
+function getCacheService(): CacheService {
+  return (cacheService ??= new CacheService(getRepository()))
+}
+
+function getQueueService(): InspectQueueService {
+  return (queueService ??= new InspectQueueService(createRedisQueueAdapter('source-inspect')))
+}
+
+function getLockService(): ILockService {
+  return (lockService ??= new RedisLockService())
+}
+
+/**
+ * Injeta a fila de inspeção usada pelo use-case (chamada pelo composition root
+ * com `runtime.getQueue('source-inspect')`). Sem chamada, o default é o adapter
+ * Redis lazy — comportamento web preservado.
+ */
+export function setInspectQueueService(queue: InspectQueueService): void {
+  queueService = queue
+}
+
+/**
+ * Injeta o serviço de lock usado pelo use-case (chamada pelo composition root
+ * com `runtime.lock`). Sem chamada, o default é o `RedisLockService` —
+ * comportamento web preservado.
+ */
+export function setInspectLockService(lock: ILockService): void {
+  lockService = lock
+}
 
 export interface InspectSourceInput {
   url: string
@@ -49,20 +86,20 @@ export class InspectSourceUseCase {
 
     // 4. Cache válido e não é refresh?
     if (!input.refresh) {
-      const isValid = await cacheService.isValid(sourceId)
+      const isValid = await getCacheService().isValid(sourceId)
       if (isValid) {
         // Atualiza lastAccessAt e updatedAt
-        await cacheService.touch(sourceId)
+        await getCacheService().touch(sourceId)
         return { sourceId, status: 'ready' }
       }
     }
 
     // 5. Tenta adquirir lock (evita múltiplos scrapers para a mesma obra)
-    const acquired = await lockService.acquire(sourceId)
+    const acquired = await getLockService().acquire(sourceId)
 
     if (acquired) {
       // 6. Enfileira job BullMQ
-      await queueService.enqueue({
+      await getQueueService().enqueue({
         sourceId,
         provider: provider.slug,
         url: canonicalUrl,

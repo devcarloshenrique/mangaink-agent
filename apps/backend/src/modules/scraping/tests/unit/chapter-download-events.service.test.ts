@@ -1,22 +1,20 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 
-const mockRedis = {
-  rpush: vi.fn().mockResolvedValue(1),
-  lrange: vi.fn().mockResolvedValue([]),
-  incr: vi.fn().mockResolvedValue(1),
-  expire: vi.fn().mockResolvedValue(1),
-  publish: vi.fn().mockResolvedValue(1),
-  subscribe: vi.fn().mockResolvedValue(undefined),
+const mockPubSub = {
+  publish: vi.fn().mockResolvedValue(undefined),
+  subscribe: vi.fn().mockResolvedValue({ unsubscribe: vi.fn().mockResolvedValue(undefined) }),
+  subscribeMany: vi.fn().mockResolvedValue({ unsubscribe: vi.fn().mockResolvedValue(undefined) }),
   unsubscribe: vi.fn().mockResolvedValue(undefined),
-  on: vi.fn(),
-  quit: vi.fn().mockResolvedValue(undefined),
+  unsubscribeMany: vi.fn().mockResolvedValue(undefined),
 }
 
-vi.mock('ioredis', () => ({
-  default: vi.fn(() => mockRedis),
-}))
+const mockJournal = {
+  append: vi.fn().mockResolvedValue(undefined),
+  range: vi.fn().mockResolvedValue([]),
+  nextId: vi.fn().mockResolvedValue(1),
+  expire: vi.fn().mockResolvedValue(undefined),
+}
 
-import { ChapterDownloadPubSubService } from '../../services/chapter-download-pubsub.service'
 import { ChapterDownloadEventsService } from '../../services/chapter-download-events.service'
 import type { FastifyReply } from 'fastify'
 
@@ -31,13 +29,11 @@ function createMockReply() {
 }
 
 describe('ChapterDownloadEventsService', () => {
-  let pubsub: ChapterDownloadPubSubService
   let eventsService: ChapterDownloadEventsService
 
   beforeEach(() => {
     vi.clearAllMocks()
-    pubsub = new ChapterDownloadPubSubService()
-    eventsService = new ChapterDownloadEventsService(pubsub)
+    eventsService = new ChapterDownloadEventsService(mockPubSub as any, mockJournal as any)
   })
 
   it('createEvent deve retornar objeto com type, data e timestamp', () => {
@@ -49,29 +45,30 @@ describe('ChapterDownloadEventsService', () => {
     expect(new Date(event.timestamp!).toString()).not.toBe('Invalid Date')
   })
 
-  it('emit deve chamar incr, rpush, publish e expire no pubsub', async () => {
+  it('emit deve gravar no journal e publicar no canal raw', async () => {
     const event = eventsService.createEvent('completed', { totalImages: 10, downloaded: 10, errors: 0 })
+    mockJournal.nextId.mockResolvedValue(7)
 
     await eventsService.emit('src-test', 'chap-test', event)
 
     const idKey = 'chapter-download-event-id:src-test:chap-test'
     const journalKey = 'chapter-download-journal:src-test:chap-test'
 
-    expect(mockRedis.incr).toHaveBeenCalledWith(idKey)
-    expect(mockRedis.rpush).toHaveBeenCalledWith(
+    expect(mockJournal.nextId).toHaveBeenCalledWith(idKey)
+    expect(mockJournal.append).toHaveBeenCalledWith(
       journalKey,
       expect.stringContaining('"type":"completed"'),
     )
-    expect(mockRedis.publish).toHaveBeenCalledWith(
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
       'chapter-download:src-test:chap-test',
       expect.any(String),
     )
-    expect(mockRedis.expire).toHaveBeenCalledWith(journalKey, 3600)
-    expect(mockRedis.expire).toHaveBeenCalledWith(idKey, 3600)
+    expect(mockJournal.expire).toHaveBeenCalledWith(journalKey, 3600)
+    expect(mockJournal.expire).toHaveBeenCalledWith(idKey, 3600)
 
-    const publishPayload = JSON.parse(mockRedis.publish.mock.calls[0][1])
+    const publishPayload = JSON.parse(mockPubSub.publish.mock.calls[0][1])
     expect(publishPayload.type).toBe('completed')
-    expect(publishPayload.id).toBe(1)
+    expect(publishPayload.id).toBe(7)
   })
 
   describe('connectToSSE', () => {
@@ -86,7 +83,7 @@ describe('ChapterDownloadEventsService', () => {
       vi.useRealTimers()
     })
 
-    it('deve escrever headers SSE e inscrever no pubsub', async () => {
+    it('deve escrever headers SSE e inscrever no canal raw', async () => {
       await eventsService.connectToSSE('src-test', 'chap-test', mockReply)
 
       expect(mockReply.raw.writeHead).toHaveBeenCalledWith(200, {
@@ -96,11 +93,12 @@ describe('ChapterDownloadEventsService', () => {
         'X-Accel-Buffering': 'no',
       })
 
-      expect(mockRedis.subscribe).toHaveBeenCalledWith(
+      expect(mockPubSub.subscribe).toHaveBeenCalledWith(
         'chapter-download:src-test:chap-test',
+        expect.any(Function),
       )
 
-      expect(mockRedis.lrange).toHaveBeenCalledWith(
+      expect(mockJournal.range).toHaveBeenCalledWith(
         'chapter-download-journal:src-test:chap-test',
         0,
         -1,
@@ -109,7 +107,7 @@ describe('ChapterDownloadEventsService', () => {
       expect(mockReply.raw.on).toHaveBeenCalledWith('close', expect.any(Function))
     })
 
-    it('deve fazer replay de eventos do journal via lrange', async () => {
+    it('deve fazer replay de eventos do journal via range', async () => {
       const entry1 = {
         type: 'progress',
         data: { downloaded: 1, total: 10 },
@@ -123,7 +121,7 @@ describe('ChapterDownloadEventsService', () => {
         id: 2,
       }
 
-      mockRedis.lrange.mockResolvedValue([JSON.stringify(entry1), JSON.stringify(entry2)])
+      mockJournal.range.mockResolvedValue([JSON.stringify(entry1), JSON.stringify(entry2)])
 
       await eventsService.connectToSSE('src-test', 'chap-test', mockReply)
 
@@ -140,6 +138,4 @@ describe('ChapterDownloadEventsService', () => {
       )
     })
   })
-
-
 })

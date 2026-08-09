@@ -1,11 +1,16 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
+import type { RuntimeAdapters } from '../../shared/infra/factory'
 import { createChapterDownload } from './controllers/create-chapter-download.controller'
 import { getChapterDownload } from './controllers/get-chapter-download.controller'
-import { chapterDownloadEvents } from './controllers/chapter-download-events.controller'
+import { createChapterDownloadEventsController } from './controllers/chapter-download-events.controller'
 import { serveChapterImage } from './controllers/serve-chapter-image.controller'
 import { deleteChapterCache } from './controllers/delete-chapter-cache.controller'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
+
+interface ChapterRoutesOptions {
+  runtime?: RuntimeAdapters
+}
 
 const chapterParamsSchema = z.object({
   sourceId: z.string(),
@@ -30,7 +35,9 @@ const downloadStatusResponseSchema = z.object({
   jobId: z.string().nullable(),
 })
 
-export const chapterRoutes: FastifyPluginAsyncZod = async (app) => {
+export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async (app, opts) => {
+  const chapterDownloadEvents = createChapterDownloadEventsController(opts.runtime)
+
   // POST /api/sources/:sourceId/chapters/:chapterId/download
   app.post(
     '/api/sources/:sourceId/chapters/:chapterId/download',

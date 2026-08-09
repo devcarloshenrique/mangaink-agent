@@ -13,6 +13,23 @@ export interface KccRunResult {
 }
 
 /**
+ * Contrato de execução do KCC (Kindle Comic Converter). Implementações:
+ *  - `KccRunnerService` — via `docker run mangaink-kcc:10.3.0`
+ *  - `KccRunnerEmbedded` — via python embutido (modo embedded, sem Docker)
+ */
+export interface IKccRunner {
+  run(
+    jobId: string,
+    options: Record<string, string | number | boolean | undefined>,
+    deviceId: string,
+    format: string,
+    inputPath: string,
+    outputPath: string,
+    title: string,
+  ): Promise<KccRunResult>
+}
+
+/**
  * Argumentos `--user` do `docker run` para que os arquivos gerados em `/output`
  * pertençam ao usuário do host. No Linux usa UID/GID do processo atual; no
  * Windows/macOS as permissões são gerenciadas pelo Docker Desktop (omitido).
@@ -61,8 +78,12 @@ let dockerChecked = false
  * Verifica (uma vez por processo) se o Docker está disponível no host. Emite um
  * erro claro em stdout e segue — o erro concreto só acontecerá na primeira
  * chamada `spawn('docker', ...)` se o daemon não estiver acessível.
+ *
+ * No modo embedded (`MI_EMBEDDED_MODE=1`) o KCC roda via python embutido — a
+ * verificação é um no-op (não executa `docker --version`).
  */
 export function checkDockerAvailable(): void {
+  if (env.MI_EMBEDDED_MODE) return
   if (dockerChecked) return
   dockerChecked = true
   try {
@@ -74,7 +95,7 @@ export function checkDockerAvailable(): void {
   }
 }
 
-export class KccRunnerService {
+export class KccRunnerService implements IKccRunner {
   constructor(private readonly events: ConversionEventsService) {}
 
   /**

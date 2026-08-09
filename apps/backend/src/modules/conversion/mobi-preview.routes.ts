@@ -6,10 +6,13 @@ import {
   StartMobiPreviewUseCase,
   GetMobiPreviewStatusUseCase,
   GetMobiPreviewPageUseCase,
+  type MobiPreviewJobData,
 } from './use-cases/mobi-preview.use-case'
 import { MobiPreviewService } from './services/mobi-preview.service'
 import { MobiPreviewStatusStore } from '../../shared/redis/mobi-preview-status-store'
 import { MobiPreviewQueueService } from './services/mobi-preview-queue.service'
+import type { IQueueService } from '../../shared/infra'
+import { createRedisQueueAdapter, type RuntimeAdapters } from '../../shared/infra/factory'
 import {
   startMobiPreviewHandler,
   getMobiPreviewStatusHandler,
@@ -23,28 +26,41 @@ import {
 } from './dtos/mobi-preview.dto'
 
 // ── Instâncias compartilhadas ──────────────────────────────────────────
-const service = new MobiPreviewService()
-const store = new MobiPreviewStatusStore()
-const queue = new MobiPreviewQueueService()
+// Com o `runtime` presente, fila e status store são as MESMAS instâncias dos
+// workers. Sem runtime, o default é o adapter Redis web — comportamento legado.
+function buildMobiPreviewDeps(opts?: { runtime?: RuntimeAdapters }) {
+  const runtime = opts?.runtime
+  const service = new MobiPreviewService()
+  const store = new MobiPreviewStatusStore(runtime ? runtime.status : undefined)
+  const queue = new MobiPreviewQueueService(
+    (runtime ? runtime.getQueue('mobi-preview') : createRedisQueueAdapter('mobi-preview')) as IQueueService<MobiPreviewJobData>,
+  )
 
-const startMobiPreviewUseCase = new StartMobiPreviewUseCase(
-  getConversionRepository(),
-  getConversionJobRepository(),
-  service,
-  store,
-  queue,
-)
-const getMobiPreviewStatusUseCase = new GetMobiPreviewStatusUseCase(
-  getConversionRepository(),
-  getConversionJobRepository(),
-  service,
-  store,
-)
-const getMobiPreviewPageUseCase = new GetMobiPreviewPageUseCase(
-  getConversionRepository(),
-  getConversionJobRepository(),
-  service,
-)
+  const startMobiPreviewUseCase = new StartMobiPreviewUseCase(
+    getConversionRepository(),
+    getConversionJobRepository(),
+    service,
+    store,
+    queue,
+  )
+  const getMobiPreviewStatusUseCase = new GetMobiPreviewStatusUseCase(
+    getConversionRepository(),
+    getConversionJobRepository(),
+    service,
+    store,
+  )
+  const getMobiPreviewPageUseCase = new GetMobiPreviewPageUseCase(
+    getConversionRepository(),
+    getConversionJobRepository(),
+    service,
+  )
+
+  return { startMobiPreviewUseCase, getMobiPreviewStatusUseCase, getMobiPreviewPageUseCase }
+}
+
+interface MobiPreviewRoutesOptions {
+  runtime?: RuntimeAdapters
+}
 
 const notFound = z.object({ error: z.string() })
 const forbidden = z.object({ error: z.string() })
@@ -55,7 +71,10 @@ const previewNotReady = z.object({
   totalPages: z.number().int().nonnegative().optional(),
 })
 
-export const mobiPreviewRoutes: FastifyPluginAsyncZod = async (app) => {
+export const mobiPreviewRoutes: FastifyPluginAsyncZod<MobiPreviewRoutesOptions> = async (app, opts) => {
+  const { startMobiPreviewUseCase, getMobiPreviewStatusUseCase, getMobiPreviewPageUseCase } =
+    buildMobiPreviewDeps(opts)
+
   // POST /api/conversions/:conversionId/jobs/:jobId/preview
   app.post(
     '/api/conversions/:conversionId/jobs/:jobId/preview',

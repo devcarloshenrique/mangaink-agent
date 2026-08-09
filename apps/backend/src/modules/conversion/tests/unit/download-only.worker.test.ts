@@ -117,13 +117,19 @@ vi.mock('../../../../shared/config/env', () => ({
   },
 }))
 
-vi.mock('../../services/conversion-pubsub.service', () => ({
-  ConversionPubSubService: vi.fn(() => ({
+vi.mock('../../../../shared/infra/redis', () => ({
+  RedisPubSubAdapter: vi.fn(() => ({
     publish: vi.fn(),
     subscribe: vi.fn(),
     subscribeMany: vi.fn(),
     unsubscribe: vi.fn(),
-    close: vi.fn(),
+    unsubscribeMany: vi.fn(),
+  })),
+  RedisJournalAdapter: vi.fn(() => ({
+    append: vi.fn(),
+    range: vi.fn(async () => []),
+    nextId: vi.fn(),
+    expire: vi.fn(),
   })),
 }))
 

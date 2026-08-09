@@ -1,16 +1,26 @@
 import type { FastifyReply } from 'fastify'
-import type { RedisPubSubService, ProgressMessage } from './redis-pubsub.service'
+import type { IPubSub } from '../../../shared/infra'
+
+export type ProgressStage = 'metadata' | 'chapters' | 'covers' | 'completed' | 'failed'
+
+export interface ProgressMessage {
+  stage: ProgressStage
+  progress?: number
+  message?: string
+}
 
 /**
- * Serviço que faz a bridge entre o Redis Pub/Sub e os clientes SSE.
- * Cada cliente que se conecta ao endpoint SSE registra um listener aqui.
+ * Serviço que faz a bridge entre o Pub/Sub (canal `source:{sourceId}`) e os
+ * clientes SSE. Cada cliente que se conecta ao endpoint SSE registra um
+ * listener aqui. O payload trafega como string JSON: os call-sites publicam
+ * com `JSON.stringify` e o callback faz `JSON.parse`.
  */
 export class SourceEventsService {
-  constructor(private readonly pubsub: RedisPubSubService) {}
+  constructor(private readonly pubsub: IPubSub) {}
 
   /**
    * Inicia o streaming SSE para um sourceId.
-   * Fica ouvindo o Redis Pub/Sub e envia os eventos para o cliente HTTP.
+   * Fica ouvindo o Pub/Sub e envia os eventos para o cliente HTTP.
    *
    * Fecha a conexão automaticamente ao receber 'completed' ou 'failed'.
    */
@@ -25,39 +35,52 @@ export class SourceEventsService {
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     }
 
-    return new Promise((resolve) => {
-      const { unsubscribe } = this.pubsub.subscribe(sourceId, (msg: ProgressMessage) => {
-        if (msg.stage === 'completed') {
-          send('completed', { sourceId })
-          unsubscribe().finally(() => {
-            reply.raw.end()
-            resolve()
-          })
-          return
-        }
+    let resolveStream: (() => void) | undefined
+    const streamDone = new Promise<void>((resolve) => {
+      resolveStream = resolve
+    })
 
-        if (msg.stage === 'failed') {
-          send('failed', { message: msg.message ?? 'Erro durante o processamento' })
-          unsubscribe().finally(() => {
-            reply.raw.end()
-            resolve()
-          })
-          return
-        }
+    const handle = await this.pubsub.subscribe(`source:${sourceId}`, (rawMessage) => {
+      let msg: ProgressMessage
+      try {
+        msg = JSON.parse(rawMessage) as ProgressMessage
+      } catch {
+        return // ignora mensagem malformada
+      }
 
-        // progress event
-        send('progress', {
-          stage: msg.stage,
-          message: msg.message ?? `Processando: ${msg.stage}`,
-          progress: msg.progress,
+      const finish = () => {
+        handle.unsubscribe().finally(() => {
+          reply.raw.end()
+          resolveStream?.()
         })
-      })
+      }
 
-      // Limpa ao cliente desconectar
-      reply.raw.on('close', () => {
-        unsubscribe().catch(() => {})
-        resolve()
+      if (msg.stage === 'completed') {
+        send('completed', { sourceId })
+        finish()
+        return
+      }
+
+      if (msg.stage === 'failed') {
+        send('failed', { message: msg.message ?? 'Erro durante o processamento' })
+        finish()
+        return
+      }
+
+      // progress event
+      send('progress', {
+        stage: msg.stage,
+        message: msg.message ?? `Processando: ${msg.stage}`,
+        progress: msg.progress,
       })
     })
+
+    // Limpa ao cliente desconectar
+    reply.raw.on('close', () => {
+      handle.unsubscribe().catch(() => {})
+      resolveStream?.()
+    })
+
+    return streamDone
   }
 }

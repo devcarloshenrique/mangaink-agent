@@ -22,16 +22,26 @@ import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
 import { SourceNotFoundError, ProviderNotFoundError } from '../modules/scraping/errors/scraping.errors'
-import '../modules/scraping/workers/inspect-source.worker'
-import '../modules/conversion/workers/conversion-job.worker'
-import '../modules/conversion/workers/download-only.worker'
+import { startInspectSourceWorker } from '../modules/scraping/workers/inspect-source.worker'
+import { startConversionJobWorker } from '../modules/conversion/workers/conversion-job.worker'
+import { startDownloadOnlyWorker } from '../modules/conversion/workers/download-only.worker'
 import { startMobiPreviewWorker } from '../modules/conversion/workers/mobi-preview.worker'
 import { startChapterDownloadWorker } from '../modules/scraping/workers/chapter-download.worker'
+import { createRuntimeAdapters } from './infra/factory'
+import type { QueueWorkerHandle } from './infra/queue-worker'
+import type { IQueueService } from './infra'
+import type { ChapterDownloadData } from '../modules/scraping/types/chapter-download.types'
+import { setChapterDownloadQueue } from '../modules/scraping/services/chapter-download-queue.service'
+import { setChapterDownloadStatusStore } from '../modules/scraping/services/chapter-download-status-store'
 
 export async function createServer() {
   const app = Fastify({
     logger: env.NODE_ENV === 'dev',
   }).withTypeProvider<ZodTypeProvider>()
+
+  // Runtime de infraestrutura (embedded in-memory ou web/Redis) — usado para
+  // iniciar os workers sem conexões no load do módulo.
+  const runtime = createRuntimeAdapters()
 
   // ── CORS ────────────────────────────────────────────────────────────────────
   await app.register(cors, {
@@ -169,18 +179,36 @@ export async function createServer() {
   })
 
   // ── Rotas ───────────────────────────────────────────────────────────────────
+  // Os produtores de download de capítulos (use-case/controller) consomem a
+  // MESMA fila e status store do worker via runtime. Sem esses setters, o
+  // default é o adapter Redis web — comportamento legado preservado.
+  setChapterDownloadQueue(runtime.getQueue('chapter-download') as IQueueService<ChapterDownloadData>)
+  setChapterDownloadStatusStore(runtime.status)
+
   await app.register(healthRoutes)
   await app.register(authRoutes)
-  await app.register(scrapingRoutes)
-  await app.register(conversionRoutes)
-  await app.register(mobiPreviewRoutes)
-  await app.register(chapterRoutes)
+  await app.register(scrapingRoutes, { runtime })
+  await app.register(conversionRoutes, { runtime })
+  await app.register(mobiPreviewRoutes, { runtime })
+  await app.register(chapterRoutes, { runtime })
   await app.register(readingRoutes)
 
-  // Inicia o worker BullMQ de extracao de preview MOBI (substrato do reader)
+  // Inicia os workers de background (scraping, conversão, download-only,
+  // preview MOBI e download de capítulos). Em modo embedded, todos rodam sobre
+  // as filas in-memory do runtime; em modo web, sobre BullMQ/Redis. Os handles
+  // são fechados no shutdown via hook onClose.
   if (env.NODE_ENV !== 'test') {
-    startMobiPreviewWorker()
-    startChapterDownloadWorker()
+    const workerHandles: QueueWorkerHandle[] = [
+      startInspectSourceWorker({ runtime }),
+      startConversionJobWorker({ runtime }),
+      startDownloadOnlyWorker({ runtime }),
+      startMobiPreviewWorker({ runtime }),
+      startChapterDownloadWorker({ runtime }),
+    ]
+
+    app.addHook('onClose', async () => {
+      await Promise.allSettled(workerHandles.map((handle) => handle.close()))
+    })
   }
 
   return app

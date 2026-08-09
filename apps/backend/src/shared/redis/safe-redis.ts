@@ -19,6 +19,10 @@ const connections: Redis[] = []
  * @param opts  — opções extras do ioredis (mescladas sobre as defaults)
  */
 export function createSafeRedis(label: string, opts?: Partial<RedisOptions>): Redis {
+  if (env.MI_EMBEDDED_MODE) {
+    throw new Error('Redis não disponível no modo embedded (MI_EMBEDDED_MODE=1)')
+  }
+
   const instance = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: null,
     ...opts,

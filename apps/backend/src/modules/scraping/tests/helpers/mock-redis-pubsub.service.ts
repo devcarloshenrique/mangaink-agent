@@ -1,4 +1,4 @@
-import type { ProgressMessage } from '../../services/redis-pubsub.service'
+import type { ProgressMessage } from '../../services/source-events.service'
 
 export class MockRedisPubSubService {
   publishedMessages: Array<{ sourceId: string; message: ProgressMessage }> = []

@@ -26,11 +26,25 @@ const positiveMs = z.preprocess(
 )
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['dev', 'test', 'production']).default('dev'),
+  // Vite/electron-vite dev definem NODE_ENV='development' — normaliza para 'dev'
+  NODE_ENV: z
+    .preprocess((val) => (val === 'development' ? 'dev' : val), z.enum(['dev', 'test', 'production']))
+    .default('dev'),
   PORT: z.coerce.number().default(3333),
   JWT_SECRET: z.string(),
   DATABASE_URL: z.string(),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  // Modo embedded: backend embarcado no app desktop (true apenas para '1' ou 'true')
+  MI_EMBEDDED_MODE: z
+    .string()
+    .optional()
+    .transform((value) => value === '1' || value === 'true'),
+
+  // Caminho raiz do runtime embarcado (usado apenas no modo embedded)
+  MI_EMBEDDED_RUNTIME_PATH: z.string().optional(),
+
+  // Ignorado no modo embedded (MI_EMBEDDED_MODE=1)
+  REDIS_URL: z.string().optional().default('redis://localhost:6379'),
   STORAGE_PATH: z.string().default('./storage'),
   KCC_DOCKER_IMAGE: z.string().default('mangaink-kcc:10.3.0'),
   CONVERSIONS_STORAGE_PATH: z.string().default('./storage/conversions'),

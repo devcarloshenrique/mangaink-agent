@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { GetConversionLogsUseCase } from '../../use-cases/get-conversion-logs.use-case'
 import { GetConversionUseCase } from '../../use-cases/get-conversion.use-case'
-import { ConversionPubSubService } from '../../services/conversion-pubsub.service'
+import type { IJournalStore } from '../../../../shared/infra'
 import { ConversionNotFoundError, ForbiddenError } from '../../errors/conversion.errors'
 import type { ConversionState, SSEEvent } from '../../types/conversion.types'
 import { makeConversionConfig } from '../helpers/fixtures'
@@ -13,9 +13,9 @@ const mockGetConversion = {
   execute: vi.fn(),
 } as unknown as GetConversionUseCase
 
-const mockPubsub = {
-  pubLrange: vi.fn(),
-} as unknown as ConversionPubSubService
+const mockJournal = {
+  range: vi.fn(),
+} as unknown as IJournalStore
 
 let useCase: GetConversionLogsUseCase
 
@@ -64,13 +64,13 @@ const journalEntries3 = JSON.stringify(makeJournalEntry({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useCase = new GetConversionLogsUseCase(mockGetConversion, mockPubsub)
+  useCase = new GetConversionLogsUseCase(mockGetConversion, mockJournal)
 })
 
 describe('GetConversionLogsUseCase', () => {
   it('deve retornar array vazio quando não há eventos no journal', async () => {
     vi.mocked(mockGetConversion.execute).mockResolvedValue(makeState())
-    vi.mocked(mockPubsub.pubLrange).mockResolvedValue([])
+    vi.mocked(mockJournal.range).mockResolvedValue([])
 
     const result = await useCase.execute('conv_test_001', TEST_USER)
 
@@ -90,7 +90,7 @@ describe('GetConversionLogsUseCase', () => {
       }),
     )
 
-    vi.mocked(mockPubsub.pubLrange)
+    vi.mocked(mockJournal.range)
       .mockResolvedValueOnce([journalEntries, journalEntries2])
       .mockResolvedValueOnce([journalEntries3])
 
@@ -100,14 +100,14 @@ describe('GetConversionLogsUseCase', () => {
     expect(result[0].type).toBe('download.chapter.started')
     expect(result[1].type).toBe('conversion.started')
     expect(result[2].type).toBe('job.finished')
-    expect(mockPubsub.pubLrange).toHaveBeenCalledTimes(2)
-    expect(mockPubsub.pubLrange).toHaveBeenCalledWith('conversion-journal:job_001', 0, -1)
-    expect(mockPubsub.pubLrange).toHaveBeenCalledWith('conversion-journal:job_002', 0, -1)
+    expect(mockJournal.range).toHaveBeenCalledTimes(2)
+    expect(mockJournal.range).toHaveBeenCalledWith('conversion-journal:job_001', 0, -1)
+    expect(mockJournal.range).toHaveBeenCalledWith('conversion-journal:job_002', 0, -1)
   })
 
   it('deve tolerar entradas inválidas no journal (JSON malformado)', async () => {
     vi.mocked(mockGetConversion.execute).mockResolvedValue(makeState())
-    vi.mocked(mockPubsub.pubLrange).mockResolvedValue([
+    vi.mocked(mockJournal.range).mockResolvedValue([
       journalEntries,
       'json-invalido',
       journalEntries2,
@@ -146,7 +146,7 @@ describe('GetConversionLogsUseCase', () => {
       }),
     )
 
-    vi.mocked(mockPubsub.pubLrange)
+    vi.mocked(mockJournal.range)
       .mockResolvedValueOnce([journalEntries])
       .mockResolvedValueOnce([journalEntries2])
 

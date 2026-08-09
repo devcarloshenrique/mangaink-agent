@@ -1,85 +1,70 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { IStatusStore } from '../../infra'
+import { InMemoryStatusStore } from '../../infra/inmemory'
+import { RedisStatusStoreAdapter } from '../../infra/redis'
 
-const mockHset = vi.fn().mockResolvedValue('OK')
-const mockHgetall = vi.fn()
-const mockDel = vi.fn().mockResolvedValue(1)
-const mockExpire = vi.fn().mockResolvedValue(1)
-
-vi.mock('../redis', () => ({
-  getRedis: () => ({
-    hset: mockHset,
-    hgetall: mockHgetall,
-    del: mockDel,
-    expire: mockExpire,
-  }),
-  closeRedis: vi.fn(),
+const envHolder = vi.hoisted(() => ({
+  env: { JOB_STATUS_TTL_SEC: 21600, MI_EMBEDDED_MODE: false },
 }))
 
-vi.mock('../../config/env', () => ({
-  env: {
-    JOB_STATUS_TTL_SEC: 21600,
-    REDIS_URL: 'redis://localhost:6379',
-    NODE_ENV: 'test',
-    PORT: 3333,
-    JWT_SECRET: 'test-secret',
-    DATABASE_URL: 'postgresql://test',
-    STORAGE_PATH: './storage',
-    KCC_DOCKER_IMAGE: 'mangaink-kcc:10.3.0',
-    CONVERSIONS_STORAGE_PATH: './storage/conversions',
-    REPO_BACKEND: 'filesystem',
-  },
-}))
+vi.mock('../../config/env', () => ({ env: envHolder.env }))
 
 import { JobLiveStatusStore } from '../job-status-store'
 
+function createMockStore() {
+  return {
+    get: vi.fn(),
+    set: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
 describe('JobLiveStatusStore', () => {
   let store: JobLiveStatusStore
+  let mockStore: ReturnType<typeof createMockStore>
 
   beforeEach(() => {
-    store = new JobLiveStatusStore()
-    mockHset.mockClear()
-    mockHgetall.mockClear()
-    mockDel.mockClear()
-    mockExpire.mockClear()
+    envHolder.env.MI_EMBEDDED_MODE = false
+    mockStore = createMockStore()
+    store = new JobLiveStatusStore(mockStore as IStatusStore)
   })
 
-  it('set: HSET + EXPIRE com TTL correto', async () => {
+  it('set: delega para IStatusStore com merge flat + TTL de JOB_STATUS_TTL_SEC', async () => {
     await store.set('job-1', {
       status: 'preparing',
       currentStep: 'Preparing...',
       updatedAt: '2024-01-01T00:00:00.000Z',
     })
 
-    expect(mockHset).toHaveBeenCalledWith(
+    expect(mockStore.set).toHaveBeenCalledWith(
       'conv:status:job-1',
-      'status',
-      'preparing',
-      'currentStep',
-      'Preparing...',
-      'updatedAt',
-      '2024-01-01T00:00:00.000Z',
+      {
+        status: 'preparing',
+        currentStep: 'Preparing...',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+      21600,
     )
-    expect(mockExpire).toHaveBeenCalledWith('conv:status:job-1', 21600)
   })
 
-  it('set: ignora campos undefined', async () => {
+  it('set: ignora campos undefined ao montar o objeto flat', async () => {
     await store.set('job-1', { status: 'downloading', progress: undefined })
 
-    expect(mockHset).toHaveBeenCalledWith(
+    expect(mockStore.set).toHaveBeenCalledWith(
       'conv:status:job-1',
-      'status',
-      'downloading',
+      { status: 'downloading' },
+      21600,
     )
   })
 
-  it('set: não chama HSET se partial vazio', async () => {
+  it('set: não delega se o partial está vazio', async () => {
     await store.set('job-1', {})
 
-    expect(mockHset).not.toHaveBeenCalled()
+    expect(mockStore.set).not.toHaveBeenCalled()
   })
 
-  it('get: retorna objeto tipado se chave existe', async () => {
-    mockHgetall.mockResolvedValue({
+  it('get: retorna objeto tipado se a chave existe', async () => {
+    mockStore.get.mockResolvedValue({
       status: 'downloading',
       currentStep: 'Downloading...',
       progress: '42',
@@ -98,11 +83,11 @@ describe('JobLiveStatusStore', () => {
       totalImages: 20,
       updatedAt: '2024-01-01T00:00:00.000Z',
     })
-    expect(mockHgetall).toHaveBeenCalledWith('conv:status:job-1')
+    expect(mockStore.get).toHaveBeenCalledWith('conv:status:job-1')
   })
 
-  it('get: retorna null se chave não existe', async () => {
-    mockHgetall.mockResolvedValue({})
+  it('get: retorna null quando IStatusStore devolve null', async () => {
+    mockStore.get.mockResolvedValue(null)
 
     const result = await store.get('job-1')
 
@@ -110,7 +95,7 @@ describe('JobLiveStatusStore', () => {
   })
 
   it('get: parseia campos numéricos a partir de strings', async () => {
-    mockHgetall.mockResolvedValue({
+    mockStore.get.mockResolvedValue({
       status: 'completed',
       progress: '0',
       downloadedImages: '0',
@@ -126,23 +111,8 @@ describe('JobLiveStatusStore', () => {
     expect(result!.outputSize).toBe(1024000)
   })
 
-  it('clear: DEL a chave correta', async () => {
-    await store.clear('job-1')
-
-    expect(mockDel).toHaveBeenCalledWith('conv:status:job-1')
-  })
-
-  it('TTL renovado em cada set', async () => {
-    await store.set('job-1', { status: 'preparing', updatedAt: '2024-01-01T00:00:00.000Z' })
-    expect(mockExpire).toHaveBeenCalledWith('conv:status:job-1', 21600)
-    mockExpire.mockClear()
-
-    await store.set('job-1', { status: 'downloading', updatedAt: '2024-01-01T00:00:00.000Z' })
-    expect(mockExpire).toHaveBeenCalledWith('conv:status:job-1', 21600)
-  })
-
   it('get: campos opcionais retornam undefined quando ausentes', async () => {
-    mockHgetall.mockResolvedValue({
+    mockStore.get.mockResolvedValue({
       status: 'queued',
       currentStep: '',
       progress: '0',
@@ -159,5 +129,59 @@ describe('JobLiveStatusStore', () => {
     expect(result!.outputFile).toBeUndefined()
     expect(result!.outputSize).toBeUndefined()
     expect(result!.error).toBeUndefined()
+  })
+
+  it('clear: delega para IStatusStore', async () => {
+    await store.clear('job-1')
+
+    expect(mockStore.clear).toHaveBeenCalledWith('conv:status:job-1')
+  })
+})
+
+describe('JobLiveStatusStore default (env-aware)', () => {
+  it('MI_EMBEDDED_MODE=true → InMemoryStatusStore e roundtrip sem Redis', async () => {
+    envHolder.env.MI_EMBEDDED_MODE = true
+
+    const defaultStore = new JobLiveStatusStore()
+
+    expect((defaultStore as unknown as { store: IStatusStore }).store).toBeInstanceOf(InMemoryStatusStore)
+
+    await defaultStore.set('job-x', {
+      status: 'downloading',
+      currentStep: 'Downloading...',
+      progress: 42,
+      downloadedImages: 5,
+      totalImages: 10,
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    })
+    const result = await defaultStore.get('job-x')
+
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe('downloading')
+    expect(result!.currentStep).toBe('Downloading...')
+    expect(result!.progress).toBe(42)
+    expect(result!.downloadedImages).toBe(5)
+    expect(result!.totalImages).toBe(10)
+    expect(result!.updatedAt).toBe('2024-01-01T00:00:00.000Z')
+
+    await defaultStore.clear('job-x')
+    expect(await defaultStore.get('job-x')).toBeNull()
+  })
+
+  it('sem flag (MI_EMBEDDED_MODE=false) → RedisStatusStoreAdapter lazy, sem conexão', () => {
+    envHolder.env.MI_EMBEDDED_MODE = false
+
+    const defaultStore = new JobLiveStatusStore()
+
+    expect((defaultStore as unknown as { store: IStatusStore }).store).toBeInstanceOf(RedisStatusStoreAdapter)
+  })
+
+  it('injeção explícita sobrepõe o default mesmo com MI_EMBEDDED_MODE=true', () => {
+    envHolder.env.MI_EMBEDDED_MODE = true
+
+    const localMock = createMockStore()
+    const injectedStore = new JobLiveStatusStore(localMock as IStatusStore)
+
+    expect((injectedStore as unknown as { store: IStatusStore }).store).toBe(localMock)
   })
 })

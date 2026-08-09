@@ -3,13 +3,17 @@ import { join } from 'node:path'
 
 const mockPubsubInstance = vi.hoisted(() => ({
   publish: vi.fn().mockResolvedValue(undefined),
-  subscribe: vi.fn().mockResolvedValue(undefined),
+  subscribe: vi.fn().mockResolvedValue({ unsubscribe: vi.fn().mockResolvedValue(undefined) }),
+  subscribeMany: vi.fn().mockResolvedValue({ unsubscribe: vi.fn().mockResolvedValue(undefined) }),
   unsubscribe: vi.fn().mockResolvedValue(undefined),
-  pubRpush: vi.fn().mockResolvedValue(undefined),
-  pubLrange: vi.fn().mockResolvedValue([]),
-  pubIncr: vi.fn().mockResolvedValue(1),
-  pubExpire: vi.fn().mockResolvedValue(undefined),
-  close: vi.fn().mockResolvedValue(undefined),
+  unsubscribeMany: vi.fn().mockResolvedValue(undefined),
+}))
+
+const mockJournalInstance = vi.hoisted(() => ({
+  append: vi.fn().mockResolvedValue(undefined),
+  range: vi.fn().mockResolvedValue([]),
+  nextId: vi.fn().mockResolvedValue(1),
+  expire: vi.fn().mockResolvedValue(undefined),
 }))
 
 const mockEventsInstance = vi.hoisted(() => ({
@@ -51,8 +55,9 @@ vi.mock('../../utils/resolve-provider', () => ({
   resolveProvider: mockResolveProviderFn,
 }))
 
-vi.mock('../../services/chapter-download-pubsub.service', () => ({
-  ChapterDownloadPubSubService: vi.fn(() => mockPubsubInstance),
+vi.mock('../../../../shared/infra/redis', () => ({
+  RedisPubSubAdapter: vi.fn(() => mockPubsubInstance),
+  RedisJournalAdapter: vi.fn(() => mockJournalInstance),
 }))
 
 vi.mock('../../services/chapter-download-events.service', () => ({

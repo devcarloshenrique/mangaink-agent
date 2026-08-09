@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { RedisLockService } from '../../services/redis-lock.service'
+import type { ILockService } from '../../../../shared/infra'
 
 vi.mock('ioredis', () => {
   const mockRedis = {
@@ -78,6 +79,15 @@ describe('RedisLockService', () => {
       mockRedis.get.mockResolvedValue(null)
       const result = await lockService.isLocked('src-test-12345678')
       expect(result).toBe(false)
+    })
+  })
+
+  describe('conformidade com o contrato ILockService (shared/infra)', () => {
+    it('deve ser atribuível a ILockService e expor acquire, release e isLocked', () => {
+      const lock: ILockService = new RedisLockService()
+      expect(['acquire', 'release', 'isLocked'].every((k) => typeof (lock as any)[k] === 'function')).toBe(
+        true,
+      )
     })
   })
 })

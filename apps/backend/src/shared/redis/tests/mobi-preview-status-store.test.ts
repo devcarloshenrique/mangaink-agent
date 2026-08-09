@@ -1,56 +1,35 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { IStatusStore } from '../../infra'
+import { InMemoryStatusStore } from '../../infra/inmemory'
+import { RedisStatusStoreAdapter } from '../../infra/redis'
 
-const mockHset = vi.fn().mockResolvedValue('OK')
-const mockHgetall = vi.fn()
-const mockDel = vi.fn().mockResolvedValue(1)
-const mockExpire = vi.fn().mockResolvedValue(1)
-const mockIncr = vi.fn().mockResolvedValue(1)
-const mockPublish = vi.fn().mockResolvedValue(1)
-
-vi.mock('../redis', () => ({
-  getRedis: () => ({
-    hset: mockHset,
-    hgetall: mockHgetall,
-    del: mockDel,
-    expire: mockExpire,
-    incr: mockIncr,
-    publish: mockPublish,
-  }),
-  closeRedis: vi.fn(),
+const envHolder = vi.hoisted(() => ({
+  env: { JOB_STATUS_TTL_SEC: 21600, MI_EMBEDDED_MODE: false },
 }))
 
-vi.mock('../../config/env', () => ({
-  env: {
-    JOB_STATUS_TTL_SEC: 21600,
-    REDIS_URL: 'redis://localhost:6379',
-    NODE_ENV: 'test',
-    PORT: 3333,
-    JWT_SECRET: 'test-secret',
-    DATABASE_URL: 'postgresql://test',
-    STORAGE_PATH: './storage',
-    KCC_DOCKER_IMAGE: 'mangaink-kcc:10.3.0',
-    CONVERSIONS_STORAGE_PATH: './storage/conversions',
-    MOBI_DOCKER_IMAGE: 'mangaink-unpack:0.4.1',
-    MOBI_PREVIEW_TTL_SEC: 86400,
-  },
-}))
+vi.mock('../../config/env', () => ({ env: envHolder.env }))
 
 import { MobiPreviewStatusStore } from '../mobi-preview-status-store'
 
+function createMockStore() {
+  return {
+    get: vi.fn(),
+    set: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
 describe('MobiPreviewStatusStore', () => {
   let store: MobiPreviewStatusStore
+  let mockStore: ReturnType<typeof createMockStore>
 
   beforeEach(() => {
-    store = new MobiPreviewStatusStore()
-    mockHset.mockClear()
-    mockHgetall.mockClear()
-    mockDel.mockClear()
-    mockExpire.mockClear()
-    mockIncr.mockClear()
-    mockPublish.mockClear()
+    envHolder.env.MI_EMBEDDED_MODE = false
+    mockStore = createMockStore()
+    store = new MobiPreviewStatusStore(mockStore as IStatusStore)
   })
 
-  it('set: HSET + EXPIRE com TTL de JOB_STATUS_TTL_SEC', async () => {
+  it('set: delega para IStatusStore com merge flat + TTL de JOB_STATUS_TTL_SEC', async () => {
     await store.set('job-1', {
       status: 'extracting',
       readyPages: 5,
@@ -58,56 +37,36 @@ describe('MobiPreviewStatusStore', () => {
       updatedAt: '2024-01-01T00:00:00.000Z',
     })
 
-    expect(mockHset).toHaveBeenCalledWith(
+    expect(mockStore.set).toHaveBeenCalledWith(
       'mobi:preview:status:job-1',
-      'status',
-      'extracting',
-      'readyPages',
-      '5',
-      'totalPages',
-      '20',
-      'updatedAt',
-      '2024-01-01T00:00:00.000Z',
-    )
-    expect(mockExpire).toHaveBeenCalledWith('mobi:preview:status:job-1', 21600)
-  })
-
-  it('set: serializa completedAt e error opcionais', async () => {
-    await store.set('job-1', {
-      status: 'failed',
-      error: 'docker not found',
-      updatedAt: '2024-01-01T00:00:00.000Z',
-    })
-
-    expect(mockHset).toHaveBeenCalledWith(
-      'mobi:preview:status:job-1',
-      'status',
-      'failed',
-      'error',
-      'docker not found',
-      'updatedAt',
-      '2024-01-01T00:00:00.000Z',
+      {
+        status: 'extracting',
+        readyPages: 5,
+        totalPages: 20,
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+      21600,
     )
   })
 
-  it('set: ignora campos undefined', async () => {
+  it('set: ignora campos undefined ao montar o objeto flat', async () => {
     await store.set('job-1', { status: 'queued', error: undefined })
 
-    expect(mockHset).toHaveBeenCalledWith(
+    expect(mockStore.set).toHaveBeenCalledWith(
       'mobi:preview:status:job-1',
-      'status',
-      'queued',
+      { status: 'queued' },
+      21600,
     )
   })
 
-  it('set: não chama HSET se partial vazio', async () => {
+  it('set: não delega se o partial está vazio', async () => {
     await store.set('job-1', {})
 
-    expect(mockHset).not.toHaveBeenCalled()
+    expect(mockStore.set).not.toHaveBeenCalled()
   })
 
   it('get: retorna estado tipado com defaults numéricos', async () => {
-    mockHgetall.mockResolvedValue({
+    mockStore.get.mockResolvedValue({
       status: 'extracting',
       readyPages: '5',
       totalPages: '20',
@@ -124,11 +83,11 @@ describe('MobiPreviewStatusStore', () => {
     expect(result!.currentStep).toBe('')
     expect(result!.completedAt).toBeUndefined()
     expect(result!.error).toBeUndefined()
-    expect(mockHgetall).toHaveBeenCalledWith('mobi:preview:status:job-1')
+    expect(mockStore.get).toHaveBeenCalledWith('mobi:preview:status:job-1')
   })
 
   it('get: retorna estado terminal completed', async () => {
-    mockHgetall.mockResolvedValue({
+    mockStore.get.mockResolvedValue({
       status: 'ready',
       readyPages: '20',
       totalPages: '20',
@@ -143,17 +102,61 @@ describe('MobiPreviewStatusStore', () => {
     expect(result!.completedAt).toBe('2024-01-01T00:05:00.000Z')
   })
 
-  it('get: retorna null se chave não existe', async () => {
-    mockHgetall.mockResolvedValue({})
+  it('get: retorna null quando IStatusStore devolve null', async () => {
+    mockStore.get.mockResolvedValue(null)
 
     const result = await store.get('job-1')
 
     expect(result).toBeNull()
   })
 
-  it('clear: DEL a chave correta', async () => {
+  it('clear: delega para IStatusStore', async () => {
     await store.clear('job-1')
 
-    expect(mockDel).toHaveBeenCalledWith('mobi:preview:status:job-1')
+    expect(mockStore.clear).toHaveBeenCalledWith('mobi:preview:status:job-1')
+  })
+})
+
+describe('MobiPreviewStatusStore default (env-aware)', () => {
+  it('MI_EMBEDDED_MODE=true → InMemoryStatusStore e roundtrip sem Redis', async () => {
+    envHolder.env.MI_EMBEDDED_MODE = true
+
+    const defaultStore = new MobiPreviewStatusStore()
+
+    expect((defaultStore as unknown as { store: IStatusStore }).store).toBeInstanceOf(InMemoryStatusStore)
+
+    await defaultStore.set('job-x', {
+      status: 'extracting',
+      readyPages: 5,
+      totalPages: 20,
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    })
+    const result = await defaultStore.get('job-x')
+
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe('extracting')
+    expect(result!.readyPages).toBe(5)
+    expect(result!.totalPages).toBe(20)
+    expect(result!.updatedAt).toBe('2024-01-01T00:00:00.000Z')
+
+    await defaultStore.clear('job-x')
+    expect(await defaultStore.get('job-x')).toBeNull()
+  })
+
+  it('sem flag (MI_EMBEDDED_MODE=false) → RedisStatusStoreAdapter lazy, sem conexão', () => {
+    envHolder.env.MI_EMBEDDED_MODE = false
+
+    const defaultStore = new MobiPreviewStatusStore()
+
+    expect((defaultStore as unknown as { store: IStatusStore }).store).toBeInstanceOf(RedisStatusStoreAdapter)
+  })
+
+  it('injeção explícita sobrepõe o default mesmo com MI_EMBEDDED_MODE=true', () => {
+    envHolder.env.MI_EMBEDDED_MODE = true
+
+    const localMock = createMockStore()
+    const injectedStore = new MobiPreviewStatusStore(localMock as IStatusStore)
+
+    expect((injectedStore as unknown as { store: IStatusStore }).store).toBe(localMock)
   })
 })

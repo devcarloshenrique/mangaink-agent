@@ -1,18 +1,17 @@
-import { createQueue } from '../../../shared/redis/bullmq'
-import type { Job } from 'bullmq'
+import type { IQueueService, QueueJob } from '../../../shared/infra/queue.service'
 import type { MobiPreviewJobData, MobiPreviewQueue } from '../use-cases/mobi-preview.use-case'
 
 /**
- * Fila BullMQ para extracao assincrona de preview MOBI.
+ * Fila para extracao assincrona de preview MOBI.
  *
- * Reutiliza o factory `createQueue` (mesma conexao Redis) e segue o padrao
- * do `ConversionQueueService` — adiciona jobs com `jobId` como chave
- * determinista (evita duplicacao).
+ * Segue o padrao do `ConversionQueueService` — adiciona jobs com `jobId` como
+ * chave determinista (evita duplicacao). A fila concreta (`IQueueService`)
+ * é injetada no constructor pelo composition root.
  */
 export class MobiPreviewQueueService implements MobiPreviewQueue {
-  private readonly queue = createQueue<MobiPreviewJobData>('mobi-preview')
+  constructor(private readonly queue: IQueueService<MobiPreviewJobData>) {}
 
-  async enqueue(data: MobiPreviewJobData): Promise<Job<MobiPreviewJobData>> {
+  async enqueue(data: MobiPreviewJobData): Promise<QueueJob<MobiPreviewJobData>> {
     return this.queue.add(`mobi-preview:${data.jobId}`, data, {
       jobId: data.jobId,
       attempts: 2,
@@ -20,9 +19,5 @@ export class MobiPreviewQueueService implements MobiPreviewQueue {
       removeOnComplete: { count: 50 },
       removeOnFail: { count: 25 },
     })
-  }
-
-  async close(): Promise<void> {
-    await this.queue.close()
   }
 }

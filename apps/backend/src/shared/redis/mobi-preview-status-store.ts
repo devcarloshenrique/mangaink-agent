@@ -1,5 +1,7 @@
 import { env } from '../config/env'
-import { getRedis } from './redis'
+import type { IStatusStore } from '../infra'
+import { InMemoryStatusStore } from '../infra/inmemory'
+import { RedisStatusStoreAdapter } from '../infra/redis'
 import type { MobiPreviewLiveState, MobiPreviewLiveStatus } from '../../modules/conversion/types/mobi-preview.types'
 
 function key(jobId: string): string {
@@ -7,7 +9,9 @@ function key(jobId: string): string {
 }
 
 /**
- * Armazena estado live da extracao de preview MOBI em Redis Hash.
+ * Armazena estado live da extracao de preview MOBI em Hash via {@link IStatusStore}.
+ * Default: `InMemoryStatusStore` no modo embedded (`env.MI_EMBEDDED_MODE`),
+ * `RedisStatusStoreAdapter` (lazy) no modo web. Injeção explícita sobrepõe.
  *
  * Reusa `JOB_STATUS_TTL_SEC` (mesma janela das Conversion Jobs) — preview e
  * efemero: se ninguem escuta por 6h, regsdescarta. O cache em /temp tem TTL
@@ -15,24 +19,24 @@ function key(jobId: string): string {
  * `MobiPreviewService`.
  */
 export class MobiPreviewStatusStore {
+  constructor(
+    private readonly store: IStatusStore = env.MI_EMBEDDED_MODE
+      ? new InMemoryStatusStore()
+      : new RedisStatusStoreAdapter(),
+  ) {}
+
   async set(jobId: string, partial: Partial<MobiPreviewLiveState>): Promise<void> {
-    const redis = getRedis()
-    const k = key(jobId)
-    const flat: string[] = []
+    const flat: Record<string, string | number | undefined> = {}
     for (const [field, value] of Object.entries(partial)) {
-      if (value !== undefined) {
-        flat.push(field, String(value))
-      }
+      if (value !== undefined) flat[field] = value
     }
-    if (flat.length === 0) return
-    await redis.hset(k, ...flat)
-    await redis.expire(k, env.JOB_STATUS_TTL_SEC)
+    if (Object.keys(flat).length === 0) return
+    await this.store.set(key(jobId), flat, env.JOB_STATUS_TTL_SEC)
   }
 
   async get(jobId: string): Promise<MobiPreviewLiveState | null> {
-    const redis = getRedis()
-    const data = await redis.hgetall(key(jobId))
-    if (!Object.keys(data).length) return null
+    const data = await this.store.get(key(jobId))
+    if (!data) return null
 
     return {
       status: (data.status as MobiPreviewLiveStatus) ?? 'queued',
@@ -46,7 +50,6 @@ export class MobiPreviewStatusStore {
   }
 
   async clear(jobId: string): Promise<void> {
-    const redis = getRedis()
-    await redis.del(key(jobId))
+    await this.store.clear(key(jobId))
   }
 }

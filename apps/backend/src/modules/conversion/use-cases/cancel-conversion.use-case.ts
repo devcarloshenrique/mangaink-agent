@@ -20,6 +20,7 @@ export class CancelConversionUseCase {
     private readonly queue: ConversionQueueService,
     private readonly events: ConversionEventsService,
     private readonly downloadOnlyQueue?: DownloadOnlyQueueService,
+    private readonly statusStore: JobLiveStatusStore = new JobLiveStatusStore(),
   ) {}
 
   async execute(
@@ -47,7 +48,7 @@ export class CancelConversionUseCase {
     const jobIds = await this.conversions.listJobIds(conversionId)
 
     const jobRepo = getConversionJobRepository()
-    const store = new JobLiveStatusStore()
+    const store = this.statusStore
     const now = new Date().toISOString()
 
     for (const jobId of jobIds) {

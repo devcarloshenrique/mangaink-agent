@@ -1,5 +1,5 @@
 import type { FastifyReply } from 'fastify'
-import { ChapterDownloadPubSubService } from './chapter-download-pubsub.service'
+import type { IPubSub, IJournalStore } from '../../../shared/infra'
 
 export interface SSEEvent {
   type: string
@@ -8,28 +8,43 @@ export interface SSEEvent {
   id?: number
 }
 
+/**
+ * Bridge SSE para eventos de download de capítulo.
+ *
+ * Canal raw: `chapter-download:{sourceId}:{chapterId}` (prefixo de
+ * responsabilidade do call site). Payload publicado SEMPRE como string JSON.
+ * Journal (replay): `chapter-download-journal:` / `chapter-download-event-id:`.
+ */
 export class ChapterDownloadEventsService {
   private static readonly JOURNAL_TTL = 3600
   private static readonly JOURNAL_PREFIX = 'chapter-download-journal:'
   private static readonly ID_PREFIX = 'chapter-download-event-id:'
+  private static readonly CHANNEL_PREFIX = 'chapter-download:'
 
-  constructor(private readonly pubsub: ChapterDownloadPubSubService) {}
+  constructor(
+    private readonly pubsub: IPubSub,
+    private readonly journal: IJournalStore,
+  ) {}
 
   createEvent(type: string, data: Record<string, unknown> = {}): SSEEvent {
     return { type, data, timestamp: new Date().toISOString() }
   }
 
+  private channel(sourceId: string, chapterId: string): string {
+    return `${ChapterDownloadEventsService.CHANNEL_PREFIX}${sourceId}:${chapterId}`
+  }
+
   async emit(sourceId: string, chapterId: string, event: SSEEvent): Promise<void> {
     const idKey = `${ChapterDownloadEventsService.ID_PREFIX}${sourceId}:${chapterId}`
     const journalKey = `${ChapterDownloadEventsService.JOURNAL_PREFIX}${sourceId}:${chapterId}`
-    const id = await this.pubsub.pubIncr(idKey)
+    const id = await this.journal.nextId(idKey)
     const journalEntry: SSEEvent = { ...event, id }
     const payload = JSON.stringify(journalEntry)
 
-    await this.pubsub.pubRpush(journalKey, payload)
-    await this.pubsub.publish(sourceId, chapterId, journalEntry)
-    await this.pubsub.pubExpire(journalKey, ChapterDownloadEventsService.JOURNAL_TTL)
-    await this.pubsub.pubExpire(idKey, ChapterDownloadEventsService.JOURNAL_TTL)
+    await this.journal.append(journalKey, payload)
+    await this.pubsub.publish(this.channel(sourceId, chapterId), payload)
+    await this.journal.expire(journalKey, ChapterDownloadEventsService.JOURNAL_TTL)
+    await this.journal.expire(idKey, ChapterDownloadEventsService.JOURNAL_TTL)
   }
 
   async connectToSSE(
@@ -52,7 +67,7 @@ export class ChapterDownloadEventsService {
       }
     }
 
-    const onMessage = (_channel: string, message: string) => {
+    const onMessage = (message: string) => {
       try {
         const event = JSON.parse(message) as SSEEvent
 
@@ -68,10 +83,10 @@ export class ChapterDownloadEventsService {
       }
     }
 
-    await this.pubsub.subscribe(sourceId, chapterId, onMessage)
+    await this.pubsub.subscribe(this.channel(sourceId, chapterId), onMessage)
 
     const journalKey = `${ChapterDownloadEventsService.JOURNAL_PREFIX}${sourceId}:${chapterId}`
-    const entries = await this.pubsub.pubLrange(journalKey, 0, -1)
+    const entries = await this.journal.range(journalKey, 0, -1)
     for (const entry of entries) {
       try {
         const event = JSON.parse(entry) as SSEEvent
@@ -94,7 +109,7 @@ export class ChapterDownloadEventsService {
     const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribe(sourceId, chapterId, onMessage)
+      await this.pubsub.unsubscribe(this.channel(sourceId, chapterId), onMessage)
     })
   }
 

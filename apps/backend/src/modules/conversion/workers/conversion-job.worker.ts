@@ -1,154 +1,168 @@
-import { Worker } from 'bullmq'
 import { join, extname } from 'node:path'
 import { link, writeFile, readdir, mkdir, rm, readFile, rename, stat } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
-import { ConversionPubSubService } from '../services/conversion-pubsub.service'
 import { ConversionEventsService } from '../services/conversion-events.service'
+import { createKccRunner } from '../services/kcc-runner.factory'
+import type { IKccRunner } from '../services/kcc-runner.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
-import { KccRunnerService } from '../services/kcc-runner.service'
 import { PlaceholderService } from '../services/placeholder.service'
 import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
 import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
+import type { RuntimeAdapters } from '../../../shared/infra/factory'
+import {
+  startQueueWorker,
+  type QueueWorkerHandle,
+  type QueueWorkerJob,
+} from '../../../shared/infra/queue-worker'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 
-const pubsub = new ConversionPubSubService()
-const events = new ConversionEventsService(pubsub)
+const QUEUE_NAME = 'conversion-job'
 
-const worker = new Worker<ConversionJobData>(
-  'conversion-job',
-  async (job) => {
-    const { conversionId, jobId, sourceId, chapters, cover, output, metadata, options, storagePath } = job.data
+/** Dependências injetáveis no processConversionJob (para teste). */
+export interface ConversionJobWorkerDeps {
+  jobRepository: ReturnType<typeof getConversionJobRepository>
+  conversions: ReturnType<typeof getConversionRepository>
+  sourceRepository: ReturnType<typeof getSourceRepository>
+  events: ConversionEventsService
+  jobLiveStatusStore: JobLiveStatusStore
+  downloader: ImageDownloaderService
+  kccRunner: IKccRunner
+}
 
-    const repository = getConversionJobRepository()
-    const conversions = getConversionRepository()
-    const sourceRepo = getSourceRepository()
-    const downloader = new ImageDownloaderService(events, repository, sourceRepo)
-    const kccRunner = new KccRunnerService(events)
-    const jobLiveStatusStore = new JobLiveStatusStore()
+/**
+ * Orquestração de um Job de conversão, isolada do BullMQ para testes.
+ * O mesmo corpo do processor original, com as dependências injetadas.
+ */
+export async function processConversionJob(
+  data: ConversionJobData,
+  deps: ConversionJobWorkerDeps,
+): Promise<{ jobId: string; status: string; outputFile?: string; message?: string }> {
+  const { conversionId, jobId, sourceId, chapters, cover, output, metadata, options, storagePath } = data
+  const { jobRepository: repository, conversions, sourceRepository: sourceRepo, events, jobLiveStatusStore, downloader, kccRunner } = deps
 
-    /** Recomputa o status.json da Conversion após cada fase do Job. */
-    const sync = () => conversions.syncStatus(conversionId).catch(() => {})
+  /** Recomputa o status.json da Conversion após cada fase do Job. */
+  const sync = () => conversions.syncStatus(conversionId).catch(() => {})
 
-    const setLiveStatus = (status: JobStatus, currentStep: string) => {
-      return jobLiveStatusStore.set(jobId, {
-        status,
-        currentStep,
-        updatedAt: new Date().toISOString(),
-      }).catch(() => {})
+  const setLiveStatus = (status: JobStatus, currentStep: string) => {
+    return jobLiveStatusStore.set(jobId, {
+      status,
+      currentStep,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {})
+  }
+
+  const tempDir = join(storagePath, 'temp')
+  const tempInputDir = join(tempDir, 'input')
+  const outputPath = join(storagePath, 'output')
+
+  await mkdir(tempInputDir, { recursive: true })
+  await mkdir(outputPath, { recursive: true })
+
+  // ── Job started ─────────────────────────────────────────────────
+  await setLiveStatus('preparing', 'Preparing conversion...')
+  await sync()
+  await repository.appendLog(jobId, `Job iniciado — ${chapters.length} capítulos selecionados`)
+  await events.emit(jobId, events.createEvent('job.started', { jobId }))
+
+  // ── Fase 1: Download de imagens ──────────────────────────────────
+  await setLiveStatus('downloading', 'Downloading images...')
+  await sync()
+  await events.emit(jobId, events.createEvent('download.started', {
+    jobId,
+    totalChapters: chapters.length,
+  }))
+
+  let totalDownloaded = 0
+  let totalErrors = 0
+  let totalCorrupt = 0
+  let cumulativeTotalImages = 0
+  const skippedChapters: string[] = []
+  const successfulChapters: string[] = []
+
+  const strategy: ErrorHandlingStrategy = data.errorHandlingStrategy ?? 'ignore'
+  const placeholderService = new PlaceholderService()
+
+  const provider = await resolveProvider(sourceId)
+  if (!provider) {
+    throw new Error(`Não foi possível resolver o provider para sourceId: ${sourceId}`)
+  }
+
+  for (const chapterId of chapters) {
+    const cancelled = (await jobLiveStatusStore.get(jobId))?.status === 'cancelled'
+    if (cancelled) {
+      await repository.appendLog(jobId, 'Job cancelado durante download')
+      return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
     }
 
-    const tempDir = join(storagePath, 'temp')
-    const tempInputDir = join(tempDir, 'input')
-    const outputPath = join(storagePath, 'output')
+    const imageUrls = await getChapterImageUrls(provider, sourceId, chapterId)
 
-    await mkdir(tempInputDir, { recursive: true })
-    await mkdir(outputPath, { recursive: true })
-
-    // ── Job started ─────────────────────────────────────────────────
-    await setLiveStatus('preparing', 'Preparing conversion...')
-    await sync()
-    await repository.appendLog(jobId, `Job iniciado — ${chapters.length} capítulos selecionados`)
-    await events.emit(jobId, events.createEvent('job.started', { jobId }))
-
-    // ── Fase 1: Download de imagens ──────────────────────────────────
-    await setLiveStatus('downloading', 'Downloading images...')
-    await sync()
-    await events.emit(jobId, events.createEvent('download.started', {
+    const result = await downloader.downloadChapter(
       jobId,
-      totalChapters: chapters.length,
-    }))
+      sourceId,
+      chapterId,
+      imageUrls,
+      provider,
+    )
 
-    let totalDownloaded = 0
-    let totalErrors = 0
-    let totalCorrupt = 0
-    let cumulativeTotalImages = 0
-    const skippedChapters: string[] = []
-    const successfulChapters: string[] = []
+    totalDownloaded += result.downloadedImages
+    totalErrors += result.errors
+    cumulativeTotalImages += result.totalImages
 
-    const strategy: ErrorHandlingStrategy = job.data.errorHandlingStrategy ?? 'ignore'
-    const placeholderService = new PlaceholderService()
+    if (result.corruptPages.length > 0) {
+      totalCorrupt += result.corruptPages.length
 
-    const provider = await resolveProvider(sourceId)
-    if (!provider) {
-      throw new Error(`Não foi possível resolver o provider para sourceId: ${sourceId}`)
-    }
-
-    for (const chapterId of chapters) {
-      const cancelled = (await jobLiveStatusStore.get(jobId))?.status === 'cancelled'
-      if (cancelled) {
-        await repository.appendLog(jobId, 'Job cancelado durante download')
-        return { jobId, status: 'cancelled', message: 'Job cancelled during download' }
+      if (strategy === 'abort') {
+        await repository.appendLog(jobId,
+          `ABORTAR: ${result.corruptPages.length} páginas corrompidas no capítulo ${chapterId} ` +
+          `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Estratégia: abort`)
+        throw new Error(
+          `Páginas corrompidas encontradas no capítulo ${chapterId}. ` +
+          `Estratégia de erro: abort. Páginas: ${result.corruptPages.map(c => c.pageIndex).join(', ')}`)
       }
 
-      const imageUrls = await getChapterImageUrls(provider, sourceId, chapterId)
+      if (strategy === 'skip_chapter') {
+        await repository.appendLog(jobId,
+          `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`)
+        skippedChapters.push(chapterId)
+        await jobLiveStatusStore.set(jobId, {
+          downloadedImages: totalDownloaded,
+          totalImages: cumulativeTotalImages,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {})
+        continue
+      }
 
-      const result = await downloader.downloadChapter(
-        jobId,
-        sourceId,
-        chapterId,
-        imageUrls,
-        provider,
-      )
+      if (strategy === 'ignore') {
+        const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
 
-      totalDownloaded += result.downloadedImages
-      totalErrors += result.errors
-      cumulativeTotalImages += result.totalImages
-
-      if (result.corruptPages.length > 0) {
-        totalCorrupt += result.corruptPages.length
-
-        if (strategy === 'abort') {
+        if (result.fromCache) {
           await repository.appendLog(jobId,
-            `ABORTAR: ${result.corruptPages.length} páginas corrompidas no capítulo ${chapterId} ` +
-            `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Estratégia: abort`)
-          throw new Error(
-            `Páginas corrompidas encontradas no capítulo ${chapterId}. ` +
-            `Estratégia de erro: abort. Páginas: ${result.corruptPages.map(c => c.pageIndex).join(', ')}`)
-        }
+            `Capítulo ${chapterId}: ${result.corruptPages.length} placeholder(s) em cache ` +
+            `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Nenhuma ação necessária.`)
 
-        if (strategy === 'skip_chapter') {
-          await repository.appendLog(jobId,
-            `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`)
-          skippedChapters.push(chapterId)
-          await jobLiveStatusStore.set(jobId, {
-            downloadedImages: totalDownloaded,
-            totalImages: cumulativeTotalImages,
-            updatedAt: new Date().toISOString(),
-          }).catch(() => {})
-          continue
-        }
+          await events.emit(jobId, events.createEvent('download.progress', {
+            chapterId,
+            downloadedImages: result.totalImages,
+            totalImages: result.totalImages,
+            errors: 0,
+          }))
 
-        if (strategy === 'ignore') {
-          const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
-          
-          if (result.fromCache) {
-            await repository.appendLog(jobId,
-              `Capítulo ${chapterId}: ${result.corruptPages.length} placeholder(s) em cache ` +
-              `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Nenhuma ação necessária.`)
-            
-            await events.emit(jobId, events.createEvent('download.progress', {
-              chapterId,
-              downloadedImages: result.totalImages,
-              totalImages: result.totalImages,
-              errors: 0,
-            }))
-            
-            successfulChapters.push(chapterId)
-          } else {
-            let placeholderCount = 0
-            for (const cp of result.corruptPages) {
-              const filename = `${String(cp.pageIndex).padStart(4, '0')}.png`
-              const cachePath = join(cacheDir, filename)
-              try {
-                const pageLabel = `Cap. ${chapterId.replace(/^chap_0*/, '')}, Pág. ${cp.pageIndex}`
-                const placeholder = await placeholderService.generate(output.deviceId, pageLabel)
-                await writeFile(cachePath, placeholder)
-                placeholderCount++
-              } catch (err) {
-                await repository.appendLog(jobId,
-                  `Erro ao gerar placeholder para ${chapterId} página ${cp.pageIndex}: ${err instanceof Error ? err.message : 'unknown'}`)
+          successfulChapters.push(chapterId)
+        } else {
+          let placeholderCount = 0
+          for (const cp of result.corruptPages) {
+            const filename = `${String(cp.pageIndex).padStart(4, '0')}.png`
+            const cachePath = join(cacheDir, filename)
+            try {
+              const pageLabel = `Cap. ${chapterId.replace(/^chap_0*/, '')}, Pág. ${cp.pageIndex}`
+              const placeholder = await placeholderService.generate(output.deviceId, pageLabel)
+              await writeFile(cachePath, placeholder)
+              placeholderCount++
+            } catch (err) {
+              await repository.appendLog(jobId,
+                `Erro ao gerar placeholder para ${chapterId} página ${cp.pageIndex}: ${err instanceof Error ? err.message : 'unknown'}`)
       }
       await jobLiveStatusStore.set(jobId, {
         downloadedImages: totalDownloaded,
@@ -156,18 +170,18 @@ const worker = new Worker<ConversionJobData>(
         updatedAt: new Date().toISOString(),
       }).catch(() => {})
     }
-            
+
             const placeholderIndices = result.corruptPages.map(cp => cp.pageIndex)
             await sourceRepo.updatePlaceholderIndices(sourceId, chapterId, placeholderIndices)
-            
+
             await repository.appendLog(jobId,
               `${placeholderCount}/${result.corruptPages.length} placeholders gerados para capítulo ${chapterId} ` +
               `(resolução do dispositivo ${output.deviceId})`)
-            
+
             const effectiveTotal = result.totalImages
             const effectiveDownloaded = result.downloadedImages + placeholderCount
             totalDownloaded += placeholderCount
-            
+
             await events.emit(jobId, events.createEvent('download.progress', {
               chapterId,
               downloadedImages: effectiveDownloaded,
@@ -185,185 +199,206 @@ const worker = new Worker<ConversionJobData>(
       }
     }
 
-    if (successfulChapters.length === 0) {
-      const corruptDetail = totalCorrupt > 0 ? `, ${totalCorrupt} página(s) corrompida(s)` : ''
-      throw new Error(
-        `Nenhum capítulo pôde ser baixado. ` +
-        `${skippedChapters.length} capítulo(s) estão indisponíveis no site de origem (erros 404)${corruptDetail}.`,
-      )
-    }
-
-    // Avisa sobre capítulos ignorados, mas continua com os disponíveis
-    if (skippedChapters.length > 0) {
-      await repository.appendLog(
-        jobId,
-        `AVISO: ${skippedChapters.length} capítulo(s) ignorado(s) por indisponibilidade: ${skippedChapters.join(', ')}. ` +
-        `Convertendo os ${successfulChapters.length} capítulo(s) disponíveis.`,
-      )
-    }
-
-    // ── Fase 2: Montar temp/input/ com hard links ───────────────────
-    await setLiveStatus('preparing', `Creating hard links from cache (${successfulChapters.length}/${chapters.length} chapters)...`)
-    await sync()
-    await repository.appendLog(jobId, `Montando temp/input/ com hard links do cache (${successfulChapters.length} capítulos disponíveis)`)
-
-    // Usa apenas capítulos com download bem-sucedido
-    for (const chapterId of successfulChapters) {
-      const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
-      const chapterInputDir = join(tempInputDir, chapterId)
-      await mkdir(chapterInputDir, { recursive: true })
-
-      const files = await readdir(cacheDir)
-      const imageFiles = files.filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp|avif)$/i.test(f))
-
-      for (const file of imageFiles) {
-        const src = join(cacheDir, file)
-        const dest = join(chapterInputDir, file)
-        try {
-          await link(src, dest) // Hard link: instantâneo, zero duplicação
-        } catch {
-          // Fallback para cópia se hard link falhar (ex: cross-device)
-          const { copyFile } = await import('node:fs/promises')
-          await copyFile(src, dest)
-        }
-      }
-
-      await repository.appendLog(jobId, `Hard links criados para ${chapterId} (${imageFiles.length} imagens)`)
-    }
-
-    // ── Fase 2.5: Aplicar capa ──────────────────────────────────────
-    await applyCover(repository, jobId, sourceId, cover, tempInputDir, provider)
-
-    // ── Fase 2.6: Escrever metadados (ComicInfo.xml) ────────────────
-    const sourceMeta = await readSourceMetadata(sourceId)
-    await writeComicInfoXml(repository, jobId, tempInputDir, metadata, sourceMeta)
-
-    // ── Fase 3: Conversão KCC ───────────────────────────────────────
-    await setLiveStatus('converting', 'Starting KCC conversion...')
-    await sync()
-    await repository.appendLog(jobId, `KCC iniciado — device=${output.deviceId}, format=${output.format}`)
-
-    const kccOptions = { ...options, metadataTitle: 'metadataOnly' as const }
-    const kccResult = await kccRunner.run(
-      jobId,
-      kccOptions,
-      output.deviceId,
-      output.format,
-      tempInputDir,
-      outputPath,
-      metadata.title,
+  if (successfulChapters.length === 0) {
+    const corruptDetail = totalCorrupt > 0 ? `, ${totalCorrupt} página(s) corrompida(s)` : ''
+    throw new Error(
+      `Nenhum capítulo pôde ser baixado. ` +
+      `${skippedChapters.length} capítulo(s) estão indisponíveis no site de origem (erros 404)${corruptDetail}.`,
     )
+  }
 
-    // ── Fase 4: Packaging — renomear output e limpar temp ───────────
-    await setLiveStatus('packaging', 'Packaging output...')
-    await sync()
+  // Avisa sobre capítulos ignorados, mas continua com os disponíveis
+  if (skippedChapters.length > 0) {
+    await repository.appendLog(
+      jobId,
+      `AVISO: ${skippedChapters.length} capítulo(s) ignorado(s) por indisponibilidade: ${skippedChapters.join(', ')}. ` +
+      `Convertendo os ${successfulChapters.length} capítulo(s) disponíveis.`,
+    )
+  }
 
-    // Renomeia o arquivo de saída para o nome bonito com o título real
-    let finalOutputFile = kccResult.outputFile
-    // Sanitiza o título para remover caracteres inválidos em nomes de arquivo
-    // Exemplo: "Boruto: Two Blue Vortex" → "Boruto - Two Blue Vortex"
-    const desiredName = `${sanitizeFilename(metadata.title)}.${output.format.toLowerCase()}`
+  // ── Fase 2: Montar temp/input/ com hard links ───────────────────
+  await setLiveStatus('preparing', `Creating hard links from cache (${successfulChapters.length}/${chapters.length} chapters)...`)
+  await sync()
+  await repository.appendLog(jobId, `Montando temp/input/ com hard links do cache (${successfulChapters.length} capítulos disponíveis)`)
 
-    if (finalOutputFile && finalOutputFile !== desiredName) {
-      const currentPath = join(outputPath, finalOutputFile)
-      const desiredPath = join(outputPath, desiredName)
+  // Usa apenas capítulos com download bem-sucedido
+  for (const chapterId of successfulChapters) {
+    const cacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'chapters', chapterId)
+    const chapterInputDir = join(tempInputDir, chapterId)
+    await mkdir(chapterInputDir, { recursive: true })
+
+    const files = await readdir(cacheDir)
+    const imageFiles = files.filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp|avif)$/i.test(f))
+
+    for (const file of imageFiles) {
+      const src = join(cacheDir, file)
+      const dest = join(chapterInputDir, file)
       try {
-        await rename(currentPath, desiredPath)
-        finalOutputFile = desiredName
-        await repository.appendLog(jobId, `Output renomeado: "${kccResult.outputFile}" → "${desiredName}"`)
-      } catch (renameErr) {
-        // Loga o motivo real da falha para facilitar debug
-        const reason = renameErr instanceof Error ? renameErr.message : String(renameErr)
-        await repository.appendLog(jobId, `AVISO: Falha ao renomear output ("${reason}"), mantendo "${finalOutputFile}"`)
+        await link(src, dest) // Hard link: instantâneo, zero duplicação
+      } catch {
+        // Fallback para cópia se hard link falhar (ex: cross-device)
+        const { copyFile } = await import('node:fs/promises')
+        await copyFile(src, dest)
       }
     }
 
-    // Calcula tamanho final
-    let finalOutputSize = kccResult.outputSize
-    try {
-      const stats = await stat(join(outputPath, finalOutputFile))
-      finalOutputSize = stats.size
-    } catch {
-      // Mantém o tamanho original
-    }
-
-    // Limpa temp/ inteiro
-    try {
-      await rm(tempDir, { recursive: true, force: true })
-      await repository.appendLog(jobId, 'Diretório temp/ removido')
-    } catch (err) {
-      await repository.appendLog(jobId, `Aviso: falha ao remover temp/ — ${err instanceof Error ? err.message : 'unknown'}`)
-    }
-
-    // ── Job finished ────────────────────────────────────────────────
-    const downloadUrl = `/api/conversions/${conversionId}/jobs/${jobId}/download`
-
-    await repository.update(jobId, {
-      status: 'completed',
-      progress: 100,
-      currentStep: 'Done',
-      downloadedImages: totalDownloaded,
-      totalImages: cumulativeTotalImages,
-      completedAt: new Date().toISOString(),
-      downloadUrl,
-      outputFile: finalOutputFile,
-      outputSize: finalOutputSize,
-    })
-    await jobLiveStatusStore.clear(jobId).catch(() => {})
-    await sync()
-
-    await repository.appendLog(jobId, `Job concluído — output: "${finalOutputFile}" (${(finalOutputSize / 1024 / 1024).toFixed(1)} MB)`)
-
-    await events.emit(jobId, events.createEvent('job.finished', {
-      jobId,
-      downloadUrl,
-      outputFile: finalOutputFile,
-      outputSize: finalOutputSize,
-    }))
-
-    return { jobId, status: 'completed', outputFile: finalOutputFile }
-  },
-  {
-    connection: {
-      url: env.REDIS_URL,
-    },
-    concurrency: 1,
-    lockDuration: 300_000, // 5 min — conversões são longas
-    maxStalledCount: 2,
-  },
-)
-
-worker.on('completed', (job) => {
-  console.log(`[ConversionWorker] Job ${job.id} completed successfully`)
-})
-
-worker.on('failed', async (job, error) => {
-  const jobId = job?.id
-  const conversionId = job?.data?.conversionId
-  console.error(`[ConversionWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
-  if (jobId && conversionId) {
-    const failedRepo = getConversionJobRepository()
-    const convRepo = getConversionRepository()
-    await failedRepo.update(jobId, {
-      status: 'failed',
-      error: error.message.slice(0, 500),
-      currentStep: 'Failed',
-    })
-    const store = new JobLiveStatusStore()
-    await store.clear(jobId).catch(() => {})
-    await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
-    await convRepo.syncStatus(conversionId)
-    await events.emit(jobId, events.createEvent('job.failed', {
-      jobId,
-      conversionId,
-      error: error.message.slice(0, 500),
-    })).catch(() => {})
+    await repository.appendLog(jobId, `Hard links criados para ${chapterId} (${imageFiles.length} imagens)`)
   }
-})
 
-worker.on('error', (error) => {
-  console.error('[ConversionWorker] Worker error:', error.message)
-})
+  // ── Fase 2.5: Aplicar capa ──────────────────────────────────────
+  await applyCover(repository, jobId, sourceId, cover, tempInputDir, provider)
+
+  // ── Fase 2.6: Escrever metadados (ComicInfo.xml) ────────────────
+  const sourceMeta = await readSourceMetadata(sourceId)
+  await writeComicInfoXml(repository, jobId, tempInputDir, metadata, sourceMeta)
+
+  // ── Fase 3: Conversão KCC ───────────────────────────────────────
+  await setLiveStatus('converting', 'Starting KCC conversion...')
+  await sync()
+  await repository.appendLog(jobId, `KCC iniciado — device=${output.deviceId}, format=${output.format}`)
+
+  const kccOptions = { ...options, metadataTitle: 'metadataOnly' as const }
+  const kccResult = await kccRunner.run(
+    jobId,
+    kccOptions,
+    output.deviceId,
+    output.format,
+    tempInputDir,
+    outputPath,
+    metadata.title,
+  )
+
+  // ── Fase 4: Packaging — renomear output e limpar temp ───────────
+  await setLiveStatus('packaging', 'Packaging output...')
+  await sync()
+
+  // Renomeia o arquivo de saída para o nome bonito com o título real
+  let finalOutputFile = kccResult.outputFile
+  // Sanitiza o título para remover caracteres inválidos em nomes de arquivo
+  // Exemplo: "Boruto: Two Blue Vortex" → "Boruto - Two Blue Vortex"
+  const desiredName = `${sanitizeFilename(metadata.title)}.${output.format.toLowerCase()}`
+
+  if (finalOutputFile && finalOutputFile !== desiredName) {
+    const currentPath = join(outputPath, finalOutputFile)
+    const desiredPath = join(outputPath, desiredName)
+    try {
+      await rename(currentPath, desiredPath)
+      finalOutputFile = desiredName
+      await repository.appendLog(jobId, `Output renomeado: "${kccResult.outputFile}" → "${desiredName}"`)
+    } catch (renameErr) {
+      // Loga o motivo real da falha para facilitar debug
+      const reason = renameErr instanceof Error ? renameErr.message : String(renameErr)
+      await repository.appendLog(jobId, `AVISO: Falha ao renomear output ("${reason}"), mantendo "${finalOutputFile}"`)
+    }
+  }
+
+  // Calcula tamanho final
+  let finalOutputSize = kccResult.outputSize
+  try {
+    const stats = await stat(join(outputPath, finalOutputFile))
+    finalOutputSize = stats.size
+  } catch {
+    // Mantém o tamanho original
+  }
+
+  // Limpa temp/ inteiro
+  try {
+    await rm(tempDir, { recursive: true, force: true })
+    await repository.appendLog(jobId, 'Diretório temp/ removido')
+  } catch (err) {
+    await repository.appendLog(jobId, `Aviso: falha ao remover temp/ — ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+
+  // ── Job finished ────────────────────────────────────────────────
+  const downloadUrl = `/api/conversions/${conversionId}/jobs/${jobId}/download`
+
+  await repository.update(jobId, {
+    status: 'completed',
+    progress: 100,
+    currentStep: 'Done',
+    downloadedImages: totalDownloaded,
+    totalImages: cumulativeTotalImages,
+    completedAt: new Date().toISOString(),
+    downloadUrl,
+    outputFile: finalOutputFile,
+    outputSize: finalOutputSize,
+  })
+  await jobLiveStatusStore.clear(jobId).catch(() => {})
+  await sync()
+
+  await repository.appendLog(jobId, `Job concluído — output: "${finalOutputFile}" (${(finalOutputSize / 1024 / 1024).toFixed(1)} MB)`)
+
+  await events.emit(jobId, events.createEvent('job.finished', {
+    jobId,
+    downloadUrl,
+    outputFile: finalOutputFile,
+    outputSize: finalOutputSize,
+  }))
+
+  return { jobId, status: 'completed', outputFile: finalOutputFile }
+}
+
+/**
+ * Worker de conversão (fila `conversion-job`, concorrência 1).
+ *
+ * Factory: constrói todas as dependências a partir do runtime injetado —
+ * NENHUMA conexão é aberta no load do módulo. O `onFailed` preserva a
+ * semântica do antigo `worker.on('failed')`: marca o job como `failed` no
+ * repositório, limpa o status live e emite `job.failed`.
+ */
+export function startConversionJobWorker(deps: {
+  runtime: RuntimeAdapters
+  kccRunnerFactory?: (events: ConversionEventsService) => IKccRunner
+}): QueueWorkerHandle {
+  const { runtime, kccRunnerFactory = createKccRunner } = deps
+
+  const events = new ConversionEventsService(runtime.pubsub, runtime.journal)
+  const jobLiveStatusStore = new JobLiveStatusStore(runtime.status)
+  const jobRepository = getConversionJobRepository()
+  const conversions = getConversionRepository(runtime.status)
+  const sourceRepository = getSourceRepository()
+
+  const workerDeps: ConversionJobWorkerDeps = {
+    jobRepository,
+    conversions,
+    sourceRepository,
+    events,
+    jobLiveStatusStore,
+    downloader: new ImageDownloaderService(events, jobRepository, sourceRepository),
+    kccRunner: kccRunnerFactory(events),
+  }
+
+  return startQueueWorker({
+    runtime,
+    queueName: QUEUE_NAME,
+    concurrency: 1,
+    processor: async (job: QueueWorkerJob) => {
+      await processConversionJob(job.data as ConversionJobData, workerDeps)
+    },
+    onFailed: async (job, error) => {
+      const jobId = job.id
+      const conversionId = (job.data as ConversionJobData | undefined)?.conversionId
+      console.error(`[ConversionWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
+      if (jobId && conversionId) {
+        const failedRepo = getConversionJobRepository()
+        const convRepo = getConversionRepository(runtime.status)
+        await failedRepo.update(jobId, {
+          status: 'failed',
+          error: error.message.slice(0, 500),
+          currentStep: 'Failed',
+        })
+        await jobLiveStatusStore.clear(jobId).catch(() => {})
+        await failedRepo.appendLog(jobId, `ERRO: ${error.message.slice(0, 500)}`)
+        await convRepo.syncStatus(conversionId)
+        await events.emit(jobId, events.createEvent('job.failed', {
+          jobId,
+          conversionId,
+          error: error.message.slice(0, 500),
+        })).catch(() => {})
+      }
+    },
+  })
+}
 
 /**
  * Remove caracteres inválidos em nomes de arquivo (Windows + Unix).
@@ -544,5 +579,3 @@ async function applyCover(
     await repository.appendLog(jobId, `Erro ao aplicar capa (continuando sem): ${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
-
-export default worker

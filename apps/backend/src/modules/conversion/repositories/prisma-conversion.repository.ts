@@ -5,6 +5,7 @@ import { getPrisma } from '../../../shared/database/prisma'
 import { mkdirp } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
+import type { IStatusStore } from '../../../shared/infra'
 import type { ConversionRepository } from './conversion.repository'
 import type {
   ConversionConfig,
@@ -25,6 +26,8 @@ import type {
 } from '../types/conversion.types'
 
 export class PrismaConversionRepository implements ConversionRepository {
+  constructor(private readonly statusStore?: IStatusStore) {}
+
   async create(state: ConversionState): Promise<void> {
     await getPrisma().conversion.create({
       data: {
@@ -169,7 +172,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       },
     })
 
-    const store = new JobLiveStatusStore()
+    const store = new JobLiveStatusStore(this.statusStore)
     const terminalStatuses: JobStatus[] = ['completed', 'failed', 'cancelled']
 
     const summaries: ConversionJobSummary[] = await Promise.all(
