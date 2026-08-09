@@ -6,8 +6,14 @@
     "dev": "pnpm --filter @mangaink/frontend dev",
     "dev:backend": "pnpm --filter @mangaink/backend dev",
     "dev:full": "concurrently -n frontend,backend -c cyan,magenta \"pnpm dev\" \"pnpm dev:backend\"",
+    "desktop:dev": "concurrently -n frontend,desktop -c cyan,magenta \"pnpm dev\" \"pnpm --filter @mangaink/desktop dev\"",
+    "desktop:dev:embedded": "pnpm desktop:prepare:runtime && cross-env MI_EMBEDDED_MODE=1 pnpm desktop:dev",
     "build": "pnpm --filter @mangaink/frontend build",
     "build:backend": "pnpm --filter @mangaink/backend build",
+    "desktop:build": "pnpm --filter @mangaink/desktop build",
+    "desktop:prepare:backend": "node apps/desktop/scripts/prepare-backend.mjs",
+    "desktop:prepare:runtime": "node apps/desktop/scripts/prepare-runtime.mjs",
+    "desktop:dist": "pnpm build && pnpm desktop:prepare:runtime && pnpm desktop:prepare:backend && pnpm --filter @mangaink/desktop dist",
     "lint": "pnpm -r lint",
     "format": "pnpm -r format",
     "storybook": "pnpm --filter @mangaink/frontend storybook",
@@ -25,6 +31,7 @@
     "monitoring:logs": "docker compose -f docker/monitoring/docker-compose.yml logs -f"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.3",
+    "cross-env": "^7.0.3"
   }
 }
