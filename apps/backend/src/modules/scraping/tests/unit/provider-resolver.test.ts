@@ -23,7 +23,9 @@ describe('ProviderResolver', () => {
     })
 
     it('deve lançar ProviderNotFoundError para URL não suportada', () => {
-      expect(() => resolver.resolve('https://example.com/manga/test/')).toThrow(ProviderNotFoundError)
+      expect(() => resolver.resolve('https://example.com/manga/test/')).toThrow(
+        ProviderNotFoundError,
+      )
     })
 
     it('deve lançar InvalidUrlError para URL malformada', () => {
@@ -54,15 +56,30 @@ describe('ProviderResolver', () => {
       const provider = resolver.resolve('https://imperiodabritannia.net/manga/meu-manga')
       expect(provider.slug).toBe('imperiodabritannia')
     })
+
+    it('deve resolver provider para URL do Mangas Brasukas', () => {
+      const provider = resolver.resolve(
+        'https://mangasbrasuka.com.br/manga/mushoku-tensei-jobless-reincarnation/',
+      )
+      expect(provider.slug).toBe('mangasbrasuka')
+      expect(provider.name).toBe('Mangas Brasukas')
+      expect(provider.engine).toBe('api')
+    })
+
+    it('deve resolver provider para URL do Mangas Brasukas sem barra final', () => {
+      const provider = resolver.resolve('https://mangasbrasuka.com.br/manhwa/meu-manga')
+      expect(provider.slug).toBe('mangasbrasuka')
+    })
   })
 
   describe('listAll', () => {
     it('deve listar todos os providers disponíveis', () => {
       const providers = resolver.listAll()
-      expect(providers).toHaveLength(2)
+      expect(providers).toHaveLength(3)
       const slugs = providers.map((p) => p.slug)
       expect(slugs).toContain('mangalivre')
       expect(slugs).toContain('imperiodabritannia')
+      expect(slugs).toContain('mangasbrasuka')
     })
 
     it('deve retornar providers com informações completas', () => {

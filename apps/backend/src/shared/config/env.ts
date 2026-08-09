@@ -65,6 +65,8 @@ const envSchema = z.object({
   RATE_LIMIT_MANGALIVRE_MIN_TIME: numericMs.default(0),
   RATE_LIMIT_IMPERIODABRITANNIA_MAX_CONCURRENT: positiveMs.default(2),
   RATE_LIMIT_IMPERIODABRITANNIA_MIN_TIME: numericMs.default(500),
+  RATE_LIMIT_MANGASBRASUKA_MAX_CONCURRENT: positiveMs.default(3),
+  RATE_LIMIT_MANGASBRASUKA_MIN_TIME: numericMs.default(200),
 })
 
 const _env = envSchema.safeParse(process.env)
