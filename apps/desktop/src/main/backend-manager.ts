@@ -1,4 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { PostgresManagerError, type PostgresManager } from './postgres-manager'
 import type { SettingsStore } from './settings-store'
@@ -31,6 +33,8 @@ export interface BackendManagerDeps {
   healthTimeoutMs?: number
   killGraceMs?: number
   managedMigrations?: boolean
+  /** Quando definido, um hash das migrações (prisma/migrations) é gravado após o `migrate deploy` com sucesso; se o hash persistido bater, o deploy é pulado na próxima abertura (boot mais rápido). */
+  migrationsMarkerPath?: string
   nodeBin?: string
   embedded?: boolean
   postgres?: PostgresManager
@@ -57,9 +61,10 @@ export function createBackendManager(deps: BackendManagerDeps): BackendManager {
     runtimePath,
     backendPort = async () => settings.get().backendPort,
     pollIntervalMs = 500,
-    healthTimeoutMs = 30_000,
+    healthTimeoutMs = 180_000,
     killGraceMs = 5_000,
     managedMigrations = true,
+    migrationsMarkerPath,
     nodeBin = 'node',
     embedded = false,
     postgres,
@@ -149,6 +154,62 @@ export function createBackendManager(deps: BackendManagerDeps): BackendManager {
         resolve(true)
       })
     })
+  }
+
+  function hashMigrationsDir(): string | null {
+    const migrationsDir = path.join(resourcesBackendPath, 'prisma', 'migrations')
+    let entries: string[]
+    try {
+      entries = readdirSync(migrationsDir)
+    } catch {
+      return null
+    }
+    const files: string[] = []
+    for (const entry of entries) {
+      const full = path.join(migrationsDir, entry)
+      try {
+        const st = statSync(full)
+        if (st.isFile()) {
+          files.push(entry)
+        } else if (st.isDirectory()) {
+          const nested = readdirSync(full)
+          for (const n of nested) {
+            files.push(path.join(entry, n))
+          }
+        }
+      } catch {
+        // ignora arquivos inacessíveis
+      }
+    }
+    if (files.length === 0) return null
+    const hash = createHash('sha256')
+    for (const file of files.sort()) {
+      hash.update(file)
+    }
+    return hash.digest('hex')
+  }
+
+  function migrationsAreCurrent(): boolean {
+    if (migrationsMarkerPath === undefined) return false
+    const current = hashMigrationsDir()
+    if (current === null) return false
+    try {
+      return readFileSync(migrationsMarkerPath, 'utf8').trim() === current
+    } catch {
+      return false
+    }
+  }
+
+  function persistMigrationsMarker(): void {
+    if (migrationsMarkerPath === undefined) return
+    const current = hashMigrationsDir()
+    if (current === null) return
+    try {
+      mkdirSync(path.dirname(migrationsMarkerPath), { recursive: true })
+      writeFileSync(migrationsMarkerPath, current)
+    } catch {
+      // best effort — pular deploy na próxima vez é só uma otimização
+    }
   }
 
   function handleExit(code: number | null, _signal: string | null): void {
@@ -273,8 +334,13 @@ export function createBackendManager(deps: BackendManagerDeps): BackendManager {
     const databaseUrl = embedded ? postgres!.getDatabaseUrl() : settings.get().databaseUrl
 
     if (managedMigrations) {
-      const migrationsOk = await runMigrations(databaseUrl)
-      if (!migrationsOk) return
+      if (migrationsAreCurrent()) {
+        setState({ status: 'starting', message: 'Migrações já aplicadas. Iniciando backend...' })
+      } else {
+        const migrationsOk = await runMigrations(databaseUrl)
+        if (!migrationsOk) return
+        persistMigrationsMarker()
+      }
     }
 
     const port = await backendPort()

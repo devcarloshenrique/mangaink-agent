@@ -1,5 +1,8 @@
 import { execFile, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -351,6 +354,73 @@ describe('backend-manager', () => {
     expect(mocks.spawnCalls.length).toBe(1)
     expect(mocks.spawnCalls[0].args.includes('migrate')).toBe(false)
     expect(mocks.spawnCalls[0].args[0].endsWith('app.js')).toBe(true)
+  })
+
+  it('migrationsMarkerPath ausente: migrate deploy roda em toda abertura (comportamento atual)', async () => {
+    mocks.fetch.mockResolvedValue(healthOkResponse())
+    const manager = buildManager(mocks)
+
+    await manager.start()
+
+    const migrationCalls = mocks.spawnCalls.filter((c) => c.args.includes('migrate'))
+    expect(migrationCalls.length).toBe(1)
+  })
+
+  it('migrationsMarkerPath com hash atual: pula o migrate deploy (boot mais rápido)', async () => {
+    mocks.fetch.mockResolvedValue(healthOkResponse())
+    const fakeBackend = mkdtempSync(path.join(tmpdir(), 'mi-backend-'))
+    const migrationsDir = path.join(fakeBackend, 'prisma', 'migrations')
+    mkdirSync(path.join(migrationsDir, '0001_init'), { recursive: true })
+    writeFileSync(path.join(migrationsDir, '0001_init', 'migration.sql'), 'CREATE TABLE x;')
+
+    const hash = createHash('sha256')
+    hash.update(path.join('0001_init', 'migration.sql'))
+    const markerPath = path.join(tmpdir(), `mi-marker-${Date.now()}-${Math.random()}.txt`)
+    writeFileSync(markerPath, hash.digest('hex'))
+
+    try {
+      const manager = buildManager(mocks, { resourcesBackendPath: fakeBackend, migrationsMarkerPath: markerPath })
+
+      await manager.start()
+      await vi.advanceTimersByTimeAsync(500)
+
+      const migrationCalls = mocks.spawnCalls.filter((c) => c.args.includes('migrate'))
+      expect(migrationCalls.length).toBe(0)
+      expect(apiSpawnCall(mocks)).toBeDefined()
+      expect(manager.getState().status).toBe('ready')
+    } finally {
+      rmSync(fakeBackend, { recursive: true, force: true })
+      rmSync(markerPath, { force: true })
+    }
+  })
+
+  it('migrationsMarkerPath com hash divergente: migrate deploy roda e o marker é atualizado', async () => {
+    mocks.fetch.mockResolvedValue(healthOkResponse())
+    const fakeBackend = mkdtempSync(path.join(tmpdir(), 'mi-backend-'))
+    const migrationsDir = path.join(fakeBackend, 'prisma', 'migrations')
+    mkdirSync(path.join(migrationsDir, '0001_init'), { recursive: true })
+    writeFileSync(path.join(migrationsDir, '0001_init', 'migration.sql'), 'CREATE TABLE x;')
+
+    const markerPath = path.join(tmpdir(), `mi-marker-${Date.now()}-${Math.random()}.txt`)
+    writeFileSync(markerPath, 'hash-antigo')
+
+    try {
+      const manager = buildManager(mocks, { resourcesBackendPath: fakeBackend, migrationsMarkerPath: markerPath })
+
+      await manager.start()
+
+      const migrationCalls = mocks.spawnCalls.filter((c) => c.args.includes('migrate'))
+      expect(migrationCalls.length).toBe(1)
+      expect(apiSpawnCall(mocks)).toBeDefined()
+
+      const persisted = readFileSync(markerPath, 'utf8')
+      const expected = createHash('sha256')
+      expected.update(path.join('0001_init', 'migration.sql'))
+      expect(persisted).toBe(expected.digest('hex'))
+    } finally {
+      rmSync(fakeBackend, { recursive: true, force: true })
+      rmSync(markerPath, { force: true })
+    }
   })
 
   it('backendPort() injetado é usado no PORT e no health poll', async () => {

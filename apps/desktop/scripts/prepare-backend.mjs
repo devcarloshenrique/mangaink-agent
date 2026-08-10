@@ -340,7 +340,19 @@ if (build.code !== 0) {
 // staging fora do workspace o install é standalone (junctions relativas ao
 // próprio node_modules/.pnpm), e o dir é movido (rename, mesmo volume) para
 // o destino final — preservando os junctions.
-log(`${c.cyan}\n── pnpm deploy --prod --legacy → staging → ${relative(ROOT, BUNDLE)} ──${c.reset}`)
+//
+// node-linker=hoisted: o layout ISOLADO (default) cria junctions de topo
+// apontando para .pnpm/<pkg>@<ver>/node_modules/<pkg>. O after-pack do
+// electron-builder copia node_modules com dereference:true (e o 7z/NSIS
+// também desreferencia durante a extração) — transformando as junctions em
+// pastas REAIS de topo que perdem o contexto do store. Aí require('effect')
+// (dep do @prisma/config, necessário no `prisma migrate deploy`) e demais
+// deps transitivas de topo falham com MODULE_NOT_FOUND no app empacotado.
+// Com hoisted, TODOS os pacotes são materializados no node_modules de topo
+// como pastas reais (self-contained) — o app continua resolvendo tudo mesmo
+// após o dereference. Verificado: fastify/@prisma/config/@prisma/client e
+// o boot do dist/app.js funcionam no bundle hoisted DEREFERENCIADO.
+log(`${c.cyan}\n── pnpm deploy --prod --legacy (hoisted) → staging → ${relative(ROOT, BUNDLE)} ──${c.reset}`)
 const deployEnv = { CI: 'true' }
 const STAGING_DEPLOY = join(tmpdir(), `mangaink-backend-deploy-${Date.now()}`)
 let deploy = { code: 0 }
@@ -348,13 +360,13 @@ if (process.env.MI_FORCE_FALLBACK === '1') {
   deploy = { code: 1 }
 } else {
   rmSync(STAGING_DEPLOY, { recursive: true, force: true })
-  deploy = runCapture(`pnpm --filter @mangaink/backend deploy --prod --legacy ${quotePath(STAGING_DEPLOY)}`, {
+  deploy = runCapture(`pnpm --filter @mangaink/backend deploy --prod --legacy --config.node-linker=hoisted ${quotePath(STAGING_DEPLOY)}`, {
     extraEnv: deployEnv,
   })
   if (deploy.code !== 0) {
     log(`${c.yellow}  ⚠ deploy com --legacy falhou (exit ${deploy.code}); tentando sem --legacy…${c.reset}`)
     rmSync(STAGING_DEPLOY, { recursive: true, force: true })
-    deploy = runCapture(`pnpm --filter @mangaink/backend deploy --prod ${quotePath(STAGING_DEPLOY)}`, { extraEnv: deployEnv })
+    deploy = runCapture(`pnpm --filter @mangaink/backend deploy --prod --config.node-linker=hoisted ${quotePath(STAGING_DEPLOY)}`, { extraEnv: deployEnv })
   }
 }
 
@@ -383,8 +395,9 @@ if (deploy.code === 0 && existsSync(join(STAGING_DEPLOY, 'node_modules'))) {
   // node-linker=hoisted: no Windows o pnpm cria junctions ABSOLUTAS apontando
   // para o staging quando roda standalone; com hoisted os links ficam
   // relativos a node_modules/.pnpm, então o diretório pode ser movido
-  // (rename) para o bundle intacto.
-  writeFileSync(join(staging, '.npmrc'), 'node-linker=hoisted\n')
+  // (rename) para o bundle intacto. O pnpm 11 não lê `node-linker` de .npmrc
+  // — usa pnpm-workspace.yaml (settings) ou o flag --config.
+  writeFileSync(join(staging, 'pnpm-workspace.yaml'), 'nodeLinker: hoisted\n')
   const stagingPkgPath = join(staging, 'package.json')
   const stagingPkg = JSON.parse(readFileSync(stagingPkgPath, 'utf8'))
   delete stagingPkg.scripts
@@ -393,7 +406,7 @@ if (deploy.code === 0 && existsSync(join(STAGING_DEPLOY, 'node_modules'))) {
   }
   writeFileSync(stagingPkgPath, JSON.stringify(stagingPkg, null, 2))
 
-  const install = runCapture('pnpm install --prod --no-frozen-lockfile', { cwd: staging, extraEnv: { CI: 'true' } })
+  const install = runCapture('pnpm install --prod --no-frozen-lockfile --config.node-linker=hoisted', { cwd: staging, extraEnv: { CI: 'true' } })
   // ERR_PNPM_IGNORED_BUILDS faz o pnpm sair com 1 mesmo instalando os pacotes
   // (build scripts de sharp/prisma/engines não aprovados em contexto standalone).
   // O binário nativo do sharp vem prebuilt no pacote @img/sharp-<platform> e o
@@ -419,10 +432,118 @@ if (deploy.code === 0 && existsSync(join(STAGING_DEPLOY, 'node_modules'))) {
 //   .env/.env.test  → credenciais locais do dev (vazamento de secrets)
 //   storage/        → cache de scraping do dev (centenas de MB)
 //   src/            → fonte TypeScript (o runtime usa apenas dist/)
+//   bin/            → binário KCC standalone legacy (92MB) — o runtime embutido
+//                     usa python + source (<runtime>/kcc/kcc-c2e.py), nunca o exe.
 // As env vars em runtime são injetadas pelo BackendManager do desktop.
-const STAGING_REMOVE = ['.env', '.env.test', 'storage', 'src']
+const STAGING_REMOVE = ['.env', '.env.test', 'storage', 'src', 'bin']
 for (const rel of STAGING_REMOVE) {
   rmSync(join(BUNDLE, rel), { recursive: true, force: true })
+}
+
+// ── 3b.0 Podar node_modules do bundle (apenas o que o migrate deploy exige) ──
+// O CLI prisma `migrate deploy` precisa de @prisma/config + @prisma/engines
+// (schema-engine-windows.exe) + os wasm compilers do provider postgresql, MAS
+// o cli.js bundled faz require() EAGER de @prisma/studio-core/data/* e
+// @prisma/dev/internal/state no load — então @prisma/studio-core e @prisma/dev
+// DEVEM permanecer no bundle (regressão corrigida na MEC-8: primeira abertura
+// em userData limpo quebrava com MODULE_NOT_FOUND). Só os deps de studio/dev
+// que NÃO são carregados em runtime (pglite, elkjs, react, @babel, @visx,
+// typings, typescript) são podados.
+function pruneNodeModules(bundle) {
+  const nm = join(bundle, 'node_modules')
+  if (!existsSync(nm)) return 0
+  const PRUNE_DIRS = [
+    '@electric-sql', // pglite (dep do @prisma/dev, 24MB)
+    'elkjs', // graph do studio (8MB)
+    'react', // dep do studio (2MB)
+    'react-dom', // dep do studio (7MB)
+    '@babel', // transpile do studio (5MB)
+    '@types', // typings — só dev (5MB)
+    'typescript', // peer opcional do prisma (report de versão) — não usado no deploy
+    '@visx', // lib de gráficos React (transitiva, nunca usada no backend, ~932 arquivos)
+  ]
+  let removed = 0
+  for (const rel of PRUNE_DIRS) {
+    const full = join(nm, rel)
+    if (existsSync(full)) {
+      const size = dirSize(full)
+      rmSync(full, { recursive: true, force: true })
+      log(`${c.dim}    - ${rel} (${(size / 1024 / 1024).toFixed(1)} MB)${c.reset}`)
+      removed += size
+    }
+  }
+  return removed
+}
+
+function pruneSourceMaps(bundle) {
+  // Source maps (*.map) nunca são carregados pelo Node em runtime — só servem
+  // para devtools/stacktraces mapeados. O bundle tinha ~4.5k arquivos .map
+  // (~42MB). Removê-los corta centenas de MB de extração no SFX do Portable.
+  const nm = join(bundle, 'node_modules')
+  if (!existsSync(nm)) return 0
+  let removedBytes = 0
+  let removedFiles = 0
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(full)
+      } else if (entry.isFile() && entry.name.endsWith('.map')) {
+        try {
+          removedBytes += statSync(full).size
+          rmSync(full, { force: true })
+          removedFiles++
+        } catch {
+          /* best effort */
+        }
+      }
+    }
+  }
+  walk(nm)
+  if (removedFiles > 0) {
+    log(`${c.dim}    - ${removedFiles} arquivo(s) .map (${(removedBytes / 1024 / 1024).toFixed(1)} MB)${c.reset}`)
+  }
+  return removedBytes
+}
+
+function pruneOtherProviderWasm(dir) {
+  if (!existsSync(dir)) return 0
+  const removed = []
+  for (const f of readdirSync(dir)) {
+    const full = join(dir, f)
+    if (!f.includes('query_compiler')) {
+      if (f.endsWith('.map')) {
+        rmSync(full, { force: true })
+        removed.push(f)
+      }
+      continue
+    }
+    const m = f.match(/^query_compiler_(fast|small)_bg\.([a-z0-9]+)/)
+    if (m && m[2] !== 'postgresql') {
+      rmSync(full, { force: true })
+      removed.push(f)
+    }
+  }
+  return removed
+}
+
+function prunePrismaWasm(bundle) {
+  const nm = join(bundle, 'node_modules')
+  const dirs = [
+    join(nm, '@prisma', 'client', 'runtime'),
+    join(nm, 'prisma', 'build'),
+  ]
+  let count = 0
+  for (const dir of dirs) {
+    count += pruneOtherProviderWasm(dir)
+  }
+  return count
 }
 
 // ── 3b.1 Limpeza de junctions quebrados no node_modules do bundle ──────
@@ -481,6 +602,39 @@ if (clientDir && hasPrismaEngine(clientDir)) {
   }
   clientDir = findGeneratedClient(BUNDLE)
   log(`${c.green}  ✓ client Prisma gerado (${clientDir ? relative(BUNDLE, clientDir) : 'localizado'})${c.reset}`)
+}
+
+// ── 4.1 Poda de pacotes não usados em runtime (studio/dev tooling) ────
+// Roda DEPOIS do prisma generate (que pode precisar de typescript/@prisma/dev)
+// e DEPOIS do ensurePrismaLinks (para não re-materializar do .pnpm os pacotes
+// podados). `migrate deploy` no app empacotado só carrega @prisma/config +
+// @prisma/engines + os wasm postgresql — studio/dev tooling é peso morto.
+log(`${c.cyan}\n── Podando node_modules do bundle (studio/dev tooling) ──${c.reset}`)
+const prunedBytes = pruneNodeModules(BUNDLE)
+if (prunedBytes > 0) {
+  log(`${c.green}  ✓ ${(prunedBytes / 1024 / 1024).toFixed(1)} MB removidos de pacotes não usados em runtime${c.reset}`)
+} else {
+  log(`${c.green}  ✓ nada a podar${c.reset}`)
+}
+
+// ── 4.2 Poda de wasm compilers de providers não-usados (só postgresql) ──
+log(`${c.cyan}\n── Podando wasm de providers não-usados (mantém só postgresql) ──${c.reset}`)
+const prunedWasm = prunePrismaWasm(BUNDLE)
+if (prunedWasm > 0) {
+  log(`${c.green}  ✓ ${prunedWasm} arquivo(s) wasm/map removido(s)${c.reset}`)
+} else {
+  log(`${c.green}  ✓ nada a podar${c.reset}`)
+}
+
+// ── 4.3 Poda de source maps (*.map) de todo o node_modules ─────────────
+// Nunca carregados pelo Node em runtime; removê-los corta ~4.5k arquivos e
+// ~42MB do payload — redução direta no tempo de extração do SFX do Portable.
+log(`${c.cyan}\n── Podando source maps (*.map) do node_modules ──${c.reset}`)
+const prunedMaps = pruneSourceMaps(BUNDLE)
+if (prunedMaps > 0) {
+  log(`${c.green}  ✓ ${(prunedMaps / 1024 / 1024).toFixed(1)} MB removidos em .map${c.reset}`)
+} else {
+  log(`${c.green}  ✓ nada a podar${c.reset}`)
 }
 
 // ── 5. Verificação de artefatos ────────────────────────────────────────

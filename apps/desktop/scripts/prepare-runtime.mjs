@@ -332,6 +332,82 @@ export function cleanPythonRuntime(pythonDir) {
   return before - dirSizeBytes(pythonDir)
 }
 
+/** Remove tkinter/tcl (GUI — o KCC é CLI), testes do stdlib e headers de
+ *  desenvolvimento do python embutido. O KCC usa apenas módulos de CLI:
+ *  PIL/numpy/pymupdf/psutil/requests/slugify/etc. Tcl/tk é peso morto (~7MB). */
+export function prunePython(pythonDir) {
+  if (!pythonDir || !existsSync(pythonDir)) return 0
+  const before = dirSizeBytes(pythonDir)
+  const removals = [
+    'tcl',
+    'Lib/tkinter',
+    'Lib/idlelib',
+    'Lib/lib2to3',
+    'Lib/turtledemo',
+    'Lib/msilib',
+    'Lib/ensurepip',
+    'Lib/venv',
+    'Lib/pydoc_data',
+    'Lib/test',
+    'DLLs/_tkinter.pyd',
+    'DLLs/tk86t.dll',
+    'DLLs/tcl86t.dll',
+    'libs/_tkinter.lib',
+    'include',
+    'libs',
+  ]
+  for (const rel of removals) {
+    rmSync(join(pythonDir, rel), { recursive: true, force: true })
+  }
+  stripPythonDebug(pythonDir)
+  return before - dirSizeBytes(pythonDir)
+}
+
+/** Remove binários PostgreSQL que o app não usa. O PostgresManager só chama
+ *  initdb/pg_ctl/psql/createdb. pg_upgrade/pg_rewind/pgbench/wxWidgets (GUI
+ *  do StackBuilder/pgAdmin) e outras ferramentas de admin não são usadas em
+ *  runtime — peso morto no pacote. ICU e as libs do servidor são mantidas. */
+export function prunePostgres(postgresDir) {
+  if (!postgresDir || !existsSync(postgresDir)) return 0
+  const before = dirSizeBytes(postgresDir)
+  const bin = join(postgresDir, 'bin')
+  const keep = new Set([
+    'postgres.exe',
+    'pg_ctl.exe',
+    'initdb.exe',
+    'psql.exe',
+    'createdb.exe',
+    'pg_dump.exe',
+    'pg_restore.exe',
+    'libpq.dll',
+    'libssl-3-x64.dll',
+    'libcrypto-3-x64.dll',
+    'libiconv-2.dll',
+    'libintl-9.dll',
+    'zlib1.dll',
+    'libwinpthread-1.dll',
+    'libxml2.dll',
+    'libxslt.dll',
+    'libzstd.dll',
+    'liblz4.dll',
+    'libcurl.dll',
+    'icudt67.dll',
+    'icuin67.dll',
+    'icuuc67.dll',
+    'icutu67.dll',
+    'icuio67.dll',
+  ])
+  if (existsSync(bin)) {
+    for (const entry of readdirSync(bin, { withFileTypes: true })) {
+      const full = join(bin, entry.name)
+      if (entry.isFile() && !keep.has(entry.name)) {
+        rmSync(full, { force: true })
+      }
+    }
+  }
+  return before - dirSizeBytes(postgresDir)
+}
+
 function copyExtractMobi(runtimeRoot) {
   const src = join(ROOT, 'docker', 'extract_mobi.py')
   const dest = join(runtimeRoot, 'extract_mobi.py')
@@ -405,6 +481,16 @@ export async function main({ runtimeRoot = RUNTIME_ROOT, onlyMissing = true } = 
   if (existsSync(join(resolveDest(runtimeRoot, pythonArtifact), 'python.exe'))) {
     const saved = cleanPythonRuntime(resolveDest(runtimeRoot, pythonArtifact))
     if (saved > 0) log(`${c.dim}  › python: ${fmtMB(saved)} removidos (.pdb/__pycache__)${c.reset}`)
+    const pruned = prunePython(resolveDest(runtimeRoot, pythonArtifact))
+    if (pruned > 0) log(`${c.dim}  › python: ${fmtMB(pruned)} removidos (tcl/tkinter/testes/headers)${c.reset}`)
+  }
+
+  // Poda do PostgreSQL: remove binários não usados em runtime (upgrade,
+  // rewinding, pgbench, wxWidgets GUI do StackBuilder, ferramentas de admin).
+  const postgresArtifact = byId.postgres
+  if (existsSync(join(resolveDest(runtimeRoot, postgresArtifact), 'bin', 'pg_ctl.exe'))) {
+    const prunedPg = prunePostgres(resolveDest(runtimeRoot, postgresArtifact))
+    if (prunedPg > 0) log(`${c.dim}  › postgres: ${fmtMB(prunedPg)} removidos (ferramentas/utilitários não usados)${c.reset}`)
   }
 
   copyExtractMobi(runtimeRoot)

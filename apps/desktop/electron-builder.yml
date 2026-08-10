@@ -1,6 +1,6 @@
 appId: com.mangaink.desktop
 productName: MangaInk Agent
-compression: store
+compression: normal
 directories:
   output: dist
   buildResources: build

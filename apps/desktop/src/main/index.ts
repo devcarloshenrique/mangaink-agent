@@ -148,9 +148,12 @@ if (!gotTheLock) {
             runtimePostgresBin: join(runtimePath, 'postgres', 'bin'),
             dataDir: join(app.getPath('userData'), 'pgdata'),
             port: settingsStore.getManagedPostgresPort(),
+            startTimeoutMs: 180_000,
+            pollIntervalMs: 250,
           })
         : undefined,
       nodeBin: app.isPackaged ? process.execPath : 'node',
+      migrationsMarkerPath: join(app.getPath('userData'), 'storage', '.migrations-applied'),
     })
 
     backend.onStateChange((state) => {
