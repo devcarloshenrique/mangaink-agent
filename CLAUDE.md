@@ -29,7 +29,7 @@ mangaink-agent/
 │   │   │   │   ├── agendamentos/  (Timeline)
 │   │   │   │   ├── perfil/        (Achievements, MonthlyChart, TopReadings)
 │   │   │   │   ├── reader/        (ReaderToolbar)
-│   │   │   │   ├── providers/     (SuggestSourceForm, ProvidersManager, constants)
+│   │   │   │   ├── providers/     (EngineBadge, ProviderConfigDialog, ProviderEditorForm, constants)
 │   │   │   │   ├── theme/         (ThemeSelector, ComicIntensitySlider)
 │   │   │   │   ├── notifications/ (ComicToast, NotificationBell)
 │   │   │   │   └── onboarding/    (OnboardingOverlay)
@@ -378,7 +378,7 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 - `src/components/agendamentos/` — `Timeline`
 - `src/components/perfil/` — `Achievements`, `MonthlyChart`, `TopReadings`
 - `src/components/reader/` — `ReaderToolbar`
-- `src/components/providers/` — `SuggestSourceForm`, `ProvidersManager` (edição de providers em `/configuracoes`), `constants` (`STATUS_CONFIG`, `SourceStatus`)
+- `src/components/providers/` — `EngineBadge` (badge de engine), `ProviderConfigDialog` (modal de edição em `/fontes`), `ProviderEditorForm` (form compartilhado de edição), `constants` (`STATUS_CONFIG`, `SourceStatus`)
 - `src/components/theme/` — `ThemeSelector`, `ComicIntensitySlider`, `ThemeToggle`
 - `src/components/notifications/` — `ComicToast`, `NotificationBell`
 - `src/components/onboarding/` — `OnboardingOverlay`
