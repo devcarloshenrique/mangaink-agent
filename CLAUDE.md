@@ -159,7 +159,6 @@ Modelo `Provider` (tabela `providers`, migração `add_providers` — MEC-31) al
 | `description` | `Text?` | |
 | `urlExample` | `@db.VarChar(2048)? @map("url_example")` | |
 | `homepage` | `@db.VarChar(2048)?` | |
-| `logoUrl` | `@db.VarChar(2048)? @map("logo_url")` | |
 | `searchUrl` | `@db.VarChar(2048)? @map("search_url")` | |
 | `rateLimitMaxConcurrent` | `Int @default(6) @map("rate_limit_max_concurrent")` | |
 | `rateLimitMinTime` | `Int @default(50) @map("rate_limit_min_time")` | |
@@ -286,10 +285,10 @@ File-based routing em `apps/frontend/src/routes/`:
 - `GET /api/conversions/source/inspect/:sourceId/events` — SSE com progresso do scraping
   - Eventos: `progress` (stage, message, progress%), `completed`, `failed`
 - `GET /api/conversions/source/providers` — Lista providers disponíveis (público)
-  - Envelope `{ providers: [...] }`, shape: `{ slug, name, engine: "api"|"cheerio"|"playwright", tags, status, description, urlExample, homepage, logoUrl, searchUrl, rateLimit: { maxConcurrent, minTime, reservoir, reservoirRefreshInterval } }`
+  - Envelope `{ providers: [...] }`, shape: `{ slug, name, engine: "api"|"cheerio"|"playwright", tags, status, description, urlExample, homepage, searchUrl, rateLimit: { maxConcurrent, minTime, reservoir, reservoirRefreshInterval } }`
   - `allowedDomains` **não** é exposto (SSRF protection é interna)
 - `PATCH /api/conversions/source/providers/:slug` — Atualiza um provider (JWT obrigatório)
-  - Body parcial (todos os campos opcionais): `status` (`active|slow|beta|offline|soon`), `description`, `urlExample`, `homepage`, `logoUrl`, `tags`, `searchUrl`, `rateLimit` (`maxConcurrent ≥ 1`, `minTime ≥ 0`, `reservoir ≥ 1` nullable, `reservoirRefreshInterval ≥ 100` nullable)
+  - Body parcial (todos os campos opcionais): `status` (`active|slow|beta|offline|soon`), `description`, `urlExample`, `homepage`, `tags`, `searchUrl`, `rateLimit` (`maxConcurrent ≥ 1`, `minTime ≥ 0`, `reservoir ≥ 1` nullable, `reservoirRefreshInterval ≥ 100` nullable)
   - Persiste no banco, propaga a nova config de rate limit ao `ProviderResolver` (reconstrói strategies) e retorna o `provider` atualizado (shape acima). `404` se o slug não existir.
 
 ### Fluxo de Inspeção
