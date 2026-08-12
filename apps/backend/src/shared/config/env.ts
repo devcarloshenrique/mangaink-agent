@@ -1,30 +1,6 @@
 import 'dotenv/config'
 import { z } from 'zod'
 
-const numericMs = z.preprocess(
-  (val) => {
-    if (typeof val === 'string') {
-      const cleaned = val.replace(/[^0-9.-]/g, '')
-      if (cleaned === '' || cleaned === '-') return undefined
-      return Number(cleaned)
-    }
-    return val
-  },
-  z.number().int().nonnegative(),
-)
-
-const positiveMs = z.preprocess(
-  (val) => {
-    if (typeof val === 'string') {
-      const cleaned = val.replace(/[^0-9.-]/g, '')
-      if (cleaned === '' || cleaned === '-') return undefined
-      return Number(cleaned)
-    }
-    return val
-  },
-  z.number().int().positive(),
-)
-
 const envSchema = z.object({
   // Vite/electron-vite dev definem NODE_ENV='development' — normaliza para 'dev'
   NODE_ENV: z
@@ -57,16 +33,6 @@ const envSchema = z.object({
   JOB_STATUS_TTL_SEC: z.coerce.number().int().positive().default(21600),
 
   MAX_USER_PRESETS: z.coerce.number().int().positive().default(20),
-
-  // Rate Limiting por Provider (bottleneck) — valores em ms
-  RATE_LIMIT_DEFAULT_MAX_CONCURRENT: positiveMs.default(6),
-  RATE_LIMIT_DEFAULT_MIN_TIME: numericMs.default(50),
-  RATE_LIMIT_MANGALIVRE_MAX_CONCURRENT: positiveMs.default(8),
-  RATE_LIMIT_MANGALIVRE_MIN_TIME: numericMs.default(0),
-  RATE_LIMIT_IMPERIODABRITANNIA_MAX_CONCURRENT: positiveMs.default(2),
-  RATE_LIMIT_IMPERIODABRITANNIA_MIN_TIME: numericMs.default(500),
-  RATE_LIMIT_MANGASBRASUKA_MAX_CONCURRENT: positiveMs.default(3),
-  RATE_LIMIT_MANGASBRASUKA_MIN_TIME: numericMs.default(200),
 })
 
 const _env = envSchema.safeParse(process.env)

@@ -2,11 +2,11 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 import { env } from '../../../shared/config/env'
 import { SourceNotFoundError } from '../errors/scraping.errors'
 import { ProviderNotFoundError } from '../errors/scraping.errors'
-import { ProviderResolver } from '../providers/provider-resolver'
+import { getProviderResolver } from '../utils/resolve-provider'
 import { ChapterImageService } from '../services/chapter-image.service'
 import { PrismaSourceRepository } from '../repositories/prisma-source.repository'
 
-const resolver = new ProviderResolver()
+const resolver = getProviderResolver()
 
 export async function deleteChapterCache(
   request: FastifyRequest<{ Params: { sourceId: string; chapterId: string } }>,

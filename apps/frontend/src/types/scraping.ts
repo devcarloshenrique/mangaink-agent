@@ -60,3 +60,39 @@ export interface InspectTriggerResponse {
   sourceId: string;
   status: "ready" | "processing";
 }
+
+export interface RateLimitConfig {
+  maxConcurrent: number;
+  minTime: number;
+  reservoir: number | null;
+  reservoirRefreshInterval: number | null;
+}
+
+export interface ProviderRecord {
+  slug: string;
+  name: string;
+  engine: "api" | "cheerio" | "playwright";
+  tags: string[];
+  status: string;
+  description: string | null;
+  urlExample: string | null;
+  homepage: string | null;
+  searchUrl: string | null;
+  rateLimit: RateLimitConfig;
+}
+
+export type ProviderStatus = "active" | "slow" | "beta" | "offline" | "soon";
+
+export interface ProviderUpdateInput {
+  status?: ProviderStatus;
+  description?: string;
+  urlExample?: string;
+  homepage?: string;
+  tags?: string[];
+  searchUrl?: string;
+  rateLimit?: Partial<RateLimitConfig>;
+}
+
+export interface ListProvidersResponse {
+  providers: ProviderRecord[];
+}

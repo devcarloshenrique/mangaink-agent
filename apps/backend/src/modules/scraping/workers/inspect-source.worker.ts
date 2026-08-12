@@ -2,8 +2,8 @@ import { join, extname } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import { mkdirp } from '../../../shared/utils/filesystem'
-import { ProviderResolver } from '../providers/provider-resolver'
-import { RateLimitRegistry } from '../rate-limit/rate-limit-registry'
+import { getProviderResolver } from '../utils/resolve-provider'
+
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
 import type { RuntimeAdapters } from '../../../shared/infra/factory'
@@ -28,8 +28,7 @@ const QUEUE_NAME = 'source-inspect'
 export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): QueueWorkerHandle {
   const { runtime } = deps
 
-  const registry = new RateLimitRegistry()
-  const resolver = new ProviderResolver(registry)
+  const resolver = getProviderResolver()
   const repository = getSourceRepository()
   const cacheService = new CacheService(repository)
   const lockService = runtime.lock

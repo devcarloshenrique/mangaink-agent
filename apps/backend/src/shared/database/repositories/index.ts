@@ -1,4 +1,5 @@
 import type { SourceCacheRepository } from '../../../modules/scraping/repositories/source-cache.repository'
+import type { ProviderRepository } from '../../../modules/scraping/repositories/provider.repository'
 import type { ConversionRepository } from '../../../modules/conversion/repositories/conversion.repository'
 import type { ConversionJobRepository } from '../../../modules/conversion/repositories/conversion-job.repository'
 import type { IUserPresetRepository } from '../../../modules/conversion/repositories/user-preset.repository'
@@ -6,6 +7,7 @@ import type { UserChapterProgressRepository } from '../../../modules/reading/rep
 import type { IStatusStore } from '../../infra'
 
 import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
+import { PrismaProviderRepository } from '../../../modules/scraping/repositories/prisma-provider.repository'
 import { PrismaConversionRepository } from '../../../modules/conversion/repositories/prisma-conversion.repository'
 import { PrismaJobRepository } from '../../../modules/conversion/repositories/prisma-job.repository'
 import { PrismaUserPresetRepository } from '../../../modules/conversion/repositories/prisma-user-preset.repository'
@@ -13,6 +15,10 @@ import { PrismaUserChapterProgressRepository } from '../../../modules/reading/re
 
 export function getSourceRepository(): SourceCacheRepository {
   return new PrismaSourceRepository()
+}
+
+export function getProviderRepository(): ProviderRepository {
+  return new PrismaProviderRepository()
 }
 
 export function getConversionRepository(statusStore?: IStatusStore): ConversionRepository {

@@ -8,7 +8,13 @@ import type {
   UpdateProfileData,
   User,
 } from "@/types/auth";
-import type { InspectTriggerResponse, SourceInspectResponse } from "@/types/scraping";
+import type {
+  InspectTriggerResponse,
+  ListProvidersResponse,
+  ProviderRecord,
+  ProviderUpdateInput,
+  SourceInspectResponse,
+} from "@/types/scraping";
 import type {
   ConversionOptions,
   ConversionState,
@@ -188,6 +194,19 @@ export const scrapingApi = {
       onError: handlers.onError,
     });
     // sem token — endpoint público
+  },
+
+  /** GET /api/conversions/source/providers — lista providers disponíveis */
+  async providers(): Promise<ListProvidersResponse> {
+    return request<ListProvidersResponse>("/api/conversions/source/providers");
+  },
+
+  /** PATCH /api/conversions/source/providers/:slug — atualiza campos parciais de um provider */
+  async updateProvider(slug: string, patch: ProviderUpdateInput): Promise<ProviderRecord> {
+    return request<ProviderRecord>(`/api/conversions/source/providers/${slug}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
   },
 };
 

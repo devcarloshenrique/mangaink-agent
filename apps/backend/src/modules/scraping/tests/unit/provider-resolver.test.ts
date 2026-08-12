@@ -1,11 +1,26 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
+
+const mockCreateRateLimiter = vi.hoisted(() => vi.fn())
+
+vi.mock('../../rate-limit/rate-limiter', () => ({
+  createRateLimiter: mockCreateRateLimiter,
+}))
+
 import { ProviderResolver } from '../../providers/provider-resolver'
 import { ProviderNotFoundError, InvalidUrlError } from '../../errors/scraping.errors'
+import {
+  getProviderResolver,
+  refreshProviderResolver,
+  resetProviderResolver,
+} from '../../utils/resolve-provider'
 
 describe('ProviderResolver', () => {
   let resolver: ProviderResolver
 
   beforeEach(() => {
+    mockCreateRateLimiter.mockReset()
+    mockCreateRateLimiter.mockImplementation(() => ({}))
+    resetProviderResolver()
     resolver = new ProviderResolver()
   })
 
@@ -89,6 +104,108 @@ describe('ProviderResolver', () => {
       expect(provider).toHaveProperty('engine')
       expect(provider).toHaveProperty('urlPattern')
       expect(provider).toHaveProperty('allowedDomains')
+    })
+  })
+
+  describe('loadFromProviders', () => {
+    it('alimenta o registry e reconstrói providers com as novas configs', () => {
+      resolver.loadFromProviders([{ slug: 'mangalivre', maxConcurrent: 2, minTime: 300 }])
+
+      expect(mockCreateRateLimiter).toHaveBeenCalledWith({ maxConcurrent: 2, minTime: 300 })
+      expect(mockCreateRateLimiter).toHaveBeenCalledWith({ maxConcurrent: 6, minTime: 50 })
+    })
+  })
+
+  describe('refresh', () => {
+    it('preserva instâncias Bottleneck quando a config não muda', () => {
+      const before = resolver.listAll().map((p) => p.rateLimiter)
+
+      resolver.loadFromProviders([
+        { slug: 'mangalivre', maxConcurrent: 6, minTime: 50 },
+        { slug: 'imperiodabritannia', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangasbrasuka', maxConcurrent: 6, minTime: 50 },
+      ])
+
+      const after = resolver.listAll().map((p) => p.rateLimiter)
+      expect(after).toEqual(before)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(3)
+    })
+
+    it('reconstrói limiter quando a config muda', () => {
+      const before = resolver.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
+
+      resolver.loadFromProviders([{ slug: 'mangalivre', maxConcurrent: 2, minTime: 300 }])
+
+      const after = resolver.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
+      expect(after).not.toBe(before)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
+    })
+
+    it('preserva limiters dos demais providers quando só um muda', () => {
+      const beforeBritannia = resolver
+        .listAll()
+        .find((p) => p.slug === 'imperiodabritannia')!.rateLimiter
+
+      resolver.loadFromProviders([{ slug: 'mangalivre', maxConcurrent: 2, minTime: 300 }])
+
+      const afterBritannia = resolver
+        .listAll()
+        .find((p) => p.slug === 'imperiodabritannia')!.rateLimiter
+      expect(afterBritannia).toBe(beforeBritannia)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
+    })
+
+    it('mantém todos os providers após refresh', () => {
+      resolver.loadFromProviders([{ slug: 'mangalivre', maxConcurrent: 2, minTime: 300 }])
+
+      expect(resolver.listAll().map((p) => p.slug)).toEqual([
+        'mangalivre',
+        'imperiodabritannia',
+        'mangasbrasuka',
+      ])
+    })
+  })
+
+  describe('singleton (getProviderResolver/refreshProviderResolver)', () => {
+    it('retorna a mesma instância para chamadas repetidas', () => {
+      const first = getProviderResolver()
+      const second = getProviderResolver()
+      expect(first).toBe(second)
+    })
+
+    it('é uma instância real de ProviderResolver com listAll', () => {
+      const resolverInstance = getProviderResolver()
+      expect(resolverInstance).toBeInstanceOf(ProviderResolver)
+      expect(resolverInstance.listAll().map((p) => p.slug)).toEqual([
+        'mangalivre',
+        'imperiodabritannia',
+        'mangasbrasuka',
+      ])
+    })
+
+    it('refreshProviderResolver preserva a instância do singleton', () => {
+      const before = getProviderResolver()
+      refreshProviderResolver()
+      expect(getProviderResolver()).toBe(before)
+    })
+
+    it('refreshProviderResolver preserva as configs carregadas (registry não reseta)', () => {
+      const resolverInstance = getProviderResolver()
+      resolverInstance.loadFromProviders([{ slug: 'mangalivre', maxConcurrent: 2, minTime: 300 }])
+      const before = resolverInstance.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
+
+      refreshProviderResolver()
+
+      const after = resolverInstance.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
+      expect(after).toBe(before)
+      expect(mockCreateRateLimiter).toHaveBeenLastCalledWith({ maxConcurrent: 2, minTime: 300 })
+    })
+
+    it('resetProviderResolver descarta a instância do singleton', () => {
+      const first = getProviderResolver()
+      resetProviderResolver()
+      const second = getProviderResolver()
+      expect(second).not.toBe(first)
     })
   })
 })

@@ -41,6 +41,8 @@ const fakeProvider = vi.hoisted(() => ({
 const fakeResolver = vi.hoisted(() => ({
   resolve: vi.fn(),
   listAll: vi.fn(() => [fakeProvider]),
+  loadFromProviders: vi.fn(),
+  refresh: vi.fn(),
 }))
 
 // ── Spy de createSafeRedis: QUALQUER chamada quebra o teste ruidosamente ──────

@@ -189,3 +189,24 @@ model UserChapterProgress {
   @@index([userId, sourceId])
   @@map("user_chapter_progress")
 }
+
+model Provider {
+  id                                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                              String    @unique @db.VarChar(50)
+  name                              String    @db.VarChar(100)
+  engine                            String    @db.VarChar(20)
+  tags                              String[]  @db.Text
+  status                            String    @default("active") @db.VarChar(20)
+  description                       String?   @db.Text
+  urlExample                        String?   @db.VarChar(2048) @map("url_example")
+  homepage                          String?   @db.VarChar(2048)
+  searchUrl                         String?   @db.VarChar(2048) @map("search_url")
+  rateLimitMaxConcurrent            Int       @default(6) @map("rate_limit_max_concurrent")
+  rateLimitMinTime                  Int       @default(50) @map("rate_limit_min_time")
+  rateLimitReservoir                Int?      @map("rate_limit_reservoir")
+  rateLimitReservoirRefreshInterval Int?      @map("rate_limit_reservoir_refresh_interval")
+  createdAt                         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("providers")
+}

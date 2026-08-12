@@ -4,10 +4,17 @@ import type { RuntimeAdapters } from '../../shared/infra/factory'
 import { createInspectSourceController } from './controllers/inspect-source.controller'
 import { getSource } from './controllers/preview-source.controller'
 import { createSourceEventsController } from './controllers/source-events.controller'
-import { listProviders } from './controllers/providers.controller'
+import { listProviders, updateProvider } from './controllers/providers.controller'
 import { inspectSourceBodySchema, inspectSourceQuerySchema } from './dtos/inspect-source.dto'
 import { sourceParamsSchema } from './dtos/preview-source.dto'
+import {
+  listProvidersResponseSchema,
+  providerParamsSchema,
+  providerResponseSchema,
+  updateProviderBodySchema,
+} from './dtos/provider.dto'
 import { verifyJwtOptional } from '../../shared/middlewares/verify-jwt-optional'
+import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 
 interface ScrapingRoutesOptions {
   runtime?: RuntimeAdapters
@@ -137,21 +144,39 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
         summary: 'Lista providers disponíveis',
         description:
           'Retorna todos os providers de scraping disponíveis, seus slugs, ' +
-          'motores (cheerio, api, playwright) e domínios suportados.',
+          'motores (cheerio, api, playwright), status, URLs e rate limits. ' +
+          '`allowedDomains` não é exposto (SSRF protection é interna).',
         response: {
-          200: z.object({
-            providers: z.array(
-              z.object({
-                slug: z.string(),
-                name: z.string(),
-                engine: z.enum(['api', 'cheerio', 'playwright']),
-                allowedDomains: z.array(z.string()),
-              }),
-            ),
-          }),
+          200: listProvidersResponseSchema,
         },
       },
     },
     listProviders,
+  )
+
+  // PATCH /api/conversions/source/providers/:slug
+  app.patch(
+    '/api/conversions/source/providers/:slug',
+    {
+      onRequest: [verifyJwt],
+      schema: {
+        tags: ['Scraping'],
+        summary: 'Atualiza um provider',
+        description:
+          'Atualiza campos parciais de um provider (status, metadados, tags e ' +
+          'rate limit). Persiste no banco e propaga a nova config de rate limit ' +
+          'para o resolver de providers.',
+        security: [{ bearerAuth: [] }],
+        params: providerParamsSchema,
+        body: updateProviderBodySchema,
+        response: {
+          200: providerResponseSchema,
+          400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    updateProvider,
   )
 }

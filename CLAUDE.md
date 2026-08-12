@@ -29,7 +29,7 @@ mangaink-agent/
 │   │   │   │   ├── agendamentos/  (Timeline)
 │   │   │   │   ├── perfil/        (Achievements, MonthlyChart, TopReadings)
 │   │   │   │   ├── reader/        (ReaderToolbar)
-│   │   │   │   ├── fontes/        (SuggestSourceForm)
+│   │   │   │   ├── providers/     (SuggestSourceForm, ProvidersManager, constants)
 │   │   │   │   ├── theme/         (ThemeSelector, ComicIntensitySlider)
 │   │   │   │   ├── notifications/ (ComicToast, NotificationBell)
 │   │   │   │   └── onboarding/    (OnboardingOverlay)
@@ -144,6 +144,31 @@ mangaink-agent/
 - **Arquitetura modular:** controllers → use-cases → repositories → entities
 - **Testes:** Vitest unitários + E2E com in-memory + mock repositories
 
+### Prisma Schema
+
+Modelo `Provider` (tabela `providers`, migração `add_providers` — MEC-31) alimenta os endpoints e a página `/fontes`:
+
+| Campo | Tipo | Observação |
+| --- | --- | --- |
+| `id` | UUID pk | `@default(dbgenerated("gen_random_uuid()")) @db.Uuid` |
+| `slug` | `@unique @db.VarChar(50)` | identifica o provider na URL |
+| `name` | `@db.VarChar(100)` | nome de exibição |
+| `engine` | `@db.VarChar(20)` | `api` / `cheerio` / `playwright` |
+| `tags` | `String[] @db.Text` | `TEXT[]` Postgres |
+| `status` | `@default("active") @db.VarChar(20)` | `active` / `slow` / `beta` / `offline` / `soon` |
+| `description` | `Text?` | |
+| `urlExample` | `@db.VarChar(2048)? @map("url_example")` | |
+| `homepage` | `@db.VarChar(2048)?` | |
+| `logoUrl` | `@db.VarChar(2048)? @map("logo_url")` | |
+| `searchUrl` | `@db.VarChar(2048)? @map("search_url")` | |
+| `rateLimitMaxConcurrent` | `Int @default(6) @map("rate_limit_max_concurrent")` | |
+| `rateLimitMinTime` | `Int @default(50) @map("rate_limit_min_time")` | |
+| `rateLimitReservoir` | `Int? @map("rate_limit_reservoir")` | |
+| `rateLimitReservoirRefreshInterval` | `Int? @map("rate_limit_reservoir_refresh_interval")` | |
+| `createdAt` / `updatedAt` | `DateTime @default(now()) @db.Timestamptz` | `updatedAt` com `@updatedAt` |
+
+`allowedDomains` e `urlPattern` ficam no código (segurança), não no banco. `@@map("providers")`; colunas em snake_case via `@map`.
+
 ### Shared (`apps/shared`)
 - **Zod** schemas compartilhados entre frontend e backend
 - Tipos `PublicUser`, `AuthResponse`, `LoginDTO`, `RegisterDTO`, `UpdateMeDTO`
@@ -171,6 +196,7 @@ pnpm lint          # ESLint em todos os pacotes
 pnpm format        # Prettier em todos os pacotes
 pnpm test          # Testes do backend (Vitest)
 pnpm db:migrate    # Executa migrations do Prisma
+pnpm db:generate   # Regenera o Prisma Client (necessário após mudar o schema)
 pnpm db:push       # Push do schema sem migration
 pnpm db:studio     # Prisma Studio (GUI do banco)
 pnpm storybook     # Storybook em http://localhost:6006
@@ -197,6 +223,7 @@ pnpm build         # tsc
 pnpm test          # vitest run
 pnpm test:watch    # vitest (modo watch)
 pnpm db:migrate    # prisma migrate dev
+pnpm db:generate   # prisma generate
 pnpm db:push       # prisma db push
 pnpm db:studio     # prisma studio
 ```
@@ -231,7 +258,7 @@ File-based routing em `apps/frontend/src/routes/`:
 | `src/routes/biblioteca.$slug.tsx` | `/biblioteca/:slug` — Detalhe da série             |
 | `src/routes/biblioteca.converter.$jobId.tsx` | `/biblioteca/converter/:jobId` — Job de conversão       |
 | `src/routes/agendamentos.tsx`     | `/agendamentos` — Assinaturas agendadas            |
-| `src/routes/fontes.tsx`           | `/fontes` — Sugestão de novas fontes               |
+| `src/routes/fontes.tsx`           | `/fontes` — Página real dos providers (busca, filtros, layout compacto) |
 | `src/routes/configuracoes.tsx`    | `/configuracoes` — Configurações                   |
 | `src/routes/perfil.tsx`           | `/perfil` — Perfil do usuário                      |
 
@@ -258,7 +285,12 @@ File-based routing em `apps/frontend/src/routes/`:
   - Response: `{ sourceId, status, provider, source, metadata, chapters, covers, statistics }`
 - `GET /api/conversions/source/inspect/:sourceId/events` — SSE com progresso do scraping
   - Eventos: `progress` (stage, message, progress%), `completed`, `failed`
-- `GET /api/conversions/source/providers` — Lista providers disponíveis
+- `GET /api/conversions/source/providers` — Lista providers disponíveis (público)
+  - Envelope `{ providers: [...] }`, shape: `{ slug, name, engine: "api"|"cheerio"|"playwright", tags, status, description, urlExample, homepage, logoUrl, searchUrl, rateLimit: { maxConcurrent, minTime, reservoir, reservoirRefreshInterval } }`
+  - `allowedDomains` **não** é exposto (SSRF protection é interna)
+- `PATCH /api/conversions/source/providers/:slug` — Atualiza um provider (JWT obrigatório)
+  - Body parcial (todos os campos opcionais): `status` (`active|slow|beta|offline|soon`), `description`, `urlExample`, `homepage`, `logoUrl`, `tags`, `searchUrl`, `rateLimit` (`maxConcurrent ≥ 1`, `minTime ≥ 0`, `reservoir ≥ 1` nullable, `reservoirRefreshInterval ≥ 100` nullable)
+  - Persiste no banco, propaga a nova config de rate limit ao `ProviderResolver` (reconstrói strategies) e retorna o `provider` atualizado (shape acima). `404` se o slug não existir.
 
 ### Fluxo de Inspeção
 
@@ -314,11 +346,9 @@ Leitura de volumes `.mobi` no navegador via extração assincrona de paginas em 
 | `CONVERSIONS_STORAGE_PATH` | Diretório raiz para saída de conversões | `./storage/conversions` |
 | `MOBI_DOCKER_IMAGE` | Imagem Docker do extrator de MOBI (preview no navegador) | `mangaink-unpack:0.4.1` |
 | `MOBI_PREVIEW_TTL_SEC` | TTL (segundos) do cache de preview MOBI em /temp/ | `86400` (24h) |
-| `RATE_LIMIT_{SLUG}_MAX_CONCURRENT` | Máximo de requisições simultâneas por provider | `6` (default) |
-| `RATE_LIMIT_{SLUG}_MIN_TIME` | Intervalo mínimo entre requisições (ms) | `50` (default) |
-| `RATE_LIMIT_{SLUG}_RESERVOIR` | Teto de requisições por intervalo | (opcional) |
-| `RATE_LIMIT_{SLUG}_RESERVOIR_REFRESH_INTERVAL` | Intervalo do reservoir (ms) | (opcional) |
 | `JOB_STATUS_TTL_SEC` | TTL (segundos) do Hash Redis para status live de Jobs | `21600` (6h) |
+
+> **Rate limit:** as 8 env vars `RATE_LIMIT_*` foram **removidas** (MEC-31). O rate limit agora é **DB-fed**: persistido no model `Provider` (`rateLimitMaxConcurrent`, `rateLimitMinTime`, `rateLimitReservoir?`, `rateLimitReservoirRefreshInterval?`), carregado no boot por `initProviders()` e editável via PATCH `/api/conversions/source/providers/:slug`. Defaults: `maxConcurrent=6`, `minTime=50`.
 
 ---
 
@@ -349,7 +379,7 @@ O frontend usa `beforeLoad` guard do TanStack Router para proteger rotas. O toke
 - `src/components/agendamentos/` — `Timeline`
 - `src/components/perfil/` — `Achievements`, `MonthlyChart`, `TopReadings`
 - `src/components/reader/` — `ReaderToolbar`
-- `src/components/fontes/` — `SuggestSourceForm`
+- `src/components/providers/` — `SuggestSourceForm`, `ProvidersManager` (edição de providers em `/configuracoes`), `constants` (`STATUS_CONFIG`, `SourceStatus`)
 - `src/components/theme/` — `ThemeSelector`, `ComicIntensitySlider`, `ThemeToggle`
 - `src/components/notifications/` — `ComicToast`, `NotificationBell`
 - `src/components/onboarding/` — `OnboardingOverlay`
@@ -391,13 +421,15 @@ Cada módulo segue uma **arquitetura em camadas**:
   - `health.controller.ts`, `health.routes.ts`
 
 - **`scraping/`** — Scraping de fontes online (mangás)
-  - `scraping.routes.ts` — 4 endpoints: POST /inspect, GET /inspect/:id, GET /inspect/:id/events (SSE), GET /providers
-  - `controllers/` — `inspect-source.controller.ts`, `preview-source.controller.ts`, `source-events.controller.ts`, `providers.controller.ts`
+  - `scraping.routes.ts` — 5 endpoints: POST /inspect, GET /inspect/:id, GET /inspect/:id/events (SSE), GET /providers (público), PATCH /providers/:slug (JWT)
+  - `controllers/` — `inspect-source.controller.ts`, `preview-source.controller.ts`, `source-events.controller.ts`, `providers.controller.ts` (list/update a partir do banco)
   - `use-cases/` — `inspect-source.use-case.ts` (fluxo: normalizar URL → resolver provider → gerar sourceId → cache check → lock → enfileirar), `get-source.use-case.ts`
   - `services/` — `cache.service.ts` (TTL de 24h), `inspect-queue.service.ts` (BullMQ), `redis-lock.service.ts` (lock distribuído via Redis SET NX EX), `redis-pubsub.service.ts` (Pub/Sub para SSE), `source-events.service.ts` (bridge Redis → SSE)
   - `interfaces/` — `provider-strategy.interface.ts` (interface `IProviderStrategy` com `inspect()`, `getChapterImages()`, `downloadImage()`, `rateLimiter`)
-  - `providers/` — `provider.interface.ts` (deprecated re-export `ScrapingProvider`), `provider-resolver.ts` (resolve provider por URL + injeta `RateLimiter`), `mangalivre/` (implementação Cheerio: `MangaLivreStrategy`, parser com `parseChapterImages()` + `stripResolutionSuffix()`, selectors), `imperiodabritannia/` (implementação API: `ImperioDaBritanniaStrategy`, mapper com `mapObraToInspectResponse()` + `mapCapituloToImageUrls()`, tipos da API externa), `mangasbrasuka/` (implementação API: `MangasBrasukaStrategy`, mapper com `mapObraToInspectResponse()` + `mapPaginasToImageUrls()`, tipos da API externa)
-  - `rate-limit/` — `types.ts` (`RateLimiterConfig`, `RateLimiter`), `rate-limiter.ts` (`createRateLimiter()` factory Bottleneck), `rate-limit-registry.ts` (lê `RATE_LIMIT_*` env vars, `Map<slug, config>` com fallback `default`)
+  - `providers/` — `known-providers.ts` (fonte de verdade estática do seed), `known-providers.types.ts` (`ProviderRecord`, `ProviderSeed`), `init-providers.ts` (`initProviders()` chamado no boot — upsert dos providers no banco, carrega rate limits no registry e reconstrói o resolver; chamado dentro de try/catch no `server.ts`, com fallback para `known-providers.ts`), `provider-resolver.ts` (singleton, resolve provider por URL + injeta `RateLimiter`), `provider.interface.ts` (deprecated re-export `ScrapingProvider`), `mangalivre/` (implementação Cheerio: `MangaLivreStrategy`, parser com `parseChapterImages()` + `stripResolutionSuffix()`, selectors), `imperiodabritannia/` (implementação API: `ImperioDaBritanniaStrategy`, mapper com `mapObraToInspectResponse()` + `mapCapituloToImageUrls()`, tipos da API externa), `mangasbrasuka/` (implementação API: `MangasBrasukaStrategy`, mapper com `mapObraToInspectResponse()` + `mapPaginasToImageUrls()`, tipos da API externa)
+  - `repositories/` — `provider.repository.ts` (interface: `findAll`, `findBySlug`, `upsertFromSeed`, `update`), `prisma-provider.repository.ts` (implementação Prisma do model `Provider`), além de `source-cache.repository.ts` (interface) e `filesystem-source.repository.ts`
+  - `use-cases/` — `list-providers.use-case.ts`, `update-provider.use-case.ts` (validação Zod + refresh do registry após update)
+  - `rate-limit/` — `types.ts` (`RateLimiterConfig = { maxConcurrent, minTime, reservoir?, reservoirRefreshInterval? }`, `RateLimiter`), `rate-limiter.ts` (`createRateLimiter()` factory Bottleneck), `rate-limit-registry.ts` (**DB-fed**: `loadFromProviders(configs)` alimenta o registry a partir do banco; **sem** env vars `RATE_LIMIT_*`; defaults constantes `maxConcurrent=6`, `minTime=50`)
   - `repositories/` — `source-cache.repository.ts` (interface), `filesystem-source.repository.ts` (implementação filesystem com `storage/sources/{sourceId}/metadata.json`)
   - `workers/` — `inspect-source.worker.ts` (BullMQ worker: scraping → Pub/Sub progress → salva metadata.json)
   - `types/` — `source.types.ts` (SourceInspectResponse, Chapter, Cover, MangaMetadata, ChapterImagesResult), `metadata.types.ts` (MetadataCache, SourceMetadataFile), `provider.types.ts` (ProviderEngine, ProviderInfo)
@@ -409,9 +441,9 @@ Cada módulo segue uma **arquitetura em camadas**:
   - A interface principal é `IProviderStrategy` (em `interfaces/`). `ScrapingProvider` é um re-export deprecated.
   - Todo provider implementa `IProviderStrategy` e recebe um `RateLimiter` (Bottleneck) via constructor.
   - `downloadImage()` encapsula chamadas HTTP de download com rate limiting. O `ImageDownloaderService` chama `provider.downloadImage()` em vez de `httpClient.get()`.
-  - Rate limits são configuráveis por provider via env vars `RATE_LIMIT_{SLUG}_{PARAM}`. Providers sem config específica usam `RATE_LIMIT_DEFAULT_*`.
+  - Rate limits são **persistidos no banco** (model `Provider`), carregados no boot por `initProviders()` e editáveis via PATCH `/api/conversions/source/providers/:slug`. Sem env vars `RATE_LIMIT_*` (removidas). Defaults: `maxConcurrent=6`, `minTime=50`.
   - O `ProviderResolver` injeta automaticamente o `RateLimiter` no constructor do provider (Composition Root).
-  - Adicionar novo provider: criar classe `implements IProviderStrategy` + registrar no array do `ProviderResolver` + (opcional) configurar env vars.
+  - Adicionar novo provider: criar classe `implements IProviderStrategy` + registrar no `known-providers.ts` (seed) + ajustar o model `Provider` no banco (rate limit via PATCH de providers).
   - **Providers disponíveis:** `mangalivre` (engine `cheerio`, HTML parsing), `imperiodabritannia` (engine `api`, API REST direta com headers `x-noencryptionbritta` e `X-API-Token`), `mangasbrasuka` (engine `api`, API REST pública em `app.mangasbrasuka.com.br` sem autenticação)
 
 - **`conversion/`** — Conversão de mangás para formatos e-reader via KCC (Kindle Comic Converter)

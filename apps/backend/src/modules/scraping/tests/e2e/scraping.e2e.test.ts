@@ -61,11 +61,92 @@ const mockJournal = vi.hoisted(() => {
   }
 })
 
+const mockProviderRepo = vi.hoisted(() => {
+  const makeSeed = (over: Record<string, unknown> = {}) => ({
+    id: 'seed-id',
+    slug: '',
+    name: '',
+    engine: 'cheerio',
+    tags: [],
+    status: 'active',
+    description: null,
+    urlExample: null,
+    homepage: null,
+    searchUrl: null,
+    rateLimitMaxConcurrent: 6,
+    rateLimitMinTime: 50,
+    rateLimitReservoir: null,
+    rateLimitReservoirRefreshInterval: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    ...over,
+  })
+  const store = new Map<string, any>()
+  const reset = () => {
+    store.clear()
+    store.set(
+      'mangalivre',
+      makeSeed({
+        slug: 'mangalivre',
+        name: 'Manga Livre',
+        engine: 'cheerio',
+        tags: ['mangá', 'português'],
+        status: 'active',
+        description:
+          'Acervo de mangás em português com leitura online. Requer scraping de HTML (cheerio).',
+        urlExample: 'https://mangalivre.to/manga/hunter-x-hunter/',
+        homepage: 'https://mangalivre.to',
+        searchUrl: 'https://mangalivre.to/busca/?search=',
+        rateLimitMaxConcurrent: 10,
+        rateLimitMinTime: 0,
+      }),
+    )
+    store.set(
+      'imperiodabritannia',
+      makeSeed({
+        slug: 'imperiodabritannia',
+        name: 'Imperio da Britannia',
+        engine: 'api',
+        status: 'beta',
+        rateLimitMaxConcurrent: 2,
+        rateLimitMinTime: 500,
+      }),
+    )
+    store.set(
+      'mangasbrasuka',
+      makeSeed({
+        slug: 'mangasbrasuka',
+        name: 'Mangas Brasukas',
+        engine: 'api',
+        tags: ['mangá', 'manhwa', 'manhua', 'português'],
+        status: 'active',
+        rateLimitMaxConcurrent: 3,
+        rateLimitMinTime: 200,
+      }),
+    )
+  }
+  reset()
+  return {
+    reset,
+    findAll: async () => Array.from(store.values()),
+    findBySlug: async (slug: string) => store.get(slug) ?? null,
+    upsertFromSeed: async () => {},
+    update: async (slug: string, data: any) => {
+      const current = store.get(slug)
+      if (!current) return null
+      const updated = { ...current, ...data, updatedAt: new Date('2026-02-01T00:00:00Z') }
+      store.set(slug, updated)
+      return updated
+    },
+  }
+})
+
 vi.mock('../../../../shared/database/repositories', async () => {
   const actual = await vi.importActual<typeof import('../../../../shared/database/repositories')>('../../../../shared/database/repositories')
   return {
     ...actual,
     getSourceRepository: vi.fn(() => mockRepo),
+    getProviderRepository: vi.fn(() => mockProviderRepo),
   }
 })
 
@@ -90,6 +171,7 @@ vi.mock('../../../../shared/infra/redis', async () => {
 
 import { createServer } from '../../../../shared/server'
 import type { FastifyInstance } from 'fastify'
+import { resetProviderResolver } from '../../utils/resolve-provider'
 
 describe('Scraping E2E', () => {
   let app: FastifyInstance
@@ -99,6 +181,8 @@ describe('Scraping E2E', () => {
     mockLockService.reset()
     mockQueueService.reset()
     mockPubSub.reset()
+    mockProviderRepo.reset()
+    resetProviderResolver()
     app = await createServer()
   })
 
@@ -227,7 +311,7 @@ describe('Scraping E2E', () => {
       expect(body.providers.length).toBeGreaterThan(0)
     })
 
-    it('deve incluir slug e name em cada provider', async () => {
+    it('deve incluir o shape completo e não expor allowedDomains', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/conversions/source/providers',
@@ -238,8 +322,94 @@ describe('Scraping E2E', () => {
         expect(provider).toHaveProperty('slug')
         expect(provider).toHaveProperty('name')
         expect(provider).toHaveProperty('engine')
-        expect(provider).toHaveProperty('allowedDomains')
+        expect(provider).toHaveProperty('tags')
+        expect(provider).toHaveProperty('status')
+        expect(provider).toHaveProperty('description')
+        expect(provider).toHaveProperty('urlExample')
+        expect(provider).toHaveProperty('homepage')
+        expect(provider).toHaveProperty('searchUrl')
+        expect(provider).toHaveProperty('rateLimit')
+        expect(provider.rateLimit).toHaveProperty('maxConcurrent')
+        expect(provider.rateLimit).toHaveProperty('minTime')
+        expect(provider.rateLimit).toHaveProperty('reservoir')
+        expect(provider.rateLimit).toHaveProperty('reservoirRefreshInterval')
+        expect(provider).not.toHaveProperty('allowedDomains')
       }
+
+      const mangalivre = body.providers.find((p: { slug: string }) => p.slug === 'mangalivre')
+      expect(mangalivre.description).toBe(
+        'Acervo de mangás em português com leitura online. Requer scraping de HTML (cheerio).',
+      )
+      expect(mangalivre.urlExample).toBe('https://mangalivre.to/manga/hunter-x-hunter/')
+      expect(mangalivre.homepage).toBe('https://mangalivre.to')
+      expect(mangalivre.searchUrl).toBe('https://mangalivre.to/busca/?search=')
+      expect(mangalivre.rateLimit).toEqual({ maxConcurrent: 10, minTime: 0, reservoir: null, reservoirRefreshInterval: null })
+    })
+  })
+
+  describe('PATCH /api/conversions/source/providers/:slug', () => {
+    it('deve retornar 401 sem token JWT', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/conversions/source/providers/mangalivre',
+        payload: { status: 'slow' },
+      })
+
+      expect(response.statusCode).toBe(401)
+    })
+
+    it('deve retornar 404 para slug inexistente', async () => {
+      const token = app.jwt.sign({ sub: 'test-user-001' })
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/conversions/source/providers/slug-inexistente',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'slow' },
+      })
+
+      expect(response.statusCode).toBe(404)
+      expect(response.json()).toHaveProperty('error')
+    })
+
+    it('deve atualizar o provider e refletir no GET', async () => {
+      const token = app.jwt.sign({ sub: 'test-user-001' })
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/conversions/source/providers/mangalivre',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          status: 'slow',
+          description: 'Provider em teste',
+          rateLimit: { maxConcurrent: 1, minTime: 500 },
+        },
+      })
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.slug).toBe('mangalivre')
+      expect(body.status).toBe('slow')
+      expect(body.description).toBe('Provider em teste')
+      expect(body.rateLimit.maxConcurrent).toBe(1)
+      expect(body.rateLimit.minTime).toBe(500)
+
+      const getRes = await app.inject({ method: 'GET', url: '/api/conversions/source/providers' })
+      const list = getRes.json().providers
+      const mangalivre = list.find((p: { slug: string }) => p.slug === 'mangalivre')
+      expect(mangalivre.status).toBe('slow')
+      expect(mangalivre.rateLimit.maxConcurrent).toBe(1)
+      expect(mangalivre).not.toHaveProperty('allowedDomains')
+    })
+
+    it('deve retornar 400 para body inválido', async () => {
+      const token = app.jwt.sign({ sub: 'test-user-001' })
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/conversions/source/providers/mangalivre',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'status-invalido' },
+      })
+
+      expect(response.statusCode).toBe(400)
     })
   })
 })

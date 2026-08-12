@@ -2,7 +2,7 @@ import { normalizeUrl } from '../../../shared/utils/url-normalizer'
 import { createSourceId } from '../../../shared/utils/id-generator'
 import { createRedisQueueAdapter } from '../../../shared/infra/factory'
 import type { ILockService } from '../../../shared/infra'
-import { ProviderResolver } from '../providers/provider-resolver'
+import { getProviderResolver } from '../utils/resolve-provider'
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
 import { RedisLockService } from '../services/redis-lock.service'
@@ -10,7 +10,7 @@ import { InspectQueueService } from '../services/inspect-queue.service'
 import type { SourceInspectState } from '../types/source.types'
 import { InvalidUrlError } from '../errors/scraping.errors'
 
-const resolver = new ProviderResolver()
+const resolver = getProviderResolver()
 
 let repository: ReturnType<typeof getSourceRepository> | undefined
 let cacheService: CacheService | undefined

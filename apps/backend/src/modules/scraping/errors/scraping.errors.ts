@@ -15,6 +15,13 @@ export class ProviderNotFoundError extends ScrapingError {
   }
 }
 
+export class ProviderBySlugNotFoundError extends ScrapingError {
+  constructor(slug: string) {
+    super(`Provider não encontrado: ${slug}`, 'PROVIDER_BY_SLUG_NOT_FOUND')
+    this.name = 'ProviderBySlugNotFoundError'
+  }
+}
+
 export class InvalidUrlError extends ScrapingError {
   constructor(url: string) {
     super(`URL inválida ou não autorizada: ${url}`, 'INVALID_URL')

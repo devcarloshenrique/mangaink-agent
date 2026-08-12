@@ -1,72 +1,74 @@
-import { env } from '../../../shared/config/env'
 import type { RateLimiterConfig } from './types'
 
-const SLUG_PARAMS = ['MAX_CONCURRENT', 'MIN_TIME', 'RESERVOIR', 'RESERVOIR_REFRESH_INTERVAL'] as const
+/** Defaults aplicados a qualquer provider sem config específica no banco. */
+export const DEFAULT_RATE_LIMIT: RateLimiterConfig = {
+  maxConcurrent: 6,
+  minTime: 50,
+}
 
+export interface ProviderRateLimitConfig {
+  slug: string
+  maxConcurrent: number
+  minTime: number
+  reservoir?: number
+  reservoirRefreshInterval?: number
+}
+
+/** Normaliza uma config de provider para o shape interno do limiter. */
+function normalizeRateLimitConfig(config: ProviderRateLimitConfig): RateLimiterConfig {
+  return {
+    maxConcurrent: config.maxConcurrent,
+    minTime: config.minTime,
+    ...(config.reservoir !== undefined && config.reservoir !== null
+      ? { reservoir: config.reservoir }
+      : {}),
+    ...(config.reservoirRefreshInterval !== undefined && config.reservoirRefreshInterval !== null
+      ? { reservoirRefreshInterval: config.reservoirRefreshInterval }
+      : {}),
+  }
+}
+
+/**
+ * Registry de rate limits alimentado pelo banco (model `Provider`), sem
+ * dependência de env vars de rate limit (decisão MEC-31 S4).
+ */
 export class RateLimitRegistry {
   private readonly configs = new Map<string, RateLimiterConfig>()
-  private readonly defaults: RateLimiterConfig
-
-  constructor() {
-    this.defaults = {
-      maxConcurrent: env.RATE_LIMIT_DEFAULT_MAX_CONCURRENT,
-      minTime: env.RATE_LIMIT_DEFAULT_MIN_TIME,
-    }
-
-    this.parseEnvVars()
-  }
 
   get(slug: string): RateLimiterConfig {
-    return this.configs.get(slug) ?? this.defaults
+    return this.configs.get(slug) ?? { ...DEFAULT_RATE_LIMIT }
   }
 
   has(slug: string): boolean {
     return this.configs.has(slug)
   }
 
-  private parseEnvVars(): void {
-    const envRecord = env as Record<string, unknown>
-
-    for (const [key, value] of Object.entries(envRecord)) {
-      if (!key.startsWith('RATE_LIMIT_')) continue
-      if (key.startsWith('RATE_LIMIT_DEFAULT_')) continue
-      if (value === undefined || value === null) continue
-
-      const rest = key.slice('RATE_LIMIT_'.length)
-      let slug = ''
-      let param = ''
-
-      for (const p of SLUG_PARAMS) {
-        if (rest.endsWith(`_${p}`)) {
-          param = p
-          slug = rest.slice(0, rest.length - p.length - 1)
-          break
-        }
-      }
-
-      if (!slug || !param) continue
-
-      slug = slug.toLowerCase().replace(/_/g, '')
-
-      const existing = this.configs.get(slug) ?? { maxConcurrent: 0, minTime: 0 }
-      const numValue = Number(value)
-
-      switch (param) {
-        case 'MAX_CONCURRENT':
-          existing.maxConcurrent = numValue
-          break
-        case 'MIN_TIME':
-          existing.minTime = numValue
-          break
-        case 'RESERVOIR':
-          existing.reservoir = numValue
-          break
-        case 'RESERVOIR_REFRESH_INTERVAL':
-          existing.reservoirRefreshInterval = numValue
-          break
-      }
-
-      this.configs.set(slug, existing)
+  /**
+   * Alimenta o registry a partir dos providers persistidos no banco.
+   * Substitui a configuração anterior por completo (mapa recriado).
+   */
+  loadFromProviders(configs: ProviderRateLimitConfig[]): void {
+    this.configs.clear()
+    for (const config of configs) {
+      this.configs.set(config.slug, normalizeRateLimitConfig(config))
     }
+  }
+
+  /**
+   * Insere/atualiza a config de rate limit de um único provider
+   * (usado no PATCH de providers, após persistir no banco).
+   */
+  set(config: ProviderRateLimitConfig): void {
+    this.configs.set(config.slug, normalizeRateLimitConfig(config))
+  }
+
+  /** Limpa todas as configs (uso em testes). */
+  clear(): void {
+    this.configs.clear()
+  }
+
+  /** Todas as configs carregadas (slug → config). */
+  entries(): Map<string, RateLimiterConfig> {
+    return new Map(this.configs)
   }
 }

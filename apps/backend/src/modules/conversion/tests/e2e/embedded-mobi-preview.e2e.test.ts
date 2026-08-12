@@ -88,7 +88,12 @@ vi.mock('../../../user/repositories/prisma-user.repository', () => ({
 }))
 
 vi.mock('../../../scraping/providers/provider-resolver', () => ({
-  ProviderResolver: vi.fn(() => ({ resolve: vi.fn(), listAll: vi.fn(() => []) })),
+  ProviderResolver: vi.fn(() => ({
+    resolve: vi.fn(),
+    listAll: vi.fn(() => []),
+    loadFromProviders: vi.fn(),
+    refresh: vi.fn(),
+  })),
 }))
 
 vi.mock('../../services/kcc-runner.service', () => ({

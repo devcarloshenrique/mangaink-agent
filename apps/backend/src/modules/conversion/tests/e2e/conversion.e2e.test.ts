@@ -8,6 +8,12 @@ vi.mock('../../../../shared/database/repositories', () => ({
   })),
   getConversionJobRepository: vi.fn(),
   getSourceRepository: vi.fn(),
+  getProviderRepository: vi.fn(() => ({
+    findAll: vi.fn(async () => []),
+    findBySlug: vi.fn(async () => null),
+    upsertFromSeed: vi.fn(async () => {}),
+    update: vi.fn(async () => null),
+  })),
 }))
 
 vi.mock('../../../../shared/infra/redis', async () => {

@@ -13,17 +13,22 @@ vi.mock('../../../../shared/database/repositories', () => ({
 
 // Mock do ProviderResolver
 const mockResolve = vi.fn()
+const mockRefresh = vi.fn()
+const mockLoadFromProviders = vi.fn()
 const mockSlug = 'test-provider'
 
 vi.mock('../../providers/provider-resolver', () => ({
   ProviderResolver: vi.fn().mockImplementation(() => ({
     resolve: mockResolve,
+    refresh: mockRefresh,
+    loadFromProviders: mockLoadFromProviders,
   })),
 }))
 
 describe('resolveProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveProviderModule.resetProviderResolver()
   })
 
   it('deve retornar o provider quando source existe e tem chapters com url', async () => {
@@ -73,5 +78,42 @@ describe('resolveProvider', () => {
 
     expect(result).toBeNull()
     expect(mockResolve).not.toHaveBeenCalled()
+  })
+
+  describe('getProviderResolver', () => {
+    it('retorna a mesma instância (singleton)', () => {
+      const first = resolveProviderModule.getProviderResolver()
+      const second = resolveProviderModule.getProviderResolver()
+
+      expect(first).toBe(second)
+    })
+  })
+
+  describe('refreshProviderResolver', () => {
+    it('recarrega o resolver (refresh) no singleton', () => {
+      resolveProviderModule.refreshProviderResolver()
+
+      expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('opera sobre a mesma instância do singleton', () => {
+      const resolver = resolveProviderModule.getProviderResolver()
+
+      resolveProviderModule.refreshProviderResolver()
+
+      expect(mockRefresh).toHaveBeenCalled()
+      expect(resolveProviderModule.getProviderResolver()).toBe(resolver)
+    })
+  })
+
+  describe('resetProviderResolver', () => {
+    it('descarta a instância do singleton', () => {
+      const first = resolveProviderModule.getProviderResolver()
+
+      resolveProviderModule.resetProviderResolver()
+
+      const second = resolveProviderModule.getProviderResolver()
+      expect(second).not.toBe(first)
+    })
   })
 })

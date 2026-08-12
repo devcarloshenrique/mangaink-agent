@@ -4,7 +4,11 @@ import type { IProviderStrategy } from '../interfaces/provider-strategy.interfac
 
 let _providerResolver: ProviderResolver | null = null
 
-function getProviderResolver(): ProviderResolver {
+/**
+ * Singleton oficial de `ProviderResolver` (MEC-31 S4).
+ * Compartilha as instâncias Bottleneck entre proxy, worker e controllers.
+ */
+export function getProviderResolver(): ProviderResolver {
   if (!_providerResolver) {
     _providerResolver = new ProviderResolver()
   }
@@ -12,8 +16,22 @@ function getProviderResolver(): ProviderResolver {
 }
 
 /**
+ * Recarrega o singleton a partir do estado atual do registry (ex.: após
+ * `loadFromProviders` do banco). Reconstrói as strategies com as novas configs,
+ * preservando as instâncias Bottleneck compartilhadas.
+ */
+export function refreshProviderResolver(): void {
+  const resolver = getProviderResolver()
+  resolver.refresh()
+}
+
+/** Reseta o singleton (uso em testes). */
+export function resetProviderResolver(): void {
+  _providerResolver = null
+}
+
+/**
  * Resolve o provider correto para o sourceId com rate limiter injetado.
- * Singleton de ProviderResolver para compartilhar instancias Bottleneck entre proxy e worker.
  */
 export async function resolveProvider(sourceId: string): Promise<IProviderStrategy | null> {
   const source = await getSourceRepository().load(sourceId)

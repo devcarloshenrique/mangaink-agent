@@ -38,6 +38,12 @@ vi.mock('../../../../shared/database/repositories', async () => {
 
 vi.mock('../../utils/resolve-provider', () => ({
   resolveProvider: vi.fn(async () => mockProvider),
+  getProviderResolver: vi.fn(() => ({
+    resolve: vi.fn(),
+    listAll: vi.fn(() => []),
+    refresh: vi.fn(),
+  })),
+  refreshProviderResolver: vi.fn(),
 }))
 
 vi.mock('../../services/chapter-image.service', () => ({
