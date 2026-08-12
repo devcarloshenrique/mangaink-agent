@@ -48,6 +48,11 @@ login-page.yml
 login-test-result.md
 opencode.json
 
+# Skills (maquinário regenerável via skills-lock.json)
+.agents/skills/impeccable/scripts/
+.agents/skills/impeccable/reference/
+.agents/skills/impeccable/agents/
+
 wizard-step1.yml
 apps/backend/storage/
 .opencode/

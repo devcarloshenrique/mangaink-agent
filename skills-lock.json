@@ -7,6 +7,12 @@
       "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
     },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "1af8b0b25be985f882956c94d7f93f12d49f7ab90fec1a85082d63f9a51b36e0"
+    },
     "openspec-implementation": {
       "source": "forztf/open-skilled-sdd",
       "sourceType": "github",
