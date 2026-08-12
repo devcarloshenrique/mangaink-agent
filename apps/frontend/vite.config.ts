@@ -7,7 +7,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 export default defineConfig({
   plugins: [
     TanStackRouterVite({
-      routeFileIgnorePattern: ".server.",
+      routeFileIgnorePattern: ".server.|.test.",
     }),
     react(),
     tailwindcss(),
