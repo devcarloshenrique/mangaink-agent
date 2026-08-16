@@ -16,11 +16,7 @@ import { scrapingApi, chaptersApi } from "@/lib/api";
 import { useReadingProgress, useToggleRead } from "@/hooks/useReadingProgress";
 import { authGuard } from "./-authGuard";
 import type { SourceInspectResponse } from "@/types/scraping";
-import {
-  MOCK_MANGA_DETAILS,
-  MOCK_CONVERSIONS,
-  MOCK_CONVERSION_JOBS,
-} from "@/lib/manga-detail-mocks";
+import { MOCK_MANGA_DETAILS, MOCK_LOTS } from "@/lib/manga-detail-mocks";
 
 export const Route = createFileRoute("/biblioteca/$sourceId")({
   beforeLoad: authGuard,
@@ -156,11 +152,7 @@ function MangaDetailPage() {
               </TabsContent>
 
               <TabsContent value="conversoes" className="mt-4 animate-slide-up min-h-[420px]">
-                <TabConversoes
-                  sourceId={sourceId}
-                  conversions={MOCK_CONVERSIONS}
-                  jobsMap={MOCK_CONVERSION_JOBS}
-                />
+                <TabConversoes sourceId={sourceId} lots={MOCK_LOTS} />
               </TabsContent>
             </Tabs>
           </div>
