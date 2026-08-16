@@ -4,7 +4,7 @@
   "description": "Backend API do MangaInk Agent",
   "main": "dist/app.js",
   "scripts": {
-    "dev": "tsx watch src/app.ts",
+    "dev": "cross-env NODE_ENV=dev tsx watch src/app.ts",
     "build": "tsc",
     "start": "node --env-file=.env dist/app.js",
     "db:migrate": "prisma migrate dev",
@@ -54,6 +54,7 @@
     "@types/node": "^22.19.19",
     "@types/pg": "^8.11.7",
     "@vitest/coverage-v8": "^2.1.5",
+    "cross-env": "^7.0.3",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.5"

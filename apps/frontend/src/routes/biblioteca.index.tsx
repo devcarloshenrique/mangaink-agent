@@ -4,7 +4,7 @@ import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
-import { SearchBar, highlightMatch } from "@/components/biblioteca/SearchBar";
+import { highlightMatch } from "@/components/biblioteca/SearchBar";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
 import {
@@ -18,6 +18,7 @@ import {
   Loader2,
   Clock,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { cn, relativeTime } from "@/lib/utils";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/hooks/useConversions";
 import { conversionsApi } from "@/lib/api";
 import { AddMangaDialog } from "@/components/biblioteca/AddMangaDialog";
-import { InlineUrlBar } from "@/components/biblioteca/InlineUrlBar";
+import { AddMangaBar } from "@/components/biblioteca/AddMangaBar";
 import type { ConversionSummary, CoverRef } from "@/types/conversion";
 import type { SourceInspectResponse } from "@/types/scraping";
 
@@ -81,7 +82,7 @@ function BibliotecaPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [urlBarOpen, setUrlBarOpen] = useState(false);
+  const [addMode, setAddMode] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scrapedData, setScrapedData] = useState<{
     sourceId: string;
@@ -138,10 +139,16 @@ function BibliotecaPage() {
           </div>
           <button
             type="button"
-            onClick={() => setUrlBarOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 bg-comic-blue text-accent-foreground border-[3px] border-ink shadow-comic font-display text-sm px-3 py-1.5 rounded-md hover:-translate-y-0.5 transition-transform"
+            onClick={() => setAddMode((prev) => !prev)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-[3px] border-ink shadow-comic font-display text-sm px-3 py-1.5 rounded-md transition-all",
+              addMode
+                ? "bg-comic-yellow text-comic-ink hover:-translate-y-0.5"
+                : "bg-comic-blue text-accent-foreground hover:-translate-y-0.5",
+            )}
           >
-            <BookPlus className="h-4 w-4" /> Adicionar obra
+            {addMode ? <X className="h-4 w-4" /> : <BookPlus className="h-4 w-4" />}
+            {addMode ? "Cancelar" : "Adicionar obra"}
           </button>
           <Link
             to="/wizard"
@@ -170,18 +177,17 @@ function BibliotecaPage() {
           </div>
         </div>
 
-        <InlineUrlBar
-          open={urlBarOpen}
-          onClose={() => setUrlBarOpen(false)}
-          onReady={(sourceId, metadata) => {
-            setScrapedData({ sourceId, metadata });
-            setUrlBarOpen(false);
-            setDialogOpen(true);
-          }}
-        />
-
-        <div className="space-y-3 mb-6">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} />
+        <div className="mb-6">
+          <AddMangaBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            mode={addMode ? "url" : "filter"}
+            onModeChange={(mode) => setAddMode(mode === "url")}
+            onReady={(sourceId, metadata) => {
+              setScrapedData({ sourceId, metadata });
+              setDialogOpen(true);
+            }}
+          />
         </div>
 
         <div className="flex gap-2 mb-6">
