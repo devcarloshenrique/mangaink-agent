@@ -2,33 +2,22 @@
   "name": "@mangaink/desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "App desktop Electron do MangaInk Agent",
+  "description": "App desktop do MangaInk Agent (shell Tauri v2)",
   "author": {
     "name": "MangaInk Agent",
     "email": "dev@mangaink.app"
   },
   "type": "module",
-  "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "node scripts/run-e2e.mjs",
-    "icon": "node scripts/generate-icon.mjs",
+    "dev": "tauri dev --config src-tauri/tauri.conf.dev.json",
+    "build": "tauri build",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "dist": "pnpm prepare:runtime && node scripts/prepare-frontend.mjs && electron-vite build && electron-builder"
+    "prepare:resources": "node scripts/prepare-tauri-resources.mjs",
+    "dist": "node scripts/prepare-tauri-resources.mjs && node scripts/tauri-build-config.mjs && node scripts/build-distributions.mjs unpacked",
+    "dist:setup": "node scripts/prepare-tauri-resources.mjs && node scripts/tauri-build-config.mjs",
+    "dist:unpacked": "node scripts/build-distributions.mjs unpacked"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
-    "electron": "~37.10.3",
-    "electron-builder": "^26.15.7",
-    "electron-vite": "^4.0.1",
-    "png-to-ico": "^2.1.8",
-    "playwright": "^1.60.0",
-    "sharp": "^0.35.3",
-    "typescript": "^5.6.0",
-    "vite": "^7.3.1",
-    "vitest": "^2.1.9"
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

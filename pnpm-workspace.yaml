@@ -3,9 +3,6 @@ packages:
 allowBuilds:
   '@prisma/engines': true
   core-js: false
-  electron: true
-  electron-builder: true
-  electron-winstaller: true
   es5-ext: false
   esbuild: true
   msgpackr-extract: true

@@ -10,6 +10,9 @@ build/
 npm-debug.log*
 pnpm-debug.log*
 
+# Lockfile npm (o projeto usa pnpm — evita recommit acidental)
+package-lock.json
+
 # Variáveis de ambiente
 .env
 .env.local
