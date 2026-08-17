@@ -1,0 +1,29 @@
+[package]
+name = "mangaink-desktop"
+version = "0.1.0"
+description = "MangaInk Agent desktop shell (Tauri v2)"
+edition = "2021"
+
+[lib]
+name = "mangaink_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "net", "io-util", "fs"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+portpicker = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures-util = "0.3"
+async-trait = "0.1"
+sha2 = "0.10"
+percent-encoding = "2"

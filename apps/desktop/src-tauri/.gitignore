@@ -1,0 +1,5 @@
+/target/
+/gen/schemas/
+/resources/
+resources-manifest.json
+tauri.resources.longpath.json
