@@ -12,7 +12,6 @@
 //   - se o path absoluto do node_modules mais profundo exceder 240 chars,
 //     usa automaticamente um staging curto em %TEMP% (mangaink-tauri-res) e
 //     gera `src-tauri/tauri.resources.longpath.json` para o `tauri build --config`.
-//     MI_TAURI_RESOURCES_DIR continua como override explícito.
 //
 // Também verifica (D4) que não restam junctions/symlinks no staging e escreve
 // o manifesto `src-tauri/resources-manifest.json` com o resultado.
@@ -29,7 +28,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   CRITICAL_DEPS,
@@ -180,28 +179,24 @@ const deepestProbe = (stagingDir) =>
   )
 const longPath = deepestProbe(defaultStaging).length > 240
 
-// Fallback automático para staging curto em %TEMP% quando o default estoura
-// MAX_PATH (evita exigir env manual). MI_TAURI_RESOURCES_DIR é override.
+// Staging curto em %TEMP% quando o default estoura MAX_PATH — automático,
+// sem variável de ambiente (portável entre devs/CI).
 let staging
-let fallback = false
-if (process.env.MI_TAURI_RESOURCES_DIR) {
-  staging = resolve(process.env.MI_TAURI_RESOURCES_DIR)
-} else if (longPath) {
+if (longPath) {
   const probeShort = deepestProbe(shortStaging).length
   if (probeShort > 240) {
     throw new Error(
       `O staging curto (${shortStaging}) ainda gera paths >240 chars (${probeShort}). ` +
-        `Defina MI_TAURI_RESOURCES_DIR para um dir mais curto.`,
+        `Encurte o path do workspace (ex.: clonar fora do OneDrive).`,
     )
   }
   staging = shortStaging
-  fallback = true
 } else {
   staging = defaultStaging
 }
 
 log(
-  `Staging resources → ${relative(DESKTOP_DIR, staging)}${longPath ? ` (curto${fallback ? ' automático' : ''}, long-path override)` : ''}`,
+  `Staging resources → ${relative(DESKTOP_DIR, staging)}${longPath ? ' (curto automático, long-path override)' : ''}`,
 )
 
 // ── 2.1 valida FONTE self-contained (contagem + integridade) ──
