@@ -32,6 +32,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { finished } from 'node:stream/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url))
@@ -137,32 +138,52 @@ function run(args, { cwd } = {}) {
   })
 }
 
-async function downloadFile(url, destPath, label) {
-  log(`${c.dim}    ↓ ${url}${c.reset}`)
-  const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok) {
-    throw new Error(`download falhou (HTTP ${res.status}) para ${url}`)
-  }
-  const total = Number(res.headers.get('content-length') ?? 0)
-  const out = createWriteStream(destPath)
-  let received = 0
-  let lastPct = -1
-  for await (const chunk of res.body) {
-    received += chunk.length
-    if (total > 0) {
-      const pct = Math.floor((received / total) * 100)
-      if (pct !== lastPct && pct % 20 === 0) {
-        lastPct = pct
-        log(`${c.dim}      ${pct}% (${fmtMB(received)})${c.reset}`)
-      }
+const RETRY_DELAYS = [2000, 4000, 8000]
+
+function sleep(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
+}
+
+/** Download com retry (3 tentativas, backoff 2s/4s/8s) em falha de rede/5xx.
+ *  Não retry em 4xx (exceto 429). Usa `finished(out)` para garantir que todos
+ *  os bytes foram flushed antes de retornar. */
+async function downloadFile(url, destPath, label, attempt = 1) {
+  try {
+    log(`${c.dim}    ↓ ${url}${c.reset}`)
+    const res = await fetch(url, { redirect: 'follow' })
+    if (!res.ok) {
+      const err = new Error(`download falhou (HTTP ${res.status}) para ${url}`)
+      err.statusCode = res.status
+      throw err
     }
-    out.write(chunk)
+    const total = Number(res.headers.get('content-length') ?? 0)
+    const out = createWriteStream(destPath)
+    let received = 0
+    let lastPct = -1
+    for await (const chunk of res.body) {
+      received += chunk.length
+      if (total > 0) {
+        const pct = Math.floor((received / total) * 100)
+        if (pct !== lastPct && pct % 20 === 0) {
+          lastPct = pct
+          log(`${c.dim}      ${pct}% (${fmtMB(received)})${c.reset}`)
+        }
+      }
+      out.write(chunk)
+    }
+    out.end()
+    await finished(out)
+  } catch (err) {
+    const status = err.statusCode
+    const retryable = !(status >= 400 && status < 500 && status !== 429)
+    if (retryable && attempt <= RETRY_DELAYS.length) {
+      const delay = RETRY_DELAYS[attempt - 1]
+      log(`${c.yellow}    ! tentativa ${attempt} falhou (${err?.message ?? err}) — retry em ${delay}ms${c.reset}`)
+      await sleep(delay)
+      return downloadFile(url, destPath, label, attempt + 1)
+    }
+    throw err
   }
-  out.end()
-  await new Promise((resolvePromise, reject) => {
-    out.on('finish', resolvePromise)
-    out.on('error', reject)
-  })
 }
 
 function walk(dir, out = []) {
@@ -191,19 +212,59 @@ function systemTarAvailable() {
 
 // ── Steps de preparo ────────────────────────────────────────────────────
 
+/**
+ * Cache offline opcional: `MI_RUNTIME_DOWNLOAD_DIR` → diretório com o arquivo
+ * pré-baixado nomeado pelo basename da URL do artefato (ex.:
+ * `kindlegen_win32_v2_9.zip`). Se presente, o download de rede é pulado e o
+ * arquivo é revalidado por SHA256 (paridade com o pin do manifesto) —
+ * útil para ambientes offline ou quando o upstream está indisponível (503).
+ */
+export function resolveCachedArchive(artifact) {
+  const dir = process.env.MI_RUNTIME_DOWNLOAD_DIR
+  if (!dir) return null
+  const base = basename(new URL(artifact.url).pathname)
+  const candidate = join(dir, base)
+  return existsSync(candidate) ? candidate : null
+}
+
 async function downloadAndVerify(artifact, stagingDir) {
   const filePath = join(stagingDir, `${artifact.id}.dl`)
-  await downloadFile(artifact.url, filePath, artifact.id)
-  const ok = await verifySha256(filePath, artifact.sha256)
-  if (!ok) {
-    throw new Error(
-      `SHA256 divergente para '${artifact.id}' (esperado ${artifact.sha256}): ` +
-        `o artefato baixado não corresponde ao pin do manifest. ` +
-        `Verifique a URL — provavelmente o upstream mudou o arquivo.`,
-    )
+  const cached = resolveCachedArchive(artifact)
+  if (cached) {
+    cpSync(cached, filePath)
+    log(`${c.dim}    ↻ cache local: ${cached}${c.reset}`)
+    const ok = await verifySha256(filePath, artifact.sha256)
+    if (!ok) {
+      throw new Error(
+        `SHA256 divergente no cache local para '${artifact.id}' (esperado ${artifact.sha256}): ` +
+          `remova ${cached} e deixe baixar da rede.`,
+      )
+    }
+    log(`${c.green}    ✓ sha256 ok (cache)${c.reset}`)
+    return filePath
   }
-  log(`${c.green}    ✓ sha256 ok${c.reset}`)
-  return filePath
+
+  // Tenta URL primária + mirrors em ordem até uma validar o SHA256 (a
+  // downloadFile já faz retry interno por URL). O 1º que validar vence.
+  const urls = [...new Set([artifact.url, ...(artifact.mirrors ?? [])])]
+  const errors = []
+  for (const url of urls) {
+    try {
+      await downloadFile(url, filePath, artifact.id)
+      const ok = await verifySha256(filePath, artifact.sha256)
+      if (ok) {
+        log(`${c.green}    ✓ sha256 ok${c.reset}`)
+        return filePath
+      }
+      errors.push(`${url}: sha256 divergente (esperado ${artifact.sha256})`)
+    } catch (err) {
+      errors.push(`${url}: ${err?.message ?? err}`)
+    }
+  }
+  throw new Error(
+    `falha ao baixar '${artifact.id}' de ${urls.length} URL(s):\n` +
+      errors.map((e) => `    - ${e}`).join('\n'),
+  )
 }
 
 async function extractArchive(artifact, archivePath, runtimeRoot) {

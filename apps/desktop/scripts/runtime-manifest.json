@@ -32,11 +32,22 @@
     },
     {
       "id": "kindlegen",
-      "description": "Amazon kindlegen Windows V2.9 build 1029-0897292 (o build Linux versionado em docker/kindlegen/ é 1028 — builds diferem por plataforma). Snapshot archive.org (2015-04-07) do S3 oficial (URL original retorna 403 desde 2022). Zip sem raiz única — conteúdo vai direto para <runtime>/kindlegen/. Inclui EULA.txt (redistribuição Amazon).",
+      "description": "Amazon kindlegen Windows V2.9 build 1029-0897292 (o build Linux versionado em docker/kindlegen/ é 1028 — builds diferem por plataforma). Snapshot archive.org (2015-04-07) do S3 oficial (URL original retorna 403 desde 2022). Zip sem raiz única — conteúdo vai direto para <runtime>/kindlegen/. Inclui EULA.txt (redistribuição Amazon). Mirror primário: GitHub Release runtime-assets deste repositório.",
       "url": "https://web.archive.org/web/20150407060917id_/http://kindlegen.s3.amazonaws.com/kindlegen_win32_v2_9.zip",
+      "mirrors": [
+        "https://github.com/devcarloshenrique/mangaink-agent/releases/download/runtime-assets/kindlegen_win32_v2_9.zip"
+      ],
       "sha256": "70b8401736684a1c390d4a95ba918283fcb3a36405c9a9895732deb50274540b",
       "license": "Amazon EULA (arquivos EULA*.txt acompanham o binário)",
       "dest": "kindlegen"
+    },
+    {
+      "id": "node",
+      "description": "Node.js runtime embutido para o backend do app desktop (binário único node.exe, zip win-x64). O prepare-tauri-resources deriva a versão da URL e valida o SHA256 do zip antes de extrair.",
+      "url": "https://nodejs.org/dist/v22.20.0/node-v22.20.0-win-x64.zip",
+      "sha256": "bb819d6eb8f5bfda294bbc83a7e4ec6539da67c4233d54b0d655b9248b15e29d",
+      "license": "MIT",
+      "dest": null
     },
     {
       "id": "wheels",
