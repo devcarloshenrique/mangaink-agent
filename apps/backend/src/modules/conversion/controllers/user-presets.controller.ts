@@ -19,7 +19,7 @@ export async function listUserPresetsHandler(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const userId = request.user.sub
+  const userId = (request.user as { sub: string }).sub
   const result = await listUseCase.execute(userId)
   return reply.send(result)
 }
@@ -28,7 +28,7 @@ export async function createUserPresetHandler(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const userId = request.user.sub
+  const userId = (request.user as { sub: string }).sub
   const result = await createUseCase.execute(userId, request.body as {
     name: string
     description?: string
@@ -43,7 +43,7 @@ export async function updateUserPresetMetaHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const { presetId } = request.params as { presetId: string }
-  const userId = request.user.sub
+  const userId = (request.user as { sub: string }).sub
   const result = await updateMetaUseCase.execute(presetId, userId, request.body as {
     name?: string
     description?: string | null
@@ -57,7 +57,7 @@ export async function updateUserPresetValuesHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const { presetId } = request.params as { presetId: string }
-  const userId = request.user.sub
+  const userId = (request.user as { sub: string }).sub
   const result = await updateValuesUseCase.execute(
     presetId,
     userId,
@@ -71,7 +71,7 @@ export async function deleteUserPresetHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const { presetId } = request.params as { presetId: string }
-  const userId = request.user.sub
+  const userId = (request.user as { sub: string }).sub
   await deleteUseCase.execute(presetId, userId)
   return reply.code(204).send()
 }

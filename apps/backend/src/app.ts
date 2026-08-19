@@ -3,31 +3,34 @@ import { env } from './shared/config/env'
 import { createServer } from './shared/server'
 import { closeAllRedisConnections } from './shared/redis/safe-redis'
 import { closeRedis } from './shared/redis/redis'
+import { logger } from './shared/logging/logger'
 
 async function start() {
   const app = await createServer()
 
   await app.listen({ port: env.PORT, host: '0.0.0.0' })
 
-  console.log(`🚀 Backend MangaInk Agent rodando em http://localhost:${env.PORT}`)
-  console.log(`📚 Swagger UI disponível em http://localhost:${env.PORT}/api-docs`)
+  logger.info({ port: env.PORT }, 'Backend MangaInk Agent iniciado')
+  if (env.SWAGGER_ENABLED) {
+    logger.info({ url: `http://localhost:${env.PORT}/api-docs` }, 'Swagger UI disponivel')
+  }
 
-  // ── Graceful Shutdown ──────────────────────────────────────────────
+  // ————————————————————————————————————————————————————————————————————————
   const shutdown = async (signal: string) => {
-    console.log(`\n[Shutdown] Recebido ${signal}, fechando conexões…`)
+    logger.info({ signal }, '[Shutdown] Recebido sinal, fechando conexoes')
 
     await shutdownTracing()
 
     try {
       await app.close()
     } catch {
-      // Servidor pode já estar fechado
+      // Servidor pode jÃ¡ estar fechado
     }
 
     await closeRedis()
     await closeAllRedisConnections()
 
-    console.log('[Shutdown] Encerrado com sucesso')
+    logger.info('[Shutdown] Encerrado com sucesso')
     process.exit(0)
   }
 

@@ -1,6 +1,7 @@
 import type Redis from 'ioredis'
 import { env } from '../config/env'
 import { createSafeRedis } from './safe-redis'
+import { logger } from '../logging/logger'
 
 let redisInstance: Redis | null = null
 
@@ -22,7 +23,7 @@ export function getRedis(): Redis {
     })
 
     redisInstance.on('connect', () => {
-      console.log('[Redis] Conectado com sucesso')
+      logger.info('[Redis] Conectado com sucesso')
     })
   }
 

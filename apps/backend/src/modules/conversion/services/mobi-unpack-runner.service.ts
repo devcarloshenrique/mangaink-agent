@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
 import { readdir, mkdir } from 'node:fs/promises'
+import { logger } from '../../../shared/logging/logger'
 import { env } from '../../../shared/config/env'
 import { buildUserArgs } from './kcc-runner.service'
 
@@ -84,8 +85,7 @@ export class MobiUnpackRunnerService implements MobiUnpackRunner {
 
       child.stdout?.on('data', (data: Buffer) => {
         const text = data.toString()
-        // Loga saida do Python para debug
-        console.log(`[mobi-unpack:${jobId}] ${text.trim()}`)
+        logger.debug({ jobId, text: text.trim() }, '[mobi-unpack] stdout')
       })
 
       child.stderr?.on('data', (data: Buffer) => {

@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { writeFile, readdir } from 'node:fs/promises'
 import { mkdirp, pathExists, writeJson } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { logger } from '../../../shared/logging/logger'
 import { ConversionEventsService } from './conversion-events.service'
 import type { ConversionJobRepository } from '../repositories/conversion-job.repository'
 import type { SourceCacheRepository } from '../../scraping/repositories/source-cache.repository'
@@ -79,7 +80,7 @@ export class ImageDownloaderService {
     const cacheExists = await this.isCacheValid(cacheDir, imageUrls.length)
 
     if (cacheExists) {
-      console.log(`[ImageDownloader] Cache hit para capítulo ${chapterId}`)
+      logger.debug({ sourceId, chapterId }, '[ImageDownloader] Cache hit para capitulo')
       const cachedFiles = await readdir(cacheDir)
       const imageFiles = cachedFiles.filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp|avif)$/i.test(f))
 

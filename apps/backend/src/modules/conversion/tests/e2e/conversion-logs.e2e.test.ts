@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
+import { JWT_AUDIENCE, JWT_ISSUER } from '../../../auth/services/token.service'
+import { randomUUID } from 'node:crypto'
 
 const journalEvents = [
   JSON.stringify({
@@ -60,7 +62,30 @@ vi.mock('../../services/conversion-events.service', () => ({
 vi.mock('../../repositories/prisma-conversion.repository', () => ({
   PrismaConversionRepository: vi.fn(() => ({
     create: vi.fn(),
-    findById: vi.fn(),
+    findById: vi.fn().mockResolvedValue({
+      conversionId: 'conv_test_logs_001',
+      status: 'completed',
+      progress: 100,
+      totalJobs: 1,
+      completedJobs: 1,
+      failedJobs: 0,
+      runningJobs: 0,
+      pendingJobs: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      jobs: [
+        { jobId: 'job_001', index: 0, title: 'Vol 01', status: 'completed', progress: 100 },
+      ],
+      config: {
+        sourceId: 'src-test-000',
+        cover: { kind: 'original' as const },
+        output: { deviceId: 'K11', format: 'EPUB' },
+        metadata: { title: 'Test Manga', author: 'Test Author' },
+        books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+        options: {},
+        userId: 'test-user-001',
+      },
+    }),
     update: vi.fn(),
     syncStatus: vi.fn().mockResolvedValue({
       conversionId: 'conv_test_logs_001',
@@ -170,7 +195,7 @@ describe('GET /api/conversions/:id/logs — E2E', () => {
   })
 
   it('deve retornar 200 com array de eventos do journal', async () => {
-    const token = app.jwt.sign({ sub: 'test-user-001' })
+    const token = app.jwt.sign({ sub: 'test-user-001', jti: randomUUID(), iss: JWT_ISSUER, aud: JWT_AUDIENCE })
 
     const res = await app.inject({
       method: 'GET',
@@ -190,7 +215,7 @@ describe('GET /api/conversions/:id/logs — E2E', () => {
 
   it('deve retornar 200 com array vazio quando journal não tem eventos', async () => {
     mockJournal.range.mockResolvedValue([])
-    const token = app.jwt.sign({ sub: 'test-user-001' })
+    const token = app.jwt.sign({ sub: 'test-user-001', jti: randomUUID(), iss: JWT_ISSUER, aud: JWT_AUDIENCE })
 
     const res = await app.inject({
       method: 'GET',

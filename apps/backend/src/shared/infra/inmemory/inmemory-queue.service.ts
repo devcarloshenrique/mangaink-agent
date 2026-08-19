@@ -16,8 +16,8 @@ interface JobEntry<T> {
   job: QueueJob<T>
   attempts: number
   backoff?: { type: 'exponential'; delay: number }
-  removeOnComplete?: { count: number }
-  removeOnFail?: { count: number }
+  removeOnComplete?: boolean | number | { count: number }
+  removeOnFail?: boolean | number | { count: number }
   phase: 'open' | 'closed'
   retryTimer?: ReturnType<typeof setTimeout>
 }
@@ -216,7 +216,12 @@ export class InMemoryQueueService<T = unknown> implements IQueueService<T> {
 
   private complete(entry: JobEntry<T>): void {
     this.completed.push(entry)
-    const cap = entry.removeOnComplete?.count ?? this.defaultCompletedRetention
+    const cap =
+      typeof entry.removeOnComplete === 'number'
+        ? entry.removeOnComplete
+        : typeof entry.removeOnComplete === 'boolean'
+          ? (entry.removeOnComplete ? 0 : this.defaultCompletedRetention)
+          : (entry.removeOnComplete?.count ?? this.defaultCompletedRetention)
     while (this.completed.length > cap) {
       const evicted = this.completed.shift()!
       this.registry.delete(evicted.job.id)
@@ -226,7 +231,12 @@ export class InMemoryQueueService<T = unknown> implements IQueueService<T> {
 
   private fail(entry: JobEntry<T>, error: unknown): void {
     this.failed.push(entry)
-    const cap = entry.removeOnFail?.count ?? this.defaultFailedRetention
+    const cap =
+      typeof entry.removeOnFail === 'number'
+        ? entry.removeOnFail
+        : typeof entry.removeOnFail === 'boolean'
+          ? (entry.removeOnFail ? 0 : this.defaultFailedRetention)
+          : (entry.removeOnFail?.count ?? this.defaultFailedRetention)
     while (this.failed.length > cap) {
       const evicted = this.failed.shift()!
       this.registry.delete(evicted.job.id)

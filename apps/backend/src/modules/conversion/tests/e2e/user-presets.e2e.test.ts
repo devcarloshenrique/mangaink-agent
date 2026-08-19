@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
+import { JWT_AUDIENCE, JWT_ISSUER } from '../../../auth/services/token.service'
+import { randomUUID } from 'node:crypto'
 
 const mockPresetRepo = {
   findAllByUserId: vi.fn(async () => [
@@ -98,7 +100,7 @@ afterAll(async () => {
 
 describe('User Presets E2E', () => {
   function authHeaders(): Record<string, string> {
-    const token = app.jwt.sign({ sub: 'user-1' })
+    const token = app.jwt.sign({ sub: 'user-1', jti: randomUUID(), iss: JWT_ISSUER, aud: JWT_AUDIENCE })
     return { Authorization: `Bearer ${token}` }
   }
 

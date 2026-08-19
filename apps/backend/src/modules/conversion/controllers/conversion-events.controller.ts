@@ -15,6 +15,8 @@ export function conversionEventsHandler(
     if (jobIds.length === 0) {
       return reply.code(200).send({ warning: 'Conversion sem jobs para seguir' })
     }
+    
+    reply.hijack()
     await events.connectConversionToSSE(jobIds, reply)
   }
 }

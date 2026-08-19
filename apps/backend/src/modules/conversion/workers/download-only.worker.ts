@@ -1,7 +1,9 @@
 import { join, extname } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
+import { logger } from '../../../shared/logging/logger'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
+import { assertValidImage } from '../../../shared/utils/image-validation'
 import { ConversionEventsService } from '../services/conversion-events.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
 import { PlaceholderService } from '../services/placeholder.service'
@@ -196,6 +198,7 @@ export async function processDownloadOnlyJob(
         if (!alreadyCached) {
           await mkdirp(coversDir)
           const { buffer } = await provider.downloadImage(cover.imageUrl)
+          assertValidImage(buffer)
           await writeFile(coverPath, buffer)
           await jobRepository.appendLog(jobId, `Capa baixada: ${coverPath}`)
         }
@@ -315,8 +318,9 @@ async function getChapterImageUrls(
   if (!chapter?.url) return []
   const images = await provider.getChapterImages(chapter.url)
   if (images.length === 0) {
-    console.warn(
-      `[DownloadOnlyWorker] Nenhuma imagem encontrada para capítulo ${chapterId} (${chapter.url})`,
+    logger.warn(
+      { chapterId, url: chapter.url },
+      '[DownloadOnlyWorker] Nenhuma imagem encontrada para o capitulo',
     )
   }
   return images

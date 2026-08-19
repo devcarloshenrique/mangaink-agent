@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, readFile, readdir, writeFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
@@ -273,7 +273,8 @@ describe('Embedded conversion E2E (MI_EMBEDDED_MODE=1)', () => {
     vi.stubEnv('NODE_ENV', 'dev') // workers só iniciam quando NODE_ENV !== 'test'
     vi.stubEnv('STORAGE_PATH', tmpDir)
     vi.stubEnv('CONVERSIONS_STORAGE_PATH', join(tmpDir, 'conversions'))
-    vi.stubEnv('JWT_SECRET', 'test-secret-embedded-conversion')
+    vi.stubEnv('JWT_SECRET', 'test-secret-embedded-conversion-min-32-chars')
+    vi.stubEnv('X_API_TOKEN', 'test-x-api-token')
 
     vi.resetModules()
 
@@ -416,7 +417,7 @@ describe('Embedded conversion E2E (MI_EMBEDDED_MODE=1)', () => {
     expect(createSafeRedisMock).not.toHaveBeenCalled()
   })
 
-  it('DELETE /api/conversions/:id de conversion recém-criada (job ainda pendente) → deleted; GET → 404; sem Redis', async () => {
+  it('DELETE /api/conversions/:id remove o banco E o storage em disco (outputs + logs + previews)', async () => {
     await resetState()
 
     const post = await app.inject({
@@ -427,6 +428,24 @@ describe('Embedded conversion E2E (MI_EMBEDDED_MODE=1)', () => {
     })
     expect(post.statusCode).toBe(202)
     const { conversionId } = post.json()
+
+    // Worker real processa até completed → cria outputs/logs no storage em disco.
+    const state = await pollUntilCompleted(conversionId)
+    expect(state.status).toBe('completed')
+    const jobId = state.jobs[0].jobId
+
+    const convDir = join(tmpDir, 'conversions', conversionId)
+
+    // Garante que havia dados sensíveis em disco (output EPUB) —
+    // o VULN-8 era: o DELETE apagava só o banco e o diretório ficava órfão.
+    const outputDir = join(convDir, 'jobs', jobId, 'output')
+    const outputFiles = await readdir(outputDir)
+    expect(outputFiles.some((f) => f.endsWith('.epub'))).toBe(true)
+
+    // Adiciona um cache de preview MOBI em /temp/<file-base>/ (também é removido).
+    const tempBase = join(outputDir, 'temp', 'Vol 1')
+    await mkdir(join(tempBase, 'images'), { recursive: true })
+    await writeFile(join(tempBase, 'index.json'), '{}')
 
     const del = await app.inject({
       method: 'DELETE',
@@ -442,6 +461,9 @@ describe('Embedded conversion E2E (MI_EMBEDDED_MODE=1)', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(get.statusCode).toBe(404)
+
+    // VULN-8 corrigido: o diretório inteiro (outputs + logs + previews) sumiu do disco.
+    await expect(access(convDir)).rejects.toThrow()
 
     expect(createSafeRedisMock).not.toHaveBeenCalled()
   })

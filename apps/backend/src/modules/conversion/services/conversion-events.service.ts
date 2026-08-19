@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify'
 import type { IPubSub, IJournalStore } from '../../../shared/infra'
+import { applySseSecurityHeaders } from '../../../shared/utils/security-headers'
 import type { SSEEvent, SSEEventType } from '../types/conversion.types'
 
 /**
@@ -31,10 +32,9 @@ export class ConversionEventsService {
     const journalKey = `${ConversionEventsService.JOURNAL_PREFIX}${jobId}`
     const id = await this.journal.nextId(idKey)
     const journalEntry: SSEEvent = { ...event, id }
-    const payload = JSON.stringify(journalEntry)
 
-    await this.journal.append(journalKey, payload)
-    await this.pubsub.publish(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, payload)
+    await this.journal.append(journalKey, journalEntry)
+    await this.pubsub.publish(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, journalEntry)
     await this.journal.expire(journalKey, ConversionEventsService.JOURNAL_TTL)
     await this.journal.expire(idKey, ConversionEventsService.JOURNAL_TTL)
   }
@@ -43,13 +43,21 @@ export class ConversionEventsService {
     this.writeSseHeaders(reply)
 
     const onMessage = this.writeEvent(reply)
-    await this.pubsub.subscribe(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, onMessage)
+    const handle = await this.pubsub.subscribe(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, onMessage)
     const keepAlive = this.startKeepAlive(reply)
+
+    let resolveStream: (() => void) | undefined
+    const streamDone = new Promise<void>((resolve) => {
+      resolveStream = resolve
+    })
 
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribe(`${ConversionEventsService.CHANNEL_PREFIX}${jobId}`, onMessage)
+      await handle?.unsubscribe().catch(() => {})
+      resolveStream?.()
     })
+
+    return streamDone
   }
 
   async connectConversionToSSE(jobIds: string[], reply: FastifyReply): Promise<void> {
@@ -62,16 +70,16 @@ export class ConversionEventsService {
 
     const writeSseEvent = (event: SSEEvent, jobId: string) => {
       try {
-        reply.raw.write(`event: ${event.type}\n`)
-        reply.raw.write(`data: ${JSON.stringify({ ...event.data, jobId })}\n\n`)
+        reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify({ ...event.data, jobId })}\n\n`)
+        ;(reply.raw as any).flush?.()
       } catch {
         // socket fechado
       }
     }
 
-    const onMessage = (channel: string, message: string) => {
+    const onMessage = (channel: string, message: unknown) => {
       try {
-        const event = JSON.parse(message) as SSEEvent
+        const event = (typeof message === 'string' ? JSON.parse(message) : message) as SSEEvent
         const jobId = channel.replace(ConversionEventsService.CHANNEL_PREFIX, '')
 
         if (isReplaying) {
@@ -99,7 +107,7 @@ export class ConversionEventsService {
       let maxId = 0
       for (const entry of entries) {
         try {
-          const event = JSON.parse(entry) as SSEEvent
+          const event = (typeof entry === 'string' ? JSON.parse(entry) : entry) as SSEEvent
           writeSseEvent(event, jobId)
           if (event.id != null) maxId = Math.max(maxId, event.id)
         } catch {
@@ -119,30 +127,38 @@ export class ConversionEventsService {
     }
     liveBuffer.length = 0
 
+    let resolveStream: (() => void) | undefined
+    const streamDone = new Promise<void>((resolve) => {
+      resolveStream = resolve
+    })
+
     const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
       await this.pubsub.unsubscribeMany(
         jobIds.map((j) => `${ConversionEventsService.CHANNEL_PREFIX}${j}`),
-      )
+      ).catch(() => {})
+      resolveStream?.()
     })
+
+    return streamDone
   }
 
   private writeSseHeaders(reply: FastifyReply): void {
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    })
+    reply.raw.setHeader?.('Content-Type', 'text/event-stream')
+    reply.raw.setHeader?.('Cache-Control', 'no-cache')
+    reply.raw.setHeader?.('Connection', 'keep-alive')
+    reply.raw.setHeader?.('X-Accel-Buffering', 'no')
+    applySseSecurityHeaders(reply.raw)
+    reply.raw.flushHeaders?.()
   }
 
-  private writeEvent(reply: FastifyReply): (message: string) => void {
-    return (message: string) => {
+  private writeEvent(reply: FastifyReply): (message: unknown) => void {
+    return (message: unknown) => {
       try {
-        const event = JSON.parse(message) as SSEEvent
-        reply.raw.write(`event: ${event.type}\n`)
-        reply.raw.write(`data: ${JSON.stringify(event.data)}\n\n`)
+        const event = (typeof message === 'string' ? JSON.parse(message) : message) as SSEEvent
+        reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
+        ;(reply.raw as any).flush?.()
       } catch {
         // ignora
       }
@@ -153,6 +169,7 @@ export class ConversionEventsService {
     return setInterval(() => {
       try {
         reply.raw.write(': keepalive\n\n')
+        ;(reply.raw as any).flush?.()
       } catch {
         // socket fechado
       }

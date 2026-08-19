@@ -10,12 +10,20 @@ export class GetConversionUseCase {
   constructor(private readonly conversions: ConversionRepository) {}
 
   async execute(conversionId: string, userId: string): Promise<ConversionState> {
+    // Ownership é verificado ANTES do syncStatus (VULN-5/MEC-60): consultar uma
+    // conversão alheia não pode disparar escrita colateral de status nem servir
+    // de oráculo 403/404 (enumeração de existência).
+    const existing = await this.conversions.findById(conversionId)
+    if (!existing) {
+      throw new ConversionNotFoundError(conversionId)
+    }
+    if (existing.config.userId !== userId) {
+      throw new ForbiddenError(conversionId)
+    }
+
     const state = await this.conversions.syncStatus(conversionId)
     if (!state) {
       throw new ConversionNotFoundError(conversionId)
-    }
-    if (state.config.userId !== userId) {
-      throw new ForbiddenError(conversionId)
     }
     return state
   }

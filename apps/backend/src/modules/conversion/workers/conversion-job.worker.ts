@@ -1,6 +1,8 @@
 import { join, extname } from 'node:path'
 import { link, writeFile, readdir, mkdir, rm, readFile, rename, stat } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
+import { logger } from '../../../shared/logging/logger'
+import { redactUrl, sanitizeErrorMessage } from '../../../shared/logging/sanitize'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
 import { ConversionEventsService } from '../services/conversion-events.service'
 import { createKccRunner } from '../services/kcc-runner.factory'
@@ -378,7 +380,10 @@ export function startConversionJobWorker(deps: {
     onFailed: async (job, error) => {
       const jobId = job.id
       const conversionId = (job.data as ConversionJobData | undefined)?.conversionId
-      console.error(`[ConversionWorker] Job ${jobId ?? 'unknown'} failed:`, error.message)
+      logger.error(
+        { jobId: jobId ?? 'unknown', conversionId, error: sanitizeErrorMessage(error.message) },
+        '[ConversionWorker] Job failed',
+      )
       if (jobId && conversionId) {
         const failedRepo = getConversionJobRepository()
         const convRepo = getConversionRepository(runtime.status)
@@ -502,8 +507,9 @@ async function getChapterImageUrls(
   const images = await provider.getChapterImages(chapter.url)
 
   if (images.length === 0) {
-    console.warn(
-      `[ConversionWorker] Nenhuma imagem encontrada para capítulo ${chapterId} (${chapter.url})`,
+    logger.warn(
+      { chapterId, url: redactUrl(chapter.url) },
+      '[ConversionWorker] Nenhuma imagem encontrada para capítulo',
     )
   }
 

@@ -25,6 +25,7 @@ import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-ca
 import { downloadJobHandler } from './controllers/download-job.controller'
 import { DownloadJobUseCase } from './use-cases/download-job.use-case'
 import { DeleteConversionUseCase } from './use-cases/delete-conversion.use-case'
+import { ConversionStorageService } from './services/conversion-storage.service'
 import { downloadJobParamsSchema } from './dtos/download-job.dto'
 import { serveCoverHandler } from './controllers/serve-cover.controller'
 import { ServeCoverUseCase } from './use-cases/serve-cover.use-case'
@@ -85,7 +86,10 @@ function buildConversionDeps(opts?: { runtime?: RuntimeAdapters }) {
   const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, journal)
   const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
   const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
-  const deleteConversionUseCase = new DeleteConversionUseCase(conversions)
+  const deleteConversionUseCase = new DeleteConversionUseCase(
+    conversions,
+    new ConversionStorageService(),
+  )
 
   return {
     createConversionUseCase,
@@ -167,7 +171,7 @@ const listConversionsResponseSchema = z.object({
 
 const sseEventSchema = z.object({
   type: z.string(),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
   timestamp: z.string(),
   id: z.number().optional(),
 })

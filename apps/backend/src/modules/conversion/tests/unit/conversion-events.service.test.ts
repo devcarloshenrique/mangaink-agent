@@ -19,11 +19,27 @@ import { ConversionEventsService } from '../../services/conversion-events.servic
 
 function createMockFastifyReply() {
   const chunks: string[] = []
+  const closeCallbacks: Array<() => void> = []
+  let isClosed = false
   const reply = {
     raw: {
       write: vi.fn((chunk: string) => { chunks.push(chunk) }),
-      on: vi.fn(),
+      on: vi.fn((event: string, cb: () => void) => {
+        if (event === 'close') {
+          closeCallbacks.push(cb)
+          if (isClosed) {
+            queueMicrotask(() => cb())
+          }
+        }
+      }),
+      close: () => {
+        isClosed = true
+        closeCallbacks.forEach((cb) => cb())
+      },
       writeHead: vi.fn(),
+      setHeader: vi.fn(),
+      flushHeaders: vi.fn(),
+      flush: vi.fn(),
     },
   }
   return { reply, chunks }
@@ -46,24 +62,22 @@ describe('ConversionEventsService', () => {
     expect(mockJournal.nextId).toHaveBeenCalledWith('conversion-event-id:job_001')
     expect(mockJournal.append).toHaveBeenCalledWith(
       'conversion-journal:job_001',
-      expect.any(String),
+      expect.objectContaining({ id: 5, type: 'job.started' }),
     )
     expect(mockJournal.expire).toHaveBeenCalledWith('conversion-journal:job_001', 3600)
     expect(mockJournal.expire).toHaveBeenCalledWith('conversion-event-id:job_001', 3600)
   })
 
-  it('emit deve publicar no canal raw conversion-job:{jobId} com payload string', async () => {
+  it('emit deve publicar no canal raw conversion-job:{jobId} com payload do evento', async () => {
     mockJournal.nextId.mockResolvedValue(10)
     const sseEvent = events.createEvent('job.started', { jobId: 'job_001' })
 
     await events.emit('job_001', sseEvent)
 
-    expect(mockPubSub.publish).toHaveBeenCalledWith('conversion-job:job_001', expect.any(String))
-    const payload = mockPubSub.publish.mock.calls[0][1] as string
-    expect(typeof payload).toBe('string')
-    const publishedObj = JSON.parse(payload) as Record<string, unknown>
-    expect(publishedObj.id).toBe(10)
-    expect(publishedObj.type).toBe('job.started')
+    expect(mockPubSub.publish).toHaveBeenCalledWith(
+      'conversion-job:job_001',
+      expect.objectContaining({ id: 10, type: 'job.started' }),
+    )
   })
 
   it('connectConversionToSSE deve fazer replay de eventos do journal via range', async () => {
@@ -73,7 +87,9 @@ describe('ConversionEventsService', () => {
       JSON.stringify({ id: 2, type: 'download.started', data: { jobId: 'job_a' }, timestamp: '2024-01-02' }),
     ])
 
-    await events.connectConversionToSSE(['job_a'], reply as any)
+    const promise = events.connectConversionToSSE(['job_a'], reply as any)
+    reply.raw.close()
+    await promise
 
     expect(mockJournal.range).toHaveBeenCalledWith('conversion-journal:job_a', 0, -1)
     expect(mockPubSub.subscribeMany).toHaveBeenCalledWith(
@@ -93,16 +109,21 @@ describe('ConversionEventsService', () => {
       JSON.stringify({ id: 3, type: 'job.started', data: { jobId: 'job_a' }, timestamp: '2024-01-01' }),
     ])
 
-    const subscription: { onMessage?: (ch: string, msg: string) => void } = {}
+    let onMessageCb: ((ch: string, msg: string) => void) | undefined
     mockPubSub.subscribeMany.mockImplementation(async (_ids: string[], callback: any) => {
-      subscription.onMessage = callback
+      onMessageCb = callback
+      return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    await events.connectConversionToSSE(['job_a'], reply as any)
+    const promise = events.connectConversionToSSE(['job_a'], reply as any)
+    await Promise.resolve()
 
-    subscription.onMessage?.('conversion-job:job_a', JSON.stringify({
+    onMessageCb?.('conversion-job:job_a', JSON.stringify({
       id: 2, type: 'download.started', data: {}, timestamp: '2024-01-02',
     }))
+
+    reply.raw.close()
+    await promise
 
     const output = chunks.join('')
     expect(output).toContain('event: job.started')
@@ -116,16 +137,21 @@ describe('ConversionEventsService', () => {
       JSON.stringify({ id: 1, type: 'job.started', data: { jobId: 'job_a' }, timestamp: '2024-01-01' }),
     ])
 
-    const subscription: { onMessage?: (ch: string, msg: string) => void } = {}
+    let onMessageCb: ((ch: string, msg: string) => void) | undefined
     mockPubSub.subscribeMany.mockImplementation(async (_ids: string[], callback: any) => {
-      subscription.onMessage = callback
+      onMessageCb = callback
+      return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    await events.connectConversionToSSE(['job_a'], reply as any)
+    const promise = events.connectConversionToSSE(['job_a'], reply as any)
+    await Promise.resolve()
 
-    subscription.onMessage?.('conversion-job:job_a', JSON.stringify({
+    onMessageCb?.('conversion-job:job_a', JSON.stringify({
       id: 5, type: 'conversion.started', data: {}, timestamp: '2024-01-02',
     }))
+
+    reply.raw.close()
+    await promise
 
     const output = chunks.join('')
     expect(output).toContain('event: conversion.started')
@@ -134,16 +160,21 @@ describe('ConversionEventsService', () => {
   it('connectJobToSSE deve assinar o canal raw e escrever eventos', async () => {
     const { reply, chunks } = createMockFastifyReply()
 
-    const subscription: { onMessage?: (msg: string) => void } = {}
+    let onMessageCb: ((msg: string) => void) | undefined
     mockPubSub.subscribe.mockImplementation(async (_ch: string, callback: any) => {
-      subscription.onMessage = callback
+      onMessageCb = callback
+      return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    await events.connectJobToSSE('job_001', reply as any)
+    const promise = events.connectJobToSSE('job_001', reply as any)
+    await Promise.resolve()
+
+    onMessageCb?.(JSON.stringify({ id: 1, type: 'download.progress', data: { p: 50 }, timestamp: '2024-01-02' }))
+
+    reply.raw.close()
+    await promise
 
     expect(mockPubSub.subscribe).toHaveBeenCalledWith('conversion-job:job_001', expect.any(Function))
-
-    subscription.onMessage?.(JSON.stringify({ id: 1, type: 'download.progress', data: { p: 50 }, timestamp: '2024-01-02' }))
 
     const output = chunks.join('')
     expect(output).toContain('event: download.progress')

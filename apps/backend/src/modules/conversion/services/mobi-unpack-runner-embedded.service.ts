@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readdir, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { logger } from '../../../shared/logging/logger'
 import type { MobiUnpackRunner, MobiUnpackRunOptions } from './mobi-unpack-runner.service'
 
 export interface MobiUnpackRunnerEmbeddedDeps {
@@ -94,8 +95,7 @@ export class MobiUnpackRunnerEmbedded implements MobiUnpackRunner {
 
       child.stdout?.on('data', (data: Buffer) => {
         const text = data.toString()
-        // Loga saida do Python para debug
-        console.log(`[mobi-unpack:${jobId}] ${text.trim()}`)
+        logger.debug({ jobId, text: text.trim() }, '[mobi-unpack] stdout')
       })
 
       child.stderr?.on('data', (data: Buffer) => {

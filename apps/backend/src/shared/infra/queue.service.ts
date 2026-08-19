@@ -16,8 +16,8 @@ export interface QueueAddOptions {
   jobId?: string
   attempts?: number
   backoff?: { type: 'exponential'; delay: number }
-  removeOnComplete?: { count: number }
-  removeOnFail?: { count: number }
+  removeOnComplete?: boolean | number | { count: number }
+  removeOnFail?: boolean | number | { count: number }
 }
 
 /** Opções de concorrência para a factory de worker. */

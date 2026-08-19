@@ -90,6 +90,51 @@ describe('Conversion API E2E', () => {
     expect(epub.default).toBe(true)
   })
 
+  it('POST /api/conversions → 400 com título de book acima do limite (500 chars)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conversions',
+      payload: {
+        sourceId: 'src-test',
+        cover: { kind: 'original' },
+        output: { deviceId: 'kpw_11', format: 'EPUB' },
+        books: [{ title: 'A'.repeat(600), chapters: ['chap_0001'] }],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('POST /api/conversions → 400 com capítulo acima do limite (100 chars)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conversions',
+      payload: {
+        sourceId: 'src-test',
+        cover: { kind: 'original' },
+        output: { deviceId: 'kpw_11', format: 'EPUB' },
+        books: [{ title: 'Teste', chapters: ['x'.repeat(150)] }],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('POST /api/conversions → 400 com título whitespace-only', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/conversions',
+      payload: {
+        sourceId: 'src-test',
+        cover: { kind: 'original' },
+        output: { deviceId: 'kpw_11', format: 'EPUB' },
+        books: [{ title: '   ', chapters: ['chap_0001'] }],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+  })
+
   it('formats NÃO deve conter KFX (requer Kindle Previewer — fora de escopo)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/conversions/options' })
     const formatIds = res.json().formats.map((f: any) => f.id)

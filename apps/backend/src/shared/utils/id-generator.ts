@@ -1,8 +1,9 @@
-import { sha256 } from './hash'
+﻿import { sha256 } from './hash'
+import { randomUUID } from 'node:crypto'
 
 /**
- * Extrai o slug da obra a partir da URL canônica.
- * Ex: 'https://mangalivre.to/manga/hunter-x-hunter/' → 'hunter-x-hunter'
+ * Extrai o slug da obra a partir da URL canÃ´nica.
+ * Ex: 'https://mangalivre.to/manga/hunter-x-hunter/' â†’ 'hunter-x-hunter'
  */
 function getMangaSlug(canonicalUrl: string): string {
   const match = new URL(canonicalUrl).pathname.match(/\/manga\/([^/]+)/)
@@ -10,7 +11,7 @@ function getMangaSlug(canonicalUrl: string): string {
 }
 
 /**
- * Gera um sourceId determinístico.
+ * Gera um sourceId determinÃ­stico.
  *
  * Formato: src-{slug}-{sha256(provider+canonicalUrl)[0..7]}
  *
@@ -25,9 +26,9 @@ export function createSourceId(provider: string, canonicalUrl: string): string {
 }
 
 /**
- * Gera um ID de capítulo preservando ordenação com números decimais.
+ * Gera um ID de capÃ­tulo preservando ordenaÃ§Ã£o com nÃºmeros decimais.
  *
- * | Número | ID           |
+ * | NÃºmero | ID           |
  * |--------|--------------|
  * | 1      | chap_0001    |
  * | 10     | chap_0010    |
@@ -48,14 +49,14 @@ export function createChapterId(number: string | number): string {
 
 /**
  * Gera um ID de capa com padding sequencial.
- * Ex: createCoverId(1) → 'cover_001'
+ * Ex: createCoverId(1) â†’ 'cover_001'
  */
 export function createCoverId(index: number): string {
   return `cover_${String(index).padStart(3, '0')}`
 }
 
 /**
- * Gera um ID de job de conversão usando timestamp + random.
+ * Gera um ID de job de conversÃ£o usando timestamp + random.
  * Formato: job_{timestamp}_{random4}
  *
  * @exemplo
@@ -63,9 +64,7 @@ export function createCoverId(index: number): string {
  * // => 'job_1720555200000_a1b2'
  */
 export function createJobId(): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).slice(2, 6)
-  return `job_${timestamp}_${random}`
+  return `job_${randomUUID()}`
 }
 
 /**
@@ -77,7 +76,5 @@ export function createJobId(): string {
  * // => 'conv_1720555200000_a1b2'
  */
 export function createConversionId(): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).slice(2, 6)
-  return `conv_${timestamp}_${random}`
+  return `conv_${randomUUID()}`
 }

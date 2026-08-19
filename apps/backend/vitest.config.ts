@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -6,8 +7,8 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
     },
-    envFile: '.env.test',
-    globalSetup: './vitest.globalSetup.ts',
+    envFile: resolve(__dirname, '.env.test'),
+    globalSetup: resolve(__dirname, './vitest.globalSetup.ts'),
     pool: 'forks',
     coverage: {
       provider: 'v8',

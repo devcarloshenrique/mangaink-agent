@@ -29,8 +29,11 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await getPrisma().userPreset.deleteMany({ where: { userId: { in: [userId, otherUserId] } } })
-  await getPrisma().user.deleteMany({ where: { id: { in: [userId, otherUserId] } } })
+  const ids = [userId, otherUserId].filter(Boolean) as string[]
+  if (ids.length > 0) {
+    await getPrisma().userPreset.deleteMany({ where: { userId: { in: ids } } })
+    await getPrisma().user.deleteMany({ where: { id: { in: ids } } })
+  }
   await getPrisma().$disconnect()
 })
 

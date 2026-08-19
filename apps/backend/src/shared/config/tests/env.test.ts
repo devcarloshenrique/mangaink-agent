@@ -5,8 +5,9 @@ vi.mock('dotenv/config', () => ({}))
 type Env = typeof import('../env').env
 
 const REQUIRED_ENV: Record<string, string> = {
-  JWT_SECRET: 'test-jwt-secret',
+  JWT_SECRET: 'test-jwt-secret-min-32-chars-long-security',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/mangaink_test',
+  X_API_TOKEN: 'test-x-api-token',
 }
 
 let importSeq = 0
@@ -24,8 +25,11 @@ async function loadEnv(overrides: Record<string, string | undefined> = {}): Prom
   return env
 }
 
-async function loadEnvWithout(required: 'JWT_SECRET' | 'DATABASE_URL'): Promise<Env> {
+async function loadEnvWithout(required: 'JWT_SECRET' | 'DATABASE_URL' | 'X_API_TOKEN'): Promise<Env> {
   vi.resetModules()
+  for (const [key, value] of Object.entries(REQUIRED_ENV)) {
+    vi.stubEnv(key, value)
+  }
   vi.stubEnv(required, undefined)
   importSeq += 1
   const { env } = (await import(`../env?t=${importSeq}`)) as { env: Env }
@@ -95,12 +99,16 @@ describe('env — modo embedded (MI_EMBEDDED_*)', () => {
       CONVERSIONS_STORAGE_PATH: undefined,
       KCC_DOCKER_IMAGE: undefined,
       MOBI_PREVIEW_TTL_SEC: undefined,
+      STORAGE_SWEEPER_INTERVAL_MS: undefined,
+      STORAGE_SWEEPER_MIN_ORPHAN_AGE_MS: undefined,
     })
     expect(env.PORT).toBe(3333)
     expect(env.STORAGE_PATH).toBe('./storage')
     expect(env.CONVERSIONS_STORAGE_PATH).toBe('./storage/conversions')
     expect(env.KCC_DOCKER_IMAGE).toBe('mangaink-kcc:10.3.0')
     expect(env.MOBI_PREVIEW_TTL_SEC).toBe(86400)
+    expect(env.STORAGE_SWEEPER_INTERVAL_MS).toBe(6 * 60 * 60 * 1000)
+    expect(env.STORAGE_SWEEPER_MIN_ORPHAN_AGE_MS).toBe(24 * 60 * 60 * 1000)
   })
 
   it("NODE_ENV='development' (Vite dev) → normalizado para 'dev'", async () => {
@@ -119,5 +127,9 @@ describe('env — modo embedded (MI_EMBEDDED_*)', () => {
 
   it('DATABASE_URL ausente → erro de parse', async () => {
     await expect(loadEnvWithout('DATABASE_URL')).rejects.toThrow('Variáveis de ambiente inválidas')
+  })
+
+  it('X_API_TOKEN ausente → erro de parse', async () => {
+    await expect(loadEnvWithout('X_API_TOKEN')).rejects.toThrow('Variáveis de ambiente inválidas')
   })
 })

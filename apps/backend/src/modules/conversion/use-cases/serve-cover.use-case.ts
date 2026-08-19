@@ -2,6 +2,7 @@ import { join, extname } from 'node:path'
 import { readdir, writeFile, readFile } from 'node:fs/promises'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
 import { env } from '../../../shared/config/env'
+import { assertValidImage, detectImageContentType } from '../../../shared/utils/image-validation'
 import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import type { SourceCacheRepository } from '../../scraping/repositories/source-cache.repository'
 import { ConversionNotFoundError } from '../errors/conversion.errors'
@@ -65,10 +66,12 @@ export class ServeCoverUseCase {
     }
 
     const { buffer } = await provider.downloadImage(cover.imageUrl)
+    // VULN-1/MEC-74: valida magic bytes da capa antes de persistir/servir.
+    assertValidImage(buffer)
     await mkdirp(join(env.STORAGE_PATH, 'sources', sourceId, 'covers'))
     await writeFile(cachedPath, buffer)
 
-    return { filePath: cachedPath, contentType: MIME_MAP[urlExt] ?? 'image/jpeg' }
+    return { filePath: cachedPath, contentType: detectImageContentType(buffer) }
   }
 
   private async findCachedFile(

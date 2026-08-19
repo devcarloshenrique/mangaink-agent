@@ -39,7 +39,7 @@ export class CreateUserPresetUseCase {
     private readonly maxPresets: number = env.MAX_USER_PRESETS,
   ) {}
 
-  async execute(userId: string, input: CreateUserPresetData): Promise<UserPresetResponse> {
+  async execute(userId: string, input: Omit<CreateUserPresetData, 'userId'>): Promise<UserPresetResponse> {
     const existing = await this.repo.findAllByUserId(userId)
 
     if (existing.length >= this.maxPresets) {
