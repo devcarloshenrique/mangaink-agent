@@ -137,3 +137,38 @@ describe("buildBooks", () => {
     expect(books[0].title).toBe("Título");
   });
 });
+
+function computeEqualVolumeSizes(total: number, volumeCount: number): number[] {
+  if (total <= 0) return [1];
+  const count = Math.max(1, Math.min(total, volumeCount));
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  const sizes: number[] = [];
+  for (let i = 0; i < count; i++) {
+    sizes.push(base + (i < remainder ? 1 : 0));
+  }
+  return sizes;
+}
+
+describe("computeEqualVolumeSizes", () => {
+  it("divide 10 capítulos em 2 volumes por igual", () => {
+    expect(computeEqualVolumeSizes(10, 2)).toEqual([5, 5]);
+  });
+
+  it("divide 11 capítulos em 2 volumes distribuindo o resto", () => {
+    expect(computeEqualVolumeSizes(11, 2)).toEqual([6, 5]);
+  });
+
+  it("divide 10 capítulos em 3 volumes", () => {
+    expect(computeEqualVolumeSizes(10, 3)).toEqual([4, 3, 3]);
+  });
+
+  it("retorna [1] para 0 capítulos", () => {
+    expect(computeEqualVolumeSizes(0, 2)).toEqual([1]);
+  });
+
+  it("retorna [1] para 1 capítulo com 3 volumes pedidos", () => {
+    expect(computeEqualVolumeSizes(1, 3)).toEqual([1]);
+  });
+});
+

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -45,6 +45,7 @@ import {
   AlertTriangle,
   FileType,
   RotateCcw,
+  MousePointer,
 } from "lucide-react";
 import { ConversionFieldGroup } from "@/components/wizard/ConversionFieldGroup";
 import {
@@ -135,6 +136,18 @@ function buildBooks(data: WizardData): Book[] {
   }));
 }
 
+export function computeEqualVolumeSizes(total: number, volumeCount: number): number[] {
+  if (total <= 0) return [1];
+  const count = Math.max(1, Math.min(total, volumeCount));
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  const sizes: number[] = [];
+  for (let i = 0; i < count; i++) {
+    sizes.push(base + (i < remainder ? 1 : 0));
+  }
+  return sizes;
+}
+
 function computeVolumes(
   chapters: Chapter[],
   mode: VolumeMode,
@@ -167,6 +180,8 @@ function WizardPage() {
   const [step, setStep] = useState(0);
   const [visited, setVisited] = useState(0);
   const [finishing, setFinishing] = useState(false);
+  const [isVolumeSizeManual, setIsVolumeSizeManual] = useState(false);
+  const [isVolumeSizesManual, setIsVolumeSizesManual] = useState(false);
   const [data, setData] = useState<WizardData>({
     url: "",
     sourceId: null,
@@ -183,7 +198,7 @@ function WizardPage() {
     errorHandlingStrategy: "ignore",
     delivery: "kindle",
     kindleEmail: "",
-    volumeSize: 8,
+    volumeSize: 1,
     volumeMode: "fixed",
     volumeSizes: [],
   });
@@ -226,6 +241,8 @@ function WizardPage() {
   const handleFetch = async () => {
     if (!data.url) return;
     scraping.reset();
+    setIsVolumeSizeManual(false);
+    setIsVolumeSizesManual(false);
     setData((d) => ({ ...d, sourceId: null, inspectData: null, selectedChapters: new Set() }));
     await scraping.inspect(data.url);
   };
@@ -239,6 +256,8 @@ function WizardPage() {
         sourceId: scraping.state.sourceId,
         inspectData: meta,
         selectedChapters: new Set(),
+        volumeSize: 1,
+        volumeSizes: [],
         meta: {
           title: d.meta.title || meta.metadata.title,
           author: d.meta.author || (meta.metadata.author ?? ""),
@@ -273,6 +292,7 @@ function WizardPage() {
           const conv = await conversionsApi.get(search.conversionId);
           const config = conv.config as ConversionConfig;
           if (!cancelled) {
+            setIsVolumeSizeManual(true);
             setData((d) => ({
               ...d,
               sourceId: config.sourceId,
@@ -306,13 +326,132 @@ function WizardPage() {
     };
   }, [search.sourceId, search.conversionId]);
 
-  const toggleChapter = (id: string) => {
+  const toggleChapter = (id: string, explicitSelect?: boolean) => {
     setData((d) => {
       const s = new Set(d.selectedChapters);
-      if (s.has(id)) s.delete(id);
-      else s.add(id);
-      return { ...d, selectedChapters: s };
+      const shouldAdd = explicitSelect !== undefined ? explicitSelect : !s.has(id);
+      if (shouldAdd) s.add(id);
+      else s.delete(id);
+
+      const nextData: WizardData = { ...d, selectedChapters: s };
+      if (!isVolumeSizeManual) {
+        nextData.volumeSize = Math.max(1, s.size);
+      } else if (d.volumeSize > s.size && s.size > 0) {
+        nextData.volumeSize = s.size;
+      }
+
+      if (!isVolumeSizesManual && d.volumeSizes.length > 0) {
+        nextData.volumeSizes = computeEqualVolumeSizes(s.size, d.volumeSizes.length);
+      }
+
+      return nextData;
     });
+  };
+
+  const selectBatch = (ids: string[], shouldSelect: boolean) => {
+    setData((d) => {
+      const s = new Set(d.selectedChapters);
+      for (const id of ids) {
+        if (shouldSelect) s.add(id);
+        else s.delete(id);
+      }
+
+      const nextData: WizardData = { ...d, selectedChapters: s };
+      if (!isVolumeSizeManual) {
+        nextData.volumeSize = Math.max(1, s.size);
+      } else if (d.volumeSize > s.size && s.size > 0) {
+        nextData.volumeSize = s.size;
+      }
+
+      if (!isVolumeSizesManual && d.volumeSizes.length > 0) {
+        nextData.volumeSizes = computeEqualVolumeSizes(s.size, d.volumeSizes.length);
+      }
+
+      return nextData;
+    });
+  };
+
+  const selectAll = () => {
+    if (!data.inspectData) return;
+    const all = new Set(data.inspectData.chapters.map((c) => c.id));
+    setData((d) => {
+      const nextData: WizardData = { ...d, selectedChapters: all };
+      if (!isVolumeSizeManual) {
+        nextData.volumeSize = Math.max(1, all.size);
+      }
+      if (!isVolumeSizesManual && d.volumeSizes.length > 0) {
+        nextData.volumeSizes = computeEqualVolumeSizes(all.size, d.volumeSizes.length);
+      }
+      return nextData;
+    });
+  };
+
+  const clearSelection = () => {
+    setData((d) => {
+      const nextData: WizardData = { ...d, selectedChapters: new Set() };
+      if (!isVolumeSizeManual) {
+        nextData.volumeSize = 1;
+      }
+      if (!isVolumeSizesManual && d.volumeSizes.length > 0) {
+        nextData.volumeSizes = computeEqualVolumeSizes(0, d.volumeSizes.length);
+      }
+      return nextData;
+    });
+  };
+
+  const invertSelection = () => {
+    if (!data.inspectData) return;
+    setData((d) => {
+      const s = new Set<string>();
+      for (const c of data.inspectData!.chapters) {
+        if (!d.selectedChapters.has(c.id)) {
+          s.add(c.id);
+        }
+      }
+      const nextData: WizardData = { ...d, selectedChapters: s };
+      if (!isVolumeSizeManual) {
+        nextData.volumeSize = Math.max(1, s.size);
+      } else if (d.volumeSize > s.size && s.size > 0) {
+        nextData.volumeSize = s.size;
+      }
+      if (!isVolumeSizesManual && d.volumeSizes.length > 0) {
+        nextData.volumeSizes = computeEqualVolumeSizes(s.size, d.volumeSizes.length);
+      }
+      return nextData;
+    });
+  };
+
+  const handleVolumeModeChange = (mode: VolumeMode) => {
+    setData((d) => {
+      const nextData: WizardData = { ...d, volumeMode: mode };
+      if (mode === "custom" && (d.volumeSizes.length === 0 || !isVolumeSizesManual)) {
+        const total = d.selectedChapters.size || 1;
+        const defaultCount =
+          total >= 6 && total % 3 === 0
+            ? 3
+            : total >= 4
+              ? 2
+              : Math.max(1, total);
+        nextData.volumeSizes = computeEqualVolumeSizes(total, defaultCount);
+      }
+      return nextData;
+    });
+  };
+
+  const handleSplitEqually = (targetCount?: number) => {
+    setIsVolumeSizesManual(false);
+    const total = data.selectedChapters.size || (data.inspectData?.chapters.length ?? 1);
+    let count: number;
+    if (typeof targetCount === "number" && targetCount >= 1) {
+      count = Math.min(total, targetCount);
+    } else if (data.volumeSizes.length <= 1) {
+      count = total >= 4 ? (total % 3 === 0 ? 3 : 2) : 2;
+    } else {
+      count = data.volumeSizes.length;
+    }
+    const sizes = computeEqualVolumeSizes(total, count);
+    update("volumeSizes", sizes);
+    toast.success(`${total} capítulo(s) divididos em ${sizes.length} volumes (${sizes.join(", ")})`);
   };
 
   const finish = async () => {
@@ -359,11 +498,11 @@ function WizardPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl px-4 py-8 md:py-12">
-        <div className="text-center mb-6">
-          <SpeechBubble variant="yellow" tail="bottom" className="mb-4">
-            Passo {step + 1} de {STEPS.length}: {STEPS[step].label}
-          </SpeechBubble>
-          <h1 className="font-display text-4xl md:text-5xl uppercase">Mangá pro Kindle</h1>
+        <div className="text-center mb-8 pt-2">
+          <h1 className="font-display text-4xl md:text-5xl uppercase tracking-tight">Mangá pro Kindle</h1>
+          <p className="text-sm md:text-base font-medium opacity-80 mt-2">
+            Configure e converta seus mangás favoritos para leitura otimizada no Kindle
+          </p>
         </div>
 
         <div className="mb-8">
@@ -388,14 +527,21 @@ function WizardPage() {
               volumeMode={data.volumeMode}
               volumeSizes={data.volumeSizes}
               onToggle={toggleChapter}
-              onSelectAll={() =>
-                update("selectedChapters", new Set(data.inspectData!.chapters.map((c) => c.id)))
-              }
-              onClear={() => update("selectedChapters", new Set())}
+              onSelectBatch={selectBatch}
+              onSelectAll={selectAll}
+              onClear={clearSelection}
+              onInvert={invertSelection}
               onGrouping={(g) => update("grouping", g)}
-              onVolumeSize={(v) => update("volumeSize", v)}
-              onVolumeMode={(m) => update("volumeMode", m)}
-              onVolumeSizes={(v) => update("volumeSizes", v)}
+              onVolumeSize={(v) => {
+                setIsVolumeSizeManual(true);
+                update("volumeSize", v);
+              }}
+              onVolumeMode={handleVolumeModeChange}
+              onVolumeSizes={(sizes) => {
+                setIsVolumeSizesManual(true);
+                update("volumeSizes", sizes);
+              }}
+              onSplitEqually={handleSplitEqually}
             />
           )}
           {step === 2 && data.inspectData && (
@@ -524,14 +670,18 @@ function StepOrigin({
       )}
 
       {isFailed && (
-        <ComicPanel bg="red" padding="md" className="animate-comic-pop">
-          <p className="font-display text-lg">Erro ao inspecionar a URL</p>
-          <p className="text-sm font-medium opacity-80 mt-1">{state.error}</p>
+        <ComicPanel bg="red" padding="md" className="animate-comic-pop space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-display text-lg leading-tight">Erro ao inspecionar a URL</p>
+              <p className="text-sm font-medium opacity-90 leading-relaxed">{state.error}</p>
+            </div>
+          </div>
           <Button
             size="sm"
-            variant="outline"
             onClick={onFetch}
-            className="mt-2 border-[2.5px] border-ink shadow-comic-sm font-display"
+            className="mt-2 bg-card text-foreground hover:bg-muted border-[2.5px] border-ink shadow-comic-sm font-display hover:-translate-y-0.5 active:translate-y-0"
           >
             Tentar novamente
           </Button>
@@ -566,12 +716,15 @@ function StepChapters({
   volumeMode,
   volumeSizes,
   onToggle,
+  onSelectBatch,
   onSelectAll,
   onClear,
+  onInvert,
   onGrouping,
   onVolumeSize,
   onVolumeMode,
   onVolumeSizes,
+  onSplitEqually,
 }: {
   chapters: Chapter[];
   selected: Set<string>;
@@ -579,25 +732,48 @@ function StepChapters({
   volumeSize: number;
   volumeMode: VolumeMode;
   volumeSizes: number[];
-  onToggle: (id: string) => void;
+  onToggle: (id: string, select?: boolean) => void;
+  onSelectBatch: (ids: string[], select: boolean) => void;
   onSelectAll: () => void;
   onClear: () => void;
+  onInvert: () => void;
   onGrouping: (g: "single" | "separate") => void;
   onVolumeSize: (v: number) => void;
   onVolumeMode: (m: VolumeMode) => void;
   onVolumeSizes: (v: number[]) => void;
+  onSplitEqually: (targetCount?: number) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+
+  const isDraggingRef = useRef(false);
+  const dragTargetStateRef = useRef(true);
+  const lastInteractedIdRef = useRef<string | null>(null);
+
   const sorted = useMemo(
     () => [...chapters].sort((a, b) => parseFloat(a.number) - parseFloat(b.number)),
     [chapters],
   );
-  const effectiveChapters = selected.size > 0 ? sorted.filter((c) => selected.has(c.id)) : sorted;
-  const effectiveTotal = effectiveChapters.length;
+
+  const effectiveChapters = useMemo(
+    () => (selected.size > 0 ? sorted.filter((c) => selected.has(c.id)) : sorted),
+    [selected, sorted],
+  );
+  const effectiveTotal = selected.size > 0 ? selected.size : sorted.length;
+
+  const filteredChapters = useMemo(() => {
+    if (!searchQuery.trim()) return sorted;
+    const q = searchQuery.toLowerCase().trim();
+    return sorted.filter(
+      (c) => c.number.toLowerCase().includes(q) || c.title.toLowerCase().includes(q),
+    );
+  }, [sorted, searchQuery]);
 
   const calculateVolume = (chapterId: string): number => {
     const idx = effectiveChapters.findIndex((c) => c.id === chapterId);
     if (idx === -1) {
-      // fallback: full list index
       const fallbackIdx = sorted.findIndex((c) => c.id === chapterId);
       if (fallbackIdx === -1) return 1;
       if (volumeMode === "fixed") return Math.floor(fallbackIdx / volumeSize) + 1;
@@ -620,10 +796,69 @@ function StepChapters({
   };
 
   const customTotalAssigned = volumeSizes.reduce((a, b) => a + b, 0);
-  const customRemaining = effectiveTotal - customTotalAssigned;
+  const customRemaining = (selected.size > 0 ? selected.size : sorted.length) - customTotalAssigned;
 
   const addCustomVolume = () => {
-    onVolumeSizes([...volumeSizes, Math.min(volumeSize, Math.max(1, customRemaining))]);
+    onVolumeSizes([...volumeSizes, Math.max(1, customRemaining > 0 ? customRemaining : 1)]);
+  };
+
+  const handleChapterPointerDown = (id: string, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+
+    if (e.shiftKey && lastInteractedIdRef.current) {
+      const startIdx = sorted.findIndex((c) => c.id === lastInteractedIdRef.current);
+      const endIdx = sorted.findIndex((c) => c.id === id);
+      if (startIdx !== -1 && endIdx !== -1) {
+        const min = Math.min(startIdx, endIdx);
+        const max = Math.max(startIdx, endIdx);
+        const ids = sorted.slice(min, max + 1).map((c) => c.id);
+        onSelectBatch(ids, true);
+        lastInteractedIdRef.current = id;
+        return;
+      }
+    }
+
+    isDraggingRef.current = true;
+    const isCurrentlySelected = selected.has(id);
+    const targetState = !isCurrentlySelected;
+    dragTargetStateRef.current = targetState;
+    lastInteractedIdRef.current = id;
+    onToggle(id, targetState);
+  };
+
+  const handleChapterPointerEnter = (id: string) => {
+    if (isDraggingRef.current) {
+      onToggle(id, dragTargetStateRef.current);
+    }
+  };
+
+  useEffect(() => {
+    const handlePointerUp = () => {
+      isDraggingRef.current = false;
+    };
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
+
+  const handleApplyRange = () => {
+    const startNum = parseFloat(rangeStart);
+    const endNum = parseFloat(rangeEnd);
+    if (isNaN(startNum) || isNaN(endNum)) return;
+    const min = Math.min(startNum, endNum);
+    const max = Math.max(startNum, endNum);
+
+    const matchingIds = sorted
+      .filter((c) => {
+        const num = parseFloat(c.number);
+        return !isNaN(num) && num >= min && num <= max;
+      })
+      .map((c) => c.id);
+
+    if (matchingIds.length > 0) {
+      onSelectBatch(matchingIds, true);
+    }
   };
 
   return (
@@ -631,170 +866,319 @@ function StepChapters({
       <SectionHeader
         icon={<BookOpen />}
         title="Quais capítulos?"
-        subtitle={`${selected.size} de ${sorted.length} selecionados`}
+        subtitle={`${selected.size} de ${sorted.length} capítulos selecionados`}
       />
 
-      {/* Volume config */}
-      <div className="border-[3px] border-dashed border-ink rounded-lg p-4 space-y-3">
-        <p className="font-display text-xl">Capítulos por volume</p>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ChoiceCard
-            active={volumeMode === "fixed"}
-            onClick={() => onVolumeMode("fixed")}
-            title="Quantidade fixa"
-            text="Mesmo número de capítulos em cada volume."
-          />
-          <ChoiceCard
-            active={volumeMode === "custom"}
-            onClick={() => {
-              onVolumeMode("custom");
-              if (volumeSizes.length === 0) {
-                const volCount = Math.ceil(effectiveTotal / volumeSize);
-                const base = Math.floor(effectiveTotal / volCount);
-                const remainder = effectiveTotal - base * volCount;
-                const sizes: number[] = [];
-                for (let i = 0; i < volCount; i++) {
-                  sizes.push(base + (i < remainder ? 1 : 0));
-                }
-                onVolumeSizes(sizes);
-              }
-            }}
-            title="Quantidade por volume"
-            text="Defina quantos capítulos em cada volume."
-          />
+      {/* 1. Formato de entrega e divisão de volumes no topo */}
+      <div className="border-[3px] border-ink rounded-lg bg-card overflow-hidden shadow-comic-sm">
+        <div className="flex items-center gap-2 bg-comic-yellow border-b-[3px] border-ink px-4 py-2">
+          <FileStack className="h-4 w-4" />
+          <h3 className="font-display text-lg leading-none">Como entregar e organizar?</h3>
         </div>
-
-        {volumeMode === "fixed" ? (
-          <div className="flex items-center gap-3">
-            <Label className="font-display text-sm">Capítulos por volume:</Label>
-            <Input
-              type="number"
-              min={1}
-              max={effectiveTotal}
-              value={volumeSize}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(effectiveTotal, Number(e.target.value) || 1));
-                onVolumeSize(v);
-              }}
-              className="border-[3px] border-ink h-10 w-24 shadow-comic-sm"
+        <div className="p-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ChoiceCard
+              active={grouping === "single"}
+              onClick={() => onGrouping("single")}
+              icon={<FileStack />}
+              title="Arquivo único"
+              text="Junta todos os capítulos selecionados em um único arquivo."
             />
-            <span className="text-sm font-medium opacity-70">
-              = {Math.ceil(effectiveTotal / volumeSize)} volume(s)
-            </span>
+            <ChoiceCard
+              active={grouping === "separate"}
+              onClick={() => onGrouping("separate")}
+              icon={<BookOpen />}
+              title="Arquivos separados / Volumes"
+              text="Divide os capítulos em múltiplos volumes para o Kindle."
+            />
           </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {volumeSizes.map((size, i) => (
-                <div key={i} className="flex items-center gap-1">
-                  <span className="font-display text-xs">Vol.{i + 1}:</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={size}
-                    onChange={(e) => {
-                      const next = [...volumeSizes];
-                      next[i] = Math.max(1, Number(e.target.value) || 1);
-                      onVolumeSizes(next);
-                    }}
-                    className="border-[2.5px] border-ink h-9 w-16 shadow-comic-sm text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onVolumeSizes(volumeSizes.filter((_, j) => j !== i))}
-                    className="border-[2px] border-ink shadow-comic-sm font-display h-7 w-7 p-0"
+
+          {grouping === "separate" && (
+            <div className="border-[2.5px] border-dashed border-ink/40 rounded-lg p-3.5 bg-muted/20 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <p className="font-display text-base">Divisão de volumes:</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onVolumeMode("fixed")}
+                    className={cn(
+                      "font-display text-xs px-2.5 py-1 rounded border-[2px] border-ink transition-all shadow-comic-sm cursor-pointer",
+                      volumeMode === "fixed" ? "bg-comic-red text-primary-foreground -translate-y-0.5" : "bg-card hover:bg-muted"
+                    )}
                   >
-                    ×
-                  </Button>
+                    Quantidade fixa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onVolumeMode("custom")}
+                    className={cn(
+                      "font-display text-xs px-2.5 py-1 rounded border-[2px] border-ink transition-all shadow-comic-sm cursor-pointer",
+                      volumeMode === "custom" ? "bg-comic-red text-primary-foreground -translate-y-0.5" : "bg-card hover:bg-muted"
+                    )}
+                  >
+                    Por volume (personalizado)
+                  </button>
                 </div>
-              ))}
+              </div>
+
+              {volumeMode === "fixed" ? (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Label className="font-display text-sm">Capítulos por volume:</Label>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onVolumeSize(Math.max(1, volumeSize - 1))}
+                      disabled={volumeSize <= 1}
+                      className="h-8 w-8 p-0 border-[2px] border-ink font-display text-sm cursor-pointer"
+                    >
+                      -
+                    </Button>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={effectiveTotal || 1}
+                      value={volumeSize}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(effectiveTotal || 1, Number(e.target.value) || 1));
+                        onVolumeSize(v);
+                      }}
+                      className="border-[2.5px] border-ink h-8 w-16 shadow-comic-sm text-center font-display text-sm"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onVolumeSize(Math.min(effectiveTotal || 1, volumeSize + 1))}
+                      disabled={volumeSize >= (effectiveTotal || 1)}
+                      className="h-8 w-8 p-0 border-[2px] border-ink font-display text-sm cursor-pointer"
+                    >
+                      +
+                    </Button>
+                  </div>
+                  <span className="text-sm font-semibold bg-comic-yellow/40 border-[1.5px] border-ink/40 px-2 py-0.5 rounded">
+                    = {Math.ceil((effectiveTotal || 1) / volumeSize)} volume(s) gerado(s)
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Inputs de cada volume */}
+                  <div className="flex flex-wrap gap-2">
+                    {volumeSizes.map((size, i) => (
+                      <div key={i} className="flex items-center gap-1 bg-card border-[2px] border-ink rounded px-2 py-1 shadow-comic-sm">
+                        <span className="font-display text-xs">Vol. {i + 1}:</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={size}
+                          onChange={(e) => {
+                            const next = [...volumeSizes];
+                            next[i] = Math.max(1, Number(e.target.value) || 1);
+                            onVolumeSizes(next);
+                          }}
+                          className="border-[1.5px] border-ink h-7 w-14 text-xs text-center font-display"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (volumeSizes.length > 1) {
+                              onSplitEqually(volumeSizes.length - 1);
+                            }
+                          }}
+                          disabled={volumeSizes.length <= 1}
+                          className="font-display text-xs text-destructive hover:bg-destructive/10 rounded px-1 disabled:opacity-30 cursor-pointer"
+                          title="Remover volume e redistribuir"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-dashed border-ink/20">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onSplitEqually(Math.min(effectiveTotal, volumeSizes.length + 1))}
+                      disabled={volumeSizes.length >= effectiveTotal}
+                      className="border-[2px] border-ink shadow-comic-sm font-display text-xs h-7 cursor-pointer"
+                    >
+                      + Adicionar volume
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onSplitEqually(Math.max(1, volumeSizes.length - 1))}
+                      disabled={volumeSizes.length <= 1}
+                      className="border-[2px] border-ink shadow-comic-sm font-display text-xs h-7 cursor-pointer"
+                    >
+                      - Remover volume
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onSplitEqually(volumeSizes.length > 0 ? volumeSizes.length : (effectiveTotal >= 6 && effectiveTotal % 3 === 0 ? 3 : 2))}
+                      className="border-[2px] border-ink shadow-comic-sm font-display text-xs h-7 bg-comic-yellow/30 hover:bg-comic-yellow cursor-pointer"
+                    >
+                      Dividir por igual ({volumeSizes.length} vols)
+                    </Button>
+                    <span className="text-xs font-medium opacity-70 ml-auto">
+                      {customRemaining > 0
+                        ? `${customRemaining} capítulo(s) restantes`
+                        : customRemaining < 0
+                          ? `${Math.abs(customRemaining)} capítulo(s) excedentes`
+                          : "Todos os capítulos distribuídos ✓"}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={addCustomVolume}
-                disabled={customRemaining <= 0}
-                className="border-[2.5px] border-ink shadow-comic-sm font-display"
+          )}
+        </div>
+      </div>
+
+      {/* 2. Seleção de capítulos com busca, lote e clique e arraste */}
+      <div className="space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar capítulo..."
+              className="pl-9 pr-8 border-[2.5px] border-ink h-9 text-sm shadow-comic-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                + Adicionar volume
-              </Button>
-              <span className="text-xs font-medium opacity-70">
-                {customRemaining > 0
-                  ? `${customRemaining} capítulo(s) restantes`
-                  : customRemaining < 0
-                    ? `${Math.abs(customRemaining)} capítulo(s) excedentes`
-                    : "Todos os capítulos distribuídos"}
-              </span>
-            </div>
+                ✕
+              </button>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button
-          onClick={onSelectAll}
-          variant="outline"
-          className="border-[3px] border-ink shadow-comic-sm font-display"
-        >
-          Selecionar todos
-        </Button>
-        <Button
-          onClick={onClear}
-          variant="outline"
-          className="border-[3px] border-ink shadow-comic-sm font-display"
-        >
-          Limpar
-        </Button>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 max-h-72 overflow-auto pr-1">
-        {sorted.map((c) => {
-          const checked = selected.has(c.id);
-          const vol = calculateVolume(c.id);
-          return (
-            <label
-              key={c.id}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSelectAll}
+              className="border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-8"
+            >
+              Selecionar todos
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onClear}
+              className="border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-8"
+            >
+              Limpar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onInvert}
+              className="border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-8"
+            >
+              Inverter
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowRangePicker(!showRangePicker)}
               className={cn(
-                "flex items-center gap-3 border-[3px] border-ink rounded-lg p-3 cursor-pointer transition-all shadow-comic-sm",
-                checked ? "bg-secondary -translate-y-0.5" : "bg-card hover:-translate-y-0.5",
+                "border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-8",
+                showRangePicker && "bg-comic-yellow text-comic-ink"
               )}
             >
-              <Checkbox
-                checked={checked}
-                onCheckedChange={() => onToggle(c.id)}
-                className="h-5 w-5 border-[2.5px] border-ink data-[state=checked]:bg-comic-red data-[state=checked]:border-ink"
-              />
-              <div className="flex-1">
-                <p className="font-display text-lg leading-none">Cap. {c.number}</p>
-                <p className="text-xs font-medium opacity-80">
-                  Vol. {vol} • {c.title}
-                </p>
-              </div>
-            </label>
-          );
-        })}
-      </div>
+              Faixa de Caps
+            </Button>
+          </div>
+        </div>
 
-      <div>
-        <p className="font-display text-xl mb-3">Como entregar?</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ChoiceCard
-            active={grouping === "single"}
-            onClick={() => onGrouping("single")}
-            icon={<FileStack />}
-            title="Arquivo único"
-            text="Junta tudo num só arquivo."
-          />
-          <ChoiceCard
-            active={grouping === "separate"}
-            onClick={() => onGrouping("separate")}
-            icon={<BookOpen />}
-            title="Arquivos separados"
-            text="Um arquivo por capítulo/volume."
-          />
+        {showRangePicker && (
+          <div className="p-3 border-[2.5px] border-dashed border-ink rounded-lg bg-comic-yellow/20 flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-display">Selecionar faixa:</span>
+            <span className="font-semibold">De Cap.</span>
+            <Input
+              type="number"
+              value={rangeStart}
+              onChange={(e) => setRangeStart(e.target.value)}
+              className="w-16 h-7 text-xs border-[2px] border-ink bg-card text-center font-display"
+              placeholder="1"
+            />
+            <span className="font-semibold">Até Cap.</span>
+            <Input
+              type="number"
+              value={rangeEnd}
+              onChange={(e) => setRangeEnd(e.target.value)}
+              className="w-16 h-7 text-xs border-[2px] border-ink bg-card text-center font-display"
+              placeholder={String(sorted[sorted.length - 1]?.number || "")}
+            />
+            <Button
+              size="sm"
+              onClick={handleApplyRange}
+              className="bg-comic-blue text-accent-foreground hover:bg-comic-blue h-7 text-xs border-[2px] border-ink shadow-comic-sm font-display"
+            >
+              Selecionar faixa
+            </Button>
+          </div>
+        )}
+
+        <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+          <MousePointer className="h-3.5 w-3.5 shrink-0" />
+          <span>Clique e arraste para selecionar vários capítulos em lote, ou segure Shift + clique para intervalo.</span>
+        </p>
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-[460px] overflow-y-auto pr-1 select-none">
+          {filteredChapters.map((c) => {
+            const checked = selected.has(c.id);
+            const vol = calculateVolume(c.id);
+            return (
+              <div
+                key={c.id}
+                role="checkbox"
+                aria-checked={checked}
+                tabIndex={0}
+                onPointerDown={(e) => handleChapterPointerDown(c.id, e)}
+                onPointerEnter={() => handleChapterPointerEnter(c.id)}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    onToggle(c.id);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-3 border-[2.5px] border-ink rounded-lg p-2.5 cursor-pointer transition-all shadow-comic-sm select-none touch-none",
+                  checked
+                    ? "bg-secondary -translate-y-0.5 border-ink ring-2 ring-ink/10"
+                    : "bg-card hover:-translate-y-0.5 hover:bg-muted/40",
+                )}
+              >
+                <Checkbox
+                  checked={checked}
+                  tabIndex={-1}
+                  className="h-4.5 w-4.5 border-[2px] border-ink pointer-events-none data-[state=checked]:bg-comic-red data-[state=checked]:border-ink"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 justify-between">
+                    <p className="font-display text-base leading-none">Cap. {c.number}</p>
+                    {grouping === "separate" && (
+                      <span className="font-display text-[10px] uppercase bg-comic-yellow text-comic-ink border-[1.5px] border-ink rounded px-1.5 py-0.5">
+                        Vol. {vol}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium opacity-80 truncate mt-0.5">
+                    {c.title || `Capítulo ${c.number}`}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1637,7 +2021,7 @@ function StepDelivery({
 
       <div>
         <p className="font-display text-xl mb-3">Resumo</p>
-        <ComicPanel bg="halftone" padding="md" className="space-y-2 text-sm font-medium">
+        <ComicPanel bg="card" padding="md" className="space-y-2 text-sm font-medium">
           <SummaryRow
             label="Origem"
             value={data.inspectData?.metadata.title ?? "—"}
