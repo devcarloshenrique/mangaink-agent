@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { Cog, Mail, Lock, HardDrive, Palette, User, Loader2, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeSelector } from "@/components/theme/ThemeSelector";
@@ -127,9 +126,8 @@ function ConfigPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-3xl px-4 py-10 space-y-8">
+
         <div className="flex items-center gap-3">
           <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
             <Cog />

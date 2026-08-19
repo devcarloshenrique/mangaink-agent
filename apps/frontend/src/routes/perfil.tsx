@@ -1,8 +1,8 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
-import { ComicHeader } from "@/components/comic/Header";
+import { useMemo } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { useAuth } from "@/hooks/useAuth";
-import { useBiblioteca } from "@/hooks/useBiblioteca";
+import { useConversionsList, groupConversionsBySource } from "@/hooks/useConversions";
 import { MonthlyChart } from "@/components/perfil/MonthlyChart";
 import { TopReadings } from "@/components/perfil/TopReadings";
 import { BarChart3, ArrowLeft, BookOpen, HardDrive, Send } from "lucide-react";
@@ -15,19 +15,17 @@ export const Route = createFileRoute("/perfil")({
 
 function PerfilPage() {
   const { user } = useAuth();
-  const { series } = useBiblioteca();
+  const { data: convData } = useConversionsList({ limit: 100 });
+  const conversions = convData?.items ?? [];
 
-  const totalFiles = series.reduce((s, serie) => s + serie.files.length, 0);
-  const totalMB = series.reduce(
-    (s, serie) => s + serie.files.reduce((fs, f) => fs + f.bytes, 0),
-    0,
-  );
-  const totalSent = series.reduce((s, serie) => s + serie.files.filter((f) => f.sent).length, 0);
+  const series = useMemo(() => groupConversionsBySource(conversions), [conversions]);
+  const totalFiles = conversions.length;
+  const totalSent = conversions.filter((c) => c.status === "completed").length;
 
   return (
     <div className="min-h-screen bg-background">
-      <ComicHeader />
       <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
+
         <Link
           to="/"
           className="inline-flex items-center gap-1 font-display text-sm underline underline-offset-4 hover:text-comic-red"

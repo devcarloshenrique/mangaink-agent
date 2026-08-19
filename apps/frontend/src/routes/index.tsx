@@ -1,5 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
-import { ComicHeader } from "@/components/comic/Header";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
@@ -60,7 +59,7 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <ComicHeader />
+
 
       <section className="border-b-[3px] border-ink bg-comic-yellow relative overflow-hidden">
         <div className="absolute inset-0 bg-halftone opacity-25 pointer-events-none" />

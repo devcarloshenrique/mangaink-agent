@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { StepIndicator } from "@/components/comic/StepIndicator";
@@ -17,7 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
+
 import { useAuth } from "@/hooks/useAuth";
 import { useScraping } from "@/hooks/useScraping";
 import { useConversionOptions } from "@/hooks/useConversionOptions";
@@ -280,8 +280,8 @@ function WizardPage() {
               coverMode: config.books.length === 1 ? "single" : "per-volume",
               volumeMode: "fixed",
               volumeSize: config.books[0]?.chapters.length ?? 10,
-              device: config.output.deviceId,
-              format: config.output.format,
+              device: config.output?.deviceId ?? "",
+              format: config.output?.format ?? "EPUB",
               fieldOptions: config.options as Record<string, string | number | boolean>,
               meta: {
                 title: config.metadata.title ?? source.metadata.title,
@@ -358,9 +358,6 @@ function WizardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
-
       <div className="mx-auto max-w-5xl px-4 py-8 md:py-12">
         <div className="text-center mb-6">
           <SpeechBubble variant="yellow" tail="bottom" className="mb-4">

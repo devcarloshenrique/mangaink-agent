@@ -1,6 +1,5 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { Calendar, Play, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authGuard } from "./-authGuard";
@@ -76,9 +75,8 @@ function AgendamentosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
+
         <div>
           <div className="flex items-center gap-3 mb-3">
             <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">

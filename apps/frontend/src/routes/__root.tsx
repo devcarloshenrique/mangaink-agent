@@ -1,11 +1,20 @@
-import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, useRouterState } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ComicIntensityProvider } from "@/hooks/useComicIntensity";
 import { useAuth } from "@/hooks/useAuth";
+import { ComicHeader } from "@/components/comic/Header";
+import { Toaster } from "sonner";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 30, // 30s
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function NotFoundComponent() {
   return (
@@ -29,9 +38,11 @@ function NotFoundComponent() {
   );
 }
 
-/** Aguarda a restauração da sessão antes de renderizar a árvore de rotas */
+/** Aguarda a restauração da sessão antes de renderizar a árvore de rotas com Header persistente */
 function AppShell() {
   const { isLoading } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isFullscreenReader = pathname.includes("/reader-chapter");
 
   if (isLoading) {
     return (
@@ -46,7 +57,13 @@ function AppShell() {
     );
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Toaster richColors position="top-right" />
+      {!isFullscreenReader && <ComicHeader />}
+      <Outlet />
+    </>
+  );
 }
 
 export const Route = createRootRoute({
@@ -67,3 +84,4 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
+

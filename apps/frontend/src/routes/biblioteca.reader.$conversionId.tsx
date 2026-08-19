@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "sonner";
 import { ArrowLeft, BookOpen, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { conversionsApi, tokenStore } from "@/lib/api";
 import JSZip from "jszip";
+
 
 export const Route = createFileRoute("/biblioteca/reader/$conversionId")({
   validateSearch: z.object({
@@ -154,8 +153,6 @@ function ReaderPage() {
   if (!readerData && jobs.length > 0) {
     return (
       <div className="min-h-screen bg-background">
-        <Toaster richColors position="top-right" />
-        <ComicHeader />
         <div className="mx-auto max-w-4xl px-4 py-10">
           <div className="flex items-center gap-3 mb-6">
             <button

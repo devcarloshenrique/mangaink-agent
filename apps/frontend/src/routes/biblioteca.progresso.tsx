@@ -11,13 +11,12 @@ import {
   Terminal,
   Zap,
 } from "lucide-react";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Toaster } from "sonner";
+
 import { cn } from "@/lib/utils";
 import { getMockConversionRequest } from "@/lib/mock-add-manga";
 
@@ -159,8 +158,6 @@ function MockProgressPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-3xl px-4 py-10">
         <button
           type="button"

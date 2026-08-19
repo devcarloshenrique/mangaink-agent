@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { authApi, userApi, ApiError } from "@/lib/api";
+import { authSession } from "@/lib/authSession";
 import type { User, LoginCredentials, RegisterData, UpdateProfileData } from "@/types/auth";
 
 // ─── Context type ─────────────────────────────────────────────────────────────
@@ -32,8 +33,8 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => authSession.getUser());
+  const [isLoading, setIsLoading] = useState(() => !authSession.isInitialized());
 
   // ── Restaurar sessão ao montar ─────────────────────────────────────────────
   useEffect(() => {
@@ -41,11 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function restoreSession() {
       try {
-        const currentUser = await authApi.me();
+        const currentUser = await authSession.ensureInitialized();
         if (!cancelled) setUser(currentUser);
       } catch {
         // Token inválido ou expirado — limpa estado
         authApi.logout();
+        authSession.clear();
         if (!cancelled) setUser(null);
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -61,31 +63,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Métodos de Auth ────────────────────────────────────────────────────────
   const login = useCallback(async (credentials: LoginCredentials) => {
     const { user: loggedUser } = await authApi.login(credentials);
+    authSession.set(loggedUser);
     setUser(loggedUser);
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
     const { user: registeredUser } = await authApi.register(data);
+    authSession.set(registeredUser);
     setUser(registeredUser);
   }, []);
 
   const logout = useCallback(async () => {
     await authApi.logout();
+    authSession.clear();
     setUser(null);
   }, []);
 
   const refreshSession = useCallback(async () => {
     try {
       const currentUser = await authApi.me();
+      authSession.set(currentUser);
       setUser(currentUser);
     } catch {
       authApi.logout();
+      authSession.clear();
       setUser(null);
     }
   }, []);
 
   const updateProfile = useCallback(async (data: UpdateProfileData) => {
     const updatedUser = await userApi.updateMe(data);
+    authSession.set(updatedUser);
     setUser(updatedUser);
   }, []);
 

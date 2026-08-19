@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SearchBar, highlightMatch } from "@/components/biblioteca/SearchBar";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "sonner";
 import {
   Sparkles,
   ExternalLink,
@@ -149,9 +147,8 @@ function FontesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
+
         <div className="flex items-center gap-3 mb-4">
           <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
             <Sparkles />

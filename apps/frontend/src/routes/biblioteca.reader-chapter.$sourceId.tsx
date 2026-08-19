@@ -2,19 +2,17 @@ import { useState, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { ChapterReader } from "@/components/reader/ChapterReader";
-import { Toaster } from "sonner";
 import { chaptersApi } from "@/lib/api";
 import { scrapingApi } from "@/lib/api";
-import { authGuard } from "./-authGuard";
 import type { SourceInspectResponse } from "@/types/scraping";
 
 export const Route = createFileRoute("/biblioteca/reader-chapter/$sourceId")({
   validateSearch: z.object({
     chapterId: z.string(),
   }),
-  beforeLoad: authGuard,
   component: ChapterReaderPage,
 });
+
 
 function ChapterReaderPage() {
   const { sourceId } = Route.useParams();
@@ -85,7 +83,6 @@ function ChapterReaderPage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-reader-bg">
-      <Toaster richColors position="top-right" />
       <ChapterReader
         sourceId={sourceId}
         chapterId={chapterId}

@@ -2,14 +2,13 @@ import { createFileRoute, useNavigate, Link, useSearch } from "@tanstack/react-r
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { Lock, User, Loader2 } from "lucide-react";
 import { ApiError } from "@/lib/api";
 
@@ -18,58 +17,54 @@ const loginSchema = z.object({
   identifier: z
     .string()
     .trim()
-    .min(3, "E-mail ou nome de usuário deve ter no mínimo 3 caracteres")
-    .max(255, "E-mail ou nome de usuário deve ter no máximo 255 caracteres"),
-  password: z.string().min(1, "Senha é obrigatória"),
+    .min(1, "Informe seu e-mail ou nome de usuário"),
+  password: z.string().min(1, "Informe sua senha"),
 });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginFormValues = z.infer<typeof loginSchema>;
 
-// ─── Rota ─────────────────────────────────────────────────────────────────────
 export const Route = createFileRoute("/login")({
-  validateSearch: z.object({
-    redirect: z.string().optional(),
-  }),
   component: LoginPage,
 });
 
-// ─── Componente ───────────────────────────────────────────────────────────────
 function LoginPage() {
-  const navigate = useNavigate();
-  const search = useSearch({ from: "/login" });
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { redirect?: string };
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginForm>({
+  } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = async (data: LoginForm) => {
+  const onSubmit = async (values: LoginFormValues) => {
     try {
-      await login({ identifier: data.identifier, password: data.password });
-      toast.success("Bem-vindo de volta!");
-      const destination = search.redirect ?? "/";
-      navigate({ to: destination as "/" });
+      await login(values);
+      toast.success("Login realizado com sucesso!");
+      const target = search.redirect && !search.redirect.includes("/login")
+        ? search.redirect
+        : "/";
+      navigate({ to: target as "/" });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          toast.error("Credenciais inválidas. Verifique seu e-mail/usuário e senha.");
+          toast.error("Credenciais inválidas. Verifique usuário e senha.");
+        } else if (err.status === 429) {
+          toast.error("Muitas tentativas. Aguarde alguns instantes.");
         } else {
-          toast.error(err.message);
+          toast.error(err.message || "Erro ao realizar login");
         }
       } else {
-        toast.error("Erro ao conectar com o servidor");
+        toast.error("Erro inesperado. Tente novamente.");
       }
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-md px-4 py-12">
         <div className="text-center mb-6">
           <SpeechBubble variant="yellow" tail="bottom" className="mb-4">

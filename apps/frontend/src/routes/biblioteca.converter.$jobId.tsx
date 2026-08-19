@@ -11,13 +11,11 @@ import {
   type LogEntry,
   type CorruptPageEntry,
 } from "@/hooks/useConversionProgress";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Toaster } from "sonner";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -30,12 +28,12 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/biblioteca/converter/$jobId")({
-  beforeLoad: authGuard,
   component: ConverterPage,
 });
+
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -122,7 +120,6 @@ function ConverterPage() {
   if (isLoading && !state) {
     return (
       <div className="min-h-screen bg-background">
-        <ComicHeader />
         <div className="mx-auto max-w-3xl px-4 py-20 text-center">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-comic-blue" />
           <p className="font-display text-xl">Carregando conversão…</p>
@@ -135,7 +132,6 @@ function ConverterPage() {
   if (error && !state) {
     return (
       <div className="min-h-screen bg-background">
-        <ComicHeader />
         <div className="mx-auto max-w-3xl px-4 py-20 text-center">
           <h1 className="font-display text-4xl uppercase mb-4">Conversão não encontrada</h1>
           <p className="text-sm font-medium opacity-70 mb-6">{error}</p>
@@ -170,9 +166,8 @@ function ConverterPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-3xl px-4 py-10">
+
         <button
           type="button"
           onClick={() => window.history.back()}

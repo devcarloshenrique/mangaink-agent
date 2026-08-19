@@ -2,16 +2,16 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { Lock, Mail, User as UserIcon, Loader2 } from "lucide-react";
 import { ApiError } from "@/lib/api";
+
 
 // ─── Schema de validação ───────────────────────────────────────────────────────
 const cadastroSchema = z
@@ -77,8 +77,6 @@ function CadastroPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
       <div className="mx-auto max-w-md px-4 py-12">
         <div className="text-center mb-6">
           <SpeechBubble variant="blue" tail="bottom" className="mb-4">
