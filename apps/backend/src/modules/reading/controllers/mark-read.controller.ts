@@ -6,11 +6,11 @@ import { getUserChapterProgressRepository } from '../../../shared/database/repos
 import { SourceNotFoundError } from '../../scraping/errors/scraping.errors'
 
 export async function markRead(
-  request: FastifyRequest<{ Params: ReadingChapterParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const { sourceId, chapterId } = request.params
-  const userId = request.user!.sub
+  const { sourceId, chapterId } = request.params as ReadingChapterParams
+  const userId = (request.user as { sub: string }).sub
 
   const sourceRepo = getSourceRepository()
   const source = await sourceRepo.load(sourceId)

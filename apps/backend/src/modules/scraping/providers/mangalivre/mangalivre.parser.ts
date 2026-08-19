@@ -176,6 +176,7 @@ export function parseChapters($: CheerioAPI, base: string, canonicalUrl: string)
       pages: null,
       volume: null,
       isDownloaded: false,
+      isRead: false,
     })
   })
 

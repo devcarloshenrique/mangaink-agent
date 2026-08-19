@@ -21,15 +21,13 @@ export function createInspectSourceController(runtime?: RuntimeAdapters) {
     setInspectLockService(runtime.lock)
   }
 
-  return async function inspectSource(
-    request: FastifyRequest<{ Body: InspectSourceBody; Querystring: InspectSourceQuery }>,
-    reply: FastifyReply,
-  ) {
-    const { url } = request.body
-    const refresh = request.query.refresh ?? false
+  return async function inspectSource(request: FastifyRequest, reply: FastifyReply) {
+    const { url } = request.body as InspectSourceBody
+    const refresh = (request.query as InspectSourceQuery).refresh ?? false
+    const userId = (request.user as { sub: string }).sub
 
     try {
-      const result = await useCase.execute({ url, refresh })
+      const result = await useCase.execute({ url, refresh, userId })
 
       if (result.status === 'ready') {
         return reply.code(200).send(result)

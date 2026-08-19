@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify'
 import type { IPubSub, IJournalStore } from '../../../shared/infra'
+import { applySseSecurityHeaders } from '../../../shared/utils/security-headers'
 
 export interface SSEEvent {
   type: string
@@ -39,10 +40,9 @@ export class ChapterDownloadEventsService {
     const journalKey = `${ChapterDownloadEventsService.JOURNAL_PREFIX}${sourceId}:${chapterId}`
     const id = await this.journal.nextId(idKey)
     const journalEntry: SSEEvent = { ...event, id }
-    const payload = JSON.stringify(journalEntry)
 
-    await this.journal.append(journalKey, payload)
-    await this.pubsub.publish(this.channel(sourceId, chapterId), payload)
+    await this.journal.append(journalKey, journalEntry)
+    await this.pubsub.publish(this.channel(sourceId, chapterId), journalEntry)
     await this.journal.expire(journalKey, ChapterDownloadEventsService.JOURNAL_TTL)
     await this.journal.expire(idKey, ChapterDownloadEventsService.JOURNAL_TTL)
   }
@@ -67,9 +67,9 @@ export class ChapterDownloadEventsService {
       }
     }
 
-    const onMessage = (message: string) => {
+    const onMessage = (message: unknown) => {
       try {
-        const event = JSON.parse(message) as SSEEvent
+        const event = (typeof message === 'string' ? JSON.parse(message) : message) as SSEEvent
 
         if (isReplaying) {
           liveBuffer.push(event)
@@ -89,7 +89,7 @@ export class ChapterDownloadEventsService {
     const entries = await this.journal.range(journalKey, 0, -1)
     for (const entry of entries) {
       try {
-        const event = JSON.parse(entry) as SSEEvent
+        const event = (typeof entry === 'string' ? JSON.parse(entry) : entry) as SSEEvent
         writeSse(event)
         if (event.id != null) lastReplayedId = Math.max(lastReplayedId, event.id)
       } catch {
@@ -106,20 +106,28 @@ export class ChapterDownloadEventsService {
     }
     liveBuffer.length = 0
 
+    let resolveStream: (() => void) | undefined
+    const streamDone = new Promise<void>((resolve) => {
+      resolveStream = resolve
+    })
+
     const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribe(this.channel(sourceId, chapterId), onMessage)
+      await this.pubsub.unsubscribe(this.channel(sourceId, chapterId), onMessage).catch(() => {})
+      resolveStream?.()
     })
+
+    return streamDone
   }
 
   private writeSseHeaders(reply: FastifyReply): void {
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    })
+    reply.raw.setHeader?.('Content-Type', 'text/event-stream')
+    reply.raw.setHeader?.('Cache-Control', 'no-cache')
+    reply.raw.setHeader?.('Connection', 'keep-alive')
+    reply.raw.setHeader?.('X-Accel-Buffering', 'no')
+    applySseSecurityHeaders(reply.raw)
+    reply.raw.flushHeaders?.()
   }
 
   private startKeepAlive(reply: FastifyReply): NodeJS.Timeout {

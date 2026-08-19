@@ -36,6 +36,7 @@ describe('InspectQueueService', () => {
       provider: 'mangalivre',
       url: 'https://mangalivre.to/manga/test/',
       refresh: false,
+      userId: 'user-1',
     })
 
     expect(mockQueue.add).toHaveBeenCalledWith(
@@ -45,6 +46,7 @@ describe('InspectQueueService', () => {
         provider: 'mangalivre',
         url: 'https://mangalivre.to/manga/test/',
         refresh: false,
+        userId: 'user-1',
       },
       {
         jobId: 'src-test-12345678-1753891200000',
@@ -64,6 +66,7 @@ describe('InspectQueueService', () => {
       provider: 'mangalivre',
       url: 'https://mangalivre.to/manga/test/',
       refresh: true,
+      userId: 'user-1',
     })
 
     expect(mockQueue.add).toHaveBeenCalledWith(

@@ -1,5 +1,6 @@
 import { createHttpClient } from '../../../../shared/http/http-client'
 import { createSourceId } from '../../../../shared/utils/id-generator'
+import { env } from '../../../../shared/config/env'
 import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
 import type { RateLimiter } from '../../rate-limit/types'
 import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
@@ -25,7 +26,7 @@ const http = createHttpClient({
   headers: {
     'Content-Type': 'application/json',
     'x-noencryptionbritta': '1',
-    'X-API-Token': 'bunker_api_token_secreto_2025',
+    'X-API-Token': env.X_API_TOKEN,
     Referer: `${BASE_URL}/`,
     Origin: BASE_URL,
   },

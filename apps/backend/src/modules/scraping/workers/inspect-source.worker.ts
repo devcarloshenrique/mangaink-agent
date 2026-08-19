@@ -2,7 +2,9 @@ import { join, extname } from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
 import { mkdirp } from '../../../shared/utils/filesystem'
+import { assertValidImage } from '../../../shared/utils/image-validation'
 import { getProviderResolver } from '../utils/resolve-provider'
+import { logger } from '../../../shared/logging/logger'
 
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
@@ -13,6 +15,7 @@ import {
   type QueueWorkerJob,
 } from '../../../shared/infra/queue-worker'
 import type { ProgressMessage } from '../services/source-events.service'
+import { clearInspectOwner } from '../services/inspect-owner-status-store'
 import type { SourceInspectJob } from '../types/source.types'
 import type { SourceMetadataFile } from '../types/metadata.types'
 
@@ -39,12 +42,16 @@ export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): Qu
     queueName: QUEUE_NAME,
     concurrency: 3,
     processor: async (job: QueueWorkerJob) => {
-      const { sourceId, url } = job.data as SourceInspectJob
+      const { sourceId, url, userId } = job.data as SourceInspectJob
 
-      console.log(`[Worker] Iniciando scraping de ${sourceId}`)
+      logger.info({ sourceId, url, userId }, '[Worker] Iniciando scraping')
+
+      // Canal escopado ao usuário dono do job — impede que outro usuário observe
+      // o progresso via SSE.
+      const channel = `source:${userId}:${sourceId}`
 
       const publishProgress = (message: ProgressMessage) => {
-        return pubsub.publish(`source:${sourceId}`, JSON.stringify(message))
+        return pubsub.publish(channel, JSON.stringify(message))
       }
 
       try {
@@ -57,9 +64,9 @@ export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): Qu
         const provider = resolver.resolve(url)
         const result = await provider.inspect(url)
 
-        console.log(
-          `[Worker] Scraping: ${result.chapters.length} chapters, ${result.covers.length} covers, ` +
-            `title="${result.metadata.title}", sourceId=${sourceId}`,
+        logger.info(
+          { sourceId, chaptersCount: result.chapters.length, coversCount: result.covers.length, title: result.metadata.title },
+          '[Worker] Inspecao concluida',
         )
 
         await publishProgress({
@@ -91,17 +98,18 @@ export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): Qu
             const coverPath = join(coversDir, `${originalCover.id}${urlExt}`)
             await mkdirp(coversDir)
             const { buffer } = await provider.downloadImage(originalCover.imageUrl)
+            assertValidImage(buffer)
             await writeFile(coverPath, buffer)
-            console.log(`[Worker] Capa baixada: ${coverPath}`)
+            logger.debug({ sourceId, coverPath }, '[Worker] Capa original baixada para cache')
           } catch (err) {
-            console.warn(
-              `[Worker] Falha ao baixar capa de ${sourceId}:`,
-              err instanceof Error ? err.message : 'unknown',
+            logger.warn(
+              { sourceId, err: err instanceof Error ? err.message : String(err) },
+              '[Worker] Falha ao baixar capa — nao critico, continuando',
             )
           }
         }
 
-        console.log(`[Worker] Scraping concluído: ${sourceId}`)
+        logger.info({ sourceId }, '[Worker] Scraping concluido com sucesso')
 
         await publishProgress({
           stage: 'completed',
@@ -109,7 +117,10 @@ export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): Qu
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro desconhecido'
-        console.error(`[Worker] Falha no scraping de ${sourceId}:`, message)
+        logger.error(
+          { sourceId, url, err: err instanceof Error ? { message: err.message, stack: err.stack } : String(err) },
+          '[Worker] Falha no scraping',
+        )
 
         await publishProgress({
           stage: 'failed',
@@ -121,9 +132,17 @@ export function startInspectSourceWorker(deps: { runtime: RuntimeAdapters }): Qu
         try {
           await lockService.release(sourceId)
         } catch (err) {
-          console.warn(
-            `[Worker] Falha ao liberar lock de ${sourceId}:`,
-            err instanceof Error ? err.message : 'unknown',
+          logger.warn(
+            { sourceId, err: err instanceof Error ? err.message : String(err) },
+            '[Worker] Falha ao liberar lock',
+          )
+        }
+        try {
+          await clearInspectOwner(sourceId)
+        } catch (err) {
+          logger.warn(
+            { sourceId, err: err instanceof Error ? err.message : String(err) },
+            '[Worker] Falha ao limpar dono de inspecao',
           )
         }
       }

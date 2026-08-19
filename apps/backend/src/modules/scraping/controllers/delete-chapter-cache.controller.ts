@@ -9,10 +9,10 @@ import { PrismaSourceRepository } from '../repositories/prisma-source.repository
 const resolver = getProviderResolver()
 
 export async function deleteChapterCache(
-  request: FastifyRequest<{ Params: { sourceId: string; chapterId: string } }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const { sourceId, chapterId } = request.params
+  const { sourceId, chapterId } = request.params as { sourceId: string; chapterId: string }
 
   const sourceRepo = new PrismaSourceRepository()
   const metadata = await sourceRepo.load(sourceId)
@@ -22,7 +22,7 @@ export async function deleteChapterCache(
 
   const provider = resolver.listAll().find((p) => p.slug === metadata.provider.slug)
   if (!provider) {
-    throw new ProviderNotFoundError(metadata.url)
+    throw new ProviderNotFoundError(metadata.source.url)
   }
 
   const service = new ChapterImageService(provider, sourceId, chapterId, env.STORAGE_PATH)

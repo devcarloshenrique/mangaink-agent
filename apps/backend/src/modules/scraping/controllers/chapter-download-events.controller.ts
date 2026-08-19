@@ -19,10 +19,13 @@ export function createChapterDownloadEventsController(runtime?: RuntimeAdapters)
   const eventsService = new ChapterDownloadEventsService(pubsub, journal)
 
   return async function chapterDownloadEvents(
-    request: FastifyRequest<{ Params: ChapterParams }>,
+    request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const { sourceId, chapterId } = request.params
+    const { sourceId, chapterId } = request.params as ChapterParams
+
+    // Avisa o Fastify que vamos gerenciar o stream manualmente
+    reply.hijack()
 
     await eventsService.connectToSSE(sourceId, chapterId, reply)
   }

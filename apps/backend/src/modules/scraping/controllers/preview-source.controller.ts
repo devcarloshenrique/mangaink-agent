@@ -6,11 +6,11 @@ import { getUserChapterProgressRepository } from '../../../shared/database/repos
 import { SourceNotFoundError } from '../errors/scraping.errors'
 
 export async function getSource(
-  request: FastifyRequest<{ Params: SourceParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const { sourceId } = request.params
-  const userId = request.user?.sub
+  const { sourceId } = request.params as SourceParams
+  const userId = (request.user as { sub?: string } | undefined)?.sub
 
   const sourceRepo = getSourceRepository()
   const readingRepo = getUserChapterProgressRepository()

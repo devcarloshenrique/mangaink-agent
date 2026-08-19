@@ -4,11 +4,11 @@ import { GetProgressUseCase } from '../use-cases/get-progress.use-case'
 import { getSourceRepository, getUserChapterProgressRepository } from '../../../shared/database/repositories'
 
 export async function getProgress(
-  request: FastifyRequest<{ Params: ReadingParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const { sourceId } = request.params
-  const userId = request.user!.sub
+  const { sourceId } = request.params as ReadingParams
+  const userId = (request.user as { sub: string }).sub
 
   const readingRepo = getUserChapterProgressRepository()
   const sourceRepo = getSourceRepository()

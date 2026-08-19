@@ -1,6 +1,7 @@
 import Redis from 'ioredis'
 import { createSafeRedis } from '../../../shared/redis/safe-redis'
 import { env } from '../../../shared/config/env'
+import { logger } from '../../../shared/logging/logger'
 
 export type ProgressStage = 'metadata' | 'chapters' | 'covers' | 'completed' | 'failed'
 
@@ -31,9 +32,9 @@ export class RedisPubSubService {
     try {
       await this.publisher.publish(this.channel(sourceId), JSON.stringify(message))
     } catch (err) {
-      console.warn(
-        `[RedisPubSub] Falha ao publicar para ${sourceId}:`,
-        err instanceof Error ? err.message : 'unknown',
+      logger.warn(
+        { sourceId, err: err instanceof Error ? err.message : 'unknown' },
+        '[RedisPubSub] Falha ao publicar progresso',
       )
     }
   }

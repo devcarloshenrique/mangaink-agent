@@ -19,13 +19,30 @@ import { ChapterDownloadEventsService } from '../../services/chapter-download-ev
 import type { FastifyReply } from 'fastify'
 
 function createMockReply() {
-  return {
+  const closeCallbacks: Array<() => void> = []
+  let isClosed = false
+  const reply = {
     raw: {
       writeHead: vi.fn(),
+      setHeader: vi.fn(),
+      flushHeaders: vi.fn(),
+      flush: vi.fn(),
       write: vi.fn(),
-      on: vi.fn(),
+      on: vi.fn((event: string, cb: () => void) => {
+        if (event === 'close') {
+          closeCallbacks.push(cb)
+          if (isClosed) {
+            queueMicrotask(() => cb())
+          }
+        }
+      }),
+      close: () => {
+        isClosed = true
+        closeCallbacks.forEach((cb) => cb())
+      },
     },
-  } as unknown as FastifyReply
+  }
+  return reply as unknown as FastifyReply & { raw: { close: () => void } }
 }
 
 describe('ChapterDownloadEventsService', () => {
@@ -57,41 +74,33 @@ describe('ChapterDownloadEventsService', () => {
     expect(mockJournal.nextId).toHaveBeenCalledWith(idKey)
     expect(mockJournal.append).toHaveBeenCalledWith(
       journalKey,
-      expect.stringContaining('"type":"completed"'),
+      expect.objectContaining({ type: 'completed', id: 7 }),
     )
     expect(mockPubSub.publish).toHaveBeenCalledWith(
       'chapter-download:src-test:chap-test',
-      expect.any(String),
+      expect.objectContaining({ type: 'completed', id: 7 }),
     )
     expect(mockJournal.expire).toHaveBeenCalledWith(journalKey, 3600)
     expect(mockJournal.expire).toHaveBeenCalledWith(idKey, 3600)
-
-    const publishPayload = JSON.parse(mockPubSub.publish.mock.calls[0][1])
-    expect(publishPayload.type).toBe('completed')
-    expect(publishPayload.id).toBe(7)
   })
 
   describe('connectToSSE', () => {
     let mockReply: ReturnType<typeof createMockReply>
 
     beforeEach(() => {
-      vi.useFakeTimers()
       mockReply = createMockReply()
     })
 
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
     it('deve escrever headers SSE e inscrever no canal raw', async () => {
-      await eventsService.connectToSSE('src-test', 'chap-test', mockReply)
+      const promise = eventsService.connectToSSE('src-test', 'chap-test', mockReply as any)
+      mockReply.raw.close()
+      await promise
 
-      expect(mockReply.raw.writeHead).toHaveBeenCalledWith(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      })
+      expect(mockReply.raw.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream')
+      expect(mockReply.raw.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache')
+      expect(mockReply.raw.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive')
+      expect(mockReply.raw.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no')
+      expect(mockReply.raw.flushHeaders).toHaveBeenCalled()
 
       expect(mockPubSub.subscribe).toHaveBeenCalledWith(
         'chapter-download:src-test:chap-test',
@@ -123,7 +132,9 @@ describe('ChapterDownloadEventsService', () => {
 
       mockJournal.range.mockResolvedValue([JSON.stringify(entry1), JSON.stringify(entry2)])
 
-      await eventsService.connectToSSE('src-test', 'chap-test', mockReply)
+      const promise = eventsService.connectToSSE('src-test', 'chap-test', mockReply as any)
+      mockReply.raw.close()
+      await promise
 
       expect(mockReply.raw.write).toHaveBeenCalledTimes(4)
       expect(mockReply.raw.write).toHaveBeenNthCalledWith(1, `event: progress\n`)

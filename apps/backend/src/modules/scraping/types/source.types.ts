@@ -59,6 +59,7 @@ export interface SourceInspectJob {
   provider: string
   url: string
   refresh: boolean
+  userId: string
 }
 
 export interface ChapterImagesResult {

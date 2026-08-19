@@ -61,6 +61,23 @@ const mockJournal = vi.hoisted(() => {
   }
 })
 
+const mockStatusStore = vi.hoisted(() => {
+  const data = new Map<string, Record<string, string>>()
+  return {
+    reset: () => data.clear(),
+    get: async (key: string) => data.get(key) ?? null,
+    set: async (key: string, partial: Record<string, string | number | undefined>, _ttl?: number) => {
+      const current = data.get(key) ?? {}
+      const merged: Record<string, string> = { ...current }
+      for (const [field, value] of Object.entries(partial)) {
+        if (value !== undefined) merged[field] = String(value)
+      }
+      data.set(key, merged)
+    },
+    clear: async (key: string) => { data.delete(key) },
+  }
+})
+
 const mockProviderRepo = vi.hoisted(() => {
   const makeSeed = (over: Record<string, unknown> = {}) => ({
     id: 'seed-id',
@@ -90,10 +107,10 @@ const mockProviderRepo = vi.hoisted(() => {
         slug: 'mangalivre',
         name: 'Manga Livre',
         engine: 'cheerio',
-        tags: ['mangá', 'português'],
+        tags: ['mangÃ¡', 'portuguÃªs'],
         status: 'active',
         description:
-          'Acervo de mangás em português com leitura online. Requer scraping de HTML (cheerio).',
+          'Acervo de mangÃ¡s em portuguÃªs com leitura online. Requer scraping de HTML (cheerio).',
         urlExample: 'https://mangalivre.to/manga/hunter-x-hunter/',
         homepage: 'https://mangalivre.to',
         searchUrl: 'https://mangalivre.to/busca/?search=',
@@ -118,7 +135,7 @@ const mockProviderRepo = vi.hoisted(() => {
         slug: 'mangasbrasuka',
         name: 'Mangas Brasukas',
         engine: 'api',
-        tags: ['mangá', 'manhwa', 'manhua', 'português'],
+        tags: ['mangÃ¡', 'manhwa', 'manhua', 'portuguÃªs'],
         status: 'active',
         rateLimitMaxConcurrent: 3,
         rateLimitMinTime: 200,
@@ -166,12 +183,19 @@ vi.mock('../../../../shared/infra/redis', async () => {
     ...actual,
     RedisPubSubAdapter: vi.fn(() => mockPubSub),
     RedisJournalAdapter: vi.fn(() => mockJournal),
+    RedisStatusStoreAdapter: vi.fn(() => mockStatusStore),
   }
 })
 
 import { createServer } from '../../../../shared/server'
 import type { FastifyInstance } from 'fastify'
 import { resetProviderResolver } from '../../utils/resolve-provider'
+import { JWT_AUDIENCE, JWT_ISSUER } from '../../../auth/services/token.service'
+import { randomUUID } from 'node:crypto'
+
+function signTestToken(app: FastifyInstance, sub = 'test-user-001', role: 'USER' | 'ADMIN' = 'ADMIN') {
+  return app.jwt.sign({ sub, role, jti: randomUUID(), iss: JWT_ISSUER, aud: JWT_AUDIENCE })
+}
 
 describe('Scraping E2E', () => {
   let app: FastifyInstance
@@ -181,16 +205,30 @@ describe('Scraping E2E', () => {
     mockLockService.reset()
     mockQueueService.reset()
     mockPubSub.reset()
+    mockJournal.reset()
+    mockStatusStore.reset()
     mockProviderRepo.reset()
     resetProviderResolver()
     app = await createServer()
   })
 
   describe('POST /api/conversions/source/inspect', () => {
-    it('deve retornar 202 com sourceId e status "processing" para URL válida', async () => {
+    it('deve retornar 401 sem token JWT (auth obrigatÃ³ria)', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/conversions/source/inspect',
+        payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
+      })
+
+      expect(response.statusCode).toBe(401)
+    })
+
+    it('deve retornar 202 com sourceId e status "processing" para URL vÃ¡lida', async () => {
+      const token = signTestToken(app)
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
         payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
       })
 
@@ -200,10 +238,12 @@ describe('Scraping E2E', () => {
       expect(body.status).toBe('processing')
     })
 
-    it('deve retornar 400 para URL inválida', async () => {
+    it('deve retornar 400 para URL invÃ¡lida', async () => {
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'POST',
         url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
         payload: { url: 'not-a-url' },
       })
 
@@ -211,10 +251,12 @@ describe('Scraping E2E', () => {
       expect(response.json()).toHaveProperty('error')
     })
 
-    it('deve retornar 422 para URL de domínio não suportado', async () => {
+    it('deve retornar 422 para URL de domÃ­nio nÃ£o suportado', async () => {
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'POST',
         url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
         payload: { url: 'https://example.com/manga/test/' },
       })
 
@@ -222,24 +264,108 @@ describe('Scraping E2E', () => {
       expect(response.json()).toHaveProperty('error')
     })
 
-    it('deve retornar 400 quando body não tem URL', async () => {
+    it('deve retornar 400 quando body nÃ£o tem URL', async () => {
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'POST',
         url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
         payload: {},
       })
 
       expect(response.statusCode).toBe(400)
     })
 
-    it('deve aceitar parâmetro refresh=true', async () => {
+    it('deve aceitar parÃ¢metro refresh=true', async () => {
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'POST',
         url: '/api/conversions/source/inspect?refresh=true',
+        headers: { authorization: `Bearer ${token}` },
         payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
       })
 
       expect([200, 202]).toContain(response.statusCode)
+    })
+
+    it('deve retornar 400 para URL acima do limite de 2048 caracteres', async () => {
+      const token = signTestToken(app)
+      const url = `https://mangalivre.to/manga/${'a'.repeat(2100)}/`
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { url },
+      })
+
+      expect(response.statusCode).toBe(400)
+    })
+
+    it('deve retornar 400 para URL whitespace-only', async () => {
+      const token = signTestToken(app)
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { url: '   ' },
+      })
+
+      expect(response.statusCode).toBe(400)
+    })
+
+    it('deve retornar 429 apÃ³s exceder o rate limit (10/min por usuÃ¡rio)', async () => {
+      const token = signTestToken(app)
+      for (let i = 0; i < 10; i += 1) {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/conversions/source/inspect',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
+        })
+        expect([200, 202]).toContain(response.statusCode)
+      }
+
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
+      })
+      expect(limited.statusCode).toBe(429)
+    })
+  })
+
+  describe('GET /api/conversions/source/inspect/:sourceId/events (SSE)', () => {
+    it('deve retornar 401 sem token JWT', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/inspect/src-any-12345678/events',
+      })
+
+      expect(response.statusCode).toBe(401)
+    })
+
+    it('deve retornar 403 para SSE de job alheio (dono â‰  usuÃ¡rio)', async () => {
+      // UsuÃ¡rio A dispara a inspeÃ§Ã£o â†’ registra ownership do sourceId
+      const tokenA = signTestToken(app, 'user-owner-aaa')
+      const post = await app.inject({
+        method: 'POST',
+        url: '/api/conversions/source/inspect',
+        headers: { authorization: `Bearer ${tokenA}` },
+        payload: { url: 'https://mangalivre.to/manga/hunter-x-hunter/' },
+      })
+      expect(post.statusCode).toBe(202)
+      const sourceId = post.json().sourceId
+
+      // UsuÃ¡rio B tenta observar o SSE do job de A
+      const tokenB = signTestToken(app, 'user-intruder-bbb')
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/conversions/source/inspect/${sourceId}/events`,
+        headers: { authorization: `Bearer ${tokenB}` },
+      })
+
+      expect(response.statusCode).toBe(403)
     })
   })
 
@@ -311,7 +437,7 @@ describe('Scraping E2E', () => {
       expect(body.providers.length).toBeGreaterThan(0)
     })
 
-    it('deve incluir o shape completo e não expor allowedDomains', async () => {
+    it('deve incluir o shape completo e nÃ£o expor allowedDomains', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/conversions/source/providers',
@@ -338,7 +464,7 @@ describe('Scraping E2E', () => {
 
       const mangalivre = body.providers.find((p: { slug: string }) => p.slug === 'mangalivre')
       expect(mangalivre.description).toBe(
-        'Acervo de mangás em português com leitura online. Requer scraping de HTML (cheerio).',
+        'Acervo de mangÃ¡s em portuguÃªs com leitura online. Requer scraping de HTML (cheerio).',
       )
       expect(mangalivre.urlExample).toBe('https://mangalivre.to/manga/hunter-x-hunter/')
       expect(mangalivre.homepage).toBe('https://mangalivre.to')
@@ -358,8 +484,21 @@ describe('Scraping E2E', () => {
       expect(response.statusCode).toBe(401)
     })
 
+    it('deve retornar 403 para usuário autenticado sem role ADMIN', async () => {
+      const userToken = signTestToken(app, 'regular-user', 'USER')
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/conversions/source/providers/mangalivre',
+        headers: { authorization: `Bearer ${userToken}` },
+        payload: { status: 'slow' },
+      })
+
+      expect(response.statusCode).toBe(403)
+      expect(response.json()).toEqual({ error: 'Acesso negado' })
+    })
+
     it('deve retornar 404 para slug inexistente', async () => {
-      const token = app.jwt.sign({ sub: 'test-user-001' })
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'PATCH',
         url: '/api/conversions/source/providers/slug-inexistente',
@@ -372,7 +511,7 @@ describe('Scraping E2E', () => {
     })
 
     it('deve atualizar o provider e refletir no GET', async () => {
-      const token = app.jwt.sign({ sub: 'test-user-001' })
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'PATCH',
         url: '/api/conversions/source/providers/mangalivre',
@@ -400,8 +539,8 @@ describe('Scraping E2E', () => {
       expect(mangalivre).not.toHaveProperty('allowedDomains')
     })
 
-    it('deve retornar 400 para body inválido', async () => {
-      const token = app.jwt.sign({ sub: 'test-user-001' })
+    it('deve retornar 400 para body invÃ¡lido', async () => {
+      const token = signTestToken(app)
       const response = await app.inject({
         method: 'PATCH',
         url: '/api/conversions/source/providers/mangalivre',

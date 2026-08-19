@@ -35,7 +35,7 @@ describe('SourceEventsService', () => {
   it('deve configurar headers SSE corretamente', async () => {
     const reply = createMockReply()
 
-    const streamPromise = eventsService.stream('src-test-12345678', reply as any)
+    const streamPromise = eventsService.stream('user-1', 'src-test-12345678', reply as any)
 
     expect(reply.raw.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream')
     expect(reply.raw.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache')
@@ -57,9 +57,9 @@ describe('SourceEventsService', () => {
       return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    const streamPromise = eventsService.stream('src-test-12345678', reply as any)
+    const streamPromise = eventsService.stream('user-1', 'src-test-12345678', reply as any)
 
-    expect(pubsub.subscribe).toHaveBeenCalledWith('source:src-test-12345678', expect.any(Function))
+    expect(pubsub.subscribe).toHaveBeenCalledWith('source:user-1:src-test-12345678', expect.any(Function))
     expect(reply.raw.write).not.toHaveBeenCalled()
 
     await Promise.resolve()
@@ -89,7 +89,7 @@ describe('SourceEventsService', () => {
       return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    const streamPromise = eventsService.stream('src-test-12345678', reply as any)
+    const streamPromise = eventsService.stream('user-1', 'src-test-12345678', reply as any)
 
     await Promise.resolve()
     callback!(JSON.stringify({ stage: 'completed', progress: 100 }))
@@ -111,7 +111,7 @@ describe('SourceEventsService', () => {
       return { unsubscribe: vi.fn().mockResolvedValue(undefined) }
     })
 
-    const streamPromise = eventsService.stream('src-test-12345678', reply as any)
+    const streamPromise = eventsService.stream('user-1', 'src-test-12345678', reply as any)
 
     await Promise.resolve()
     callback!(JSON.stringify({ stage: 'failed', message: 'Falha ao processar' }))
@@ -127,7 +127,7 @@ describe('SourceEventsService', () => {
   it('deve fechar conexão ao desconectar cliente', async () => {
     const reply = createMockReply()
 
-    const streamPromise = eventsService.stream('src-test-12345678', reply as any)
+    const streamPromise = eventsService.stream('user-1', 'src-test-12345678', reply as any)
 
     await Promise.resolve()
     const closeHandler = reply.raw.on.mock.calls[0][1]
@@ -137,3 +137,5 @@ describe('SourceEventsService', () => {
     expect(reply.raw.end).not.toHaveBeenCalled()
   })
 })
+
+

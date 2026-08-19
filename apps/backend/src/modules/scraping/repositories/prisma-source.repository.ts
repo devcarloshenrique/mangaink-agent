@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { getPrisma } from '../../../shared/database/prisma'
+import { logger } from '../../../shared/logging/logger'
 import type { SourceCacheRepository } from './source-cache.repository'
 import type { SourceMetadataFile } from '../types/metadata.types'
 import type { MetadataCache } from '../types/metadata.types'
@@ -40,6 +41,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
         pages: ch.pages,
         volume: ch.volume,
         isDownloaded: false,
+        isRead: false,
       }))
       .sort((a, b) => parseFloat(a.number) - parseFloat(b.number))
 
@@ -176,10 +178,15 @@ export class PrismaSourceRepository implements SourceCacheRepository {
 
         const verifyChapters = await tx.chapter.count({ where: { sourceId } })
         const verifyCovers = await tx.cover.count({ where: { sourceId } })
-        console.log(
-          `[PrismaSourceRepo] Save ${sourceId}: ` +
-            `${data.chapters.length} chapters enviados, ${verifyChapters} no banco | ` +
-            `${data.covers.length} covers enviados, ${verifyCovers} no banco`,
+        logger.debug(
+          {
+            sourceId,
+            chaptersSent: data.chapters.length,
+            chaptersInDb: verifyChapters,
+            coversSent: data.covers.length,
+            coversInDb: verifyCovers,
+          },
+          '[PrismaSourceRepo] Save concluído',
         )
       },
       {

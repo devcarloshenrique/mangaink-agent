@@ -1,9 +1,10 @@
-import { readFile, readdir } from 'node:fs/promises'
+﻿import { readFile, readdir } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { getSourceRepository } from '../../../shared/database/repositories'
 import { ChapterImageService } from '../services/chapter-image.service'
 import { resolveProvider } from '../utils/resolve-provider'
 import { env } from '../../../shared/config/env'
+import { assertValidImage, detectImageContentType } from '../../../shared/utils/image-validation'
 import { SourceNotFoundError } from '../errors/scraping.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, PageNotReadyError } from '../errors/chapter-download.errors'
 
@@ -54,7 +55,7 @@ export class ServeChapterImageUseCase {
       throw new InvalidPageIndexError(index, manifest.totalImages)
     }
 
-    // 1. Cache hit — tenta encontrar arquivo com extensão conhecida
+    // 1. Cache hit â€” tenta encontrar arquivo com extensÃ£o conhecida
     const cacheDir = service.getCacheDir()
     const paddedIndex = String(index).padStart(4, '0')
 
@@ -71,37 +72,39 @@ export class ServeChapterImageUseCase {
         }
       }
     } catch {
-      // diretório não existe
+      // diretÃ³rio nÃ£o existe
     }
 
-    // 2. Cache miss + manifest exists — proxy via provider.downloadImage()
+    // 2. Cache miss + manifest exists â€” proxy via provider.downloadImage()
     if (manifest && manifest.urls[index - 1]) {
       const url = manifest.urls[index - 1]
       try {
-        const { buffer, contentType } = await provider!.downloadImage(url)
+        const { buffer } = await provider!.downloadImage(url)
+        assertValidImage(buffer)
         return {
           buffer,
-          contentType,
+          contentType: detectImageContentType(buffer),
           isCached: false,
         }
       } catch {
-        // Proxy falhou (URL expirada, timeout) — retornar 425 para o frontend fazer retry
+        // Proxy falhou (URL expirada, timeout) â€” retornar 425 para o frontend fazer retry
         const readyCount = await service.countCachedImages()
         throw new PageNotReadyError(sourceId, chapterId, index, readyCount, manifest.totalImages)
       }
     }
 
-    // 3. Cache miss + no manifest + chapter.url exists — fallback
+    // 3. Cache miss + no manifest + chapter.url exists â€” fallback
     if (chapter.url) {
       const imageUrls = await provider!.getChapterImages(chapter.url)
       if (index > imageUrls.length) {
         throw new InvalidPageIndexError(index, imageUrls.length)
       }
       const url = imageUrls[index - 1]
-      const { buffer, contentType } = await provider!.downloadImage(url)
+      const { buffer } = await provider!.downloadImage(url)
+      assertValidImage(buffer)
       return {
         buffer,
-        contentType,
+        contentType: detectImageContentType(buffer),
         isCached: false,
       }
     }

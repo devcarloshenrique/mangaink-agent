@@ -9,10 +9,10 @@ interface ChapterParams {
 const useCase = new GetChapterDownloadUseCase()
 
 export async function getChapterDownload(
-  request: FastifyRequest<{ Params: ChapterParams }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const { sourceId, chapterId } = request.params
+  const { sourceId, chapterId } = request.params as ChapterParams
 
   const result = await useCase.execute(sourceId, chapterId)
 

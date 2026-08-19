@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify'
 import type { IPubSub } from '../../../shared/infra'
+import { applySseSecurityHeaders } from '../../../shared/utils/security-headers'
 
 export type ProgressStage = 'metadata' | 'chapters' | 'covers' | 'completed' | 'failed'
 
@@ -19,16 +20,18 @@ export class SourceEventsService {
   constructor(private readonly pubsub: IPubSub) {}
 
   /**
-   * Inicia o streaming SSE para um sourceId.
-   * Fica ouvindo o Pub/Sub e envia os eventos para o cliente HTTP.
+   * Inicia o streaming SSE para um sourceId, escopado ao usuário dono do job
+   * (`userId`). Fica ouvindo o Pub/Sub no canal `source:{userId}:{sourceId}` e
+   * envia os eventos para o cliente HTTP.
    *
    * Fecha a conexão automaticamente ao receber 'completed' ou 'failed'.
    */
-  async stream(sourceId: string, reply: FastifyReply): Promise<void> {
+  async stream(userId: string, sourceId: string, reply: FastifyReply): Promise<void> {
     reply.raw.setHeader('Content-Type', 'text/event-stream')
     reply.raw.setHeader('Cache-Control', 'no-cache')
     reply.raw.setHeader('Connection', 'keep-alive')
     reply.raw.setHeader('X-Accel-Buffering', 'no')
+    applySseSecurityHeaders(reply.raw)
     reply.raw.flushHeaders()
 
     const send = (event: string, data: object) => {
@@ -40,7 +43,7 @@ export class SourceEventsService {
       resolveStream = resolve
     })
 
-    const handle = await this.pubsub.subscribe(`source:${sourceId}`, (rawMessage) => {
+    const handle = await this.pubsub.subscribe(`source:${userId}:${sourceId}`, (rawMessage) => {
       let msg: ProgressMessage
       try {
         msg = JSON.parse(rawMessage) as ProgressMessage

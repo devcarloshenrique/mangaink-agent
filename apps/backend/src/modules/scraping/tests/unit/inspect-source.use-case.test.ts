@@ -108,6 +108,13 @@ vi.mock('../../services/inspect-queue.service', () => ({
   InspectQueueService: vi.fn(() => sharedInstances.queueService),
 }))
 
+vi.mock('../../services/inspect-owner-status-store', () => ({
+  setInspectOwner: vi.fn().mockResolvedValue(undefined),
+  getInspectOwner: vi.fn().mockResolvedValue(null),
+  clearInspectOwner: vi.fn().mockResolvedValue(undefined),
+  setInspectOwnerStatusStore: vi.fn(),
+}))
+
 import { InspectSourceUseCase } from '../../use-cases/inspect-source.use-case'
 
 describe('InspectSourceUseCase', () => {
@@ -128,7 +135,7 @@ describe('InspectSourceUseCase', () => {
       const url = 'https://test.example.com/manga/test-series/'
 
       // First call: cache miss, returns processing and generates sourceId
-      const firstResult = await useCase.execute({ url, refresh: false })
+      const firstResult = await useCase.execute({ url, refresh: false, userId: 'user-1' })
       expect(firstResult.status).toBe('processing')
 
       // Pre-populate cache with the correct sourceId
@@ -146,7 +153,7 @@ describe('InspectSourceUseCase', () => {
       })
 
       // Second call: cache hit!
-      const result = await useCase.execute({ url, refresh: false })
+      const result = await useCase.execute({ url, refresh: false, userId: 'user-1' })
       expect(result.status).toBe('ready')
       expect(result.sourceId).toBe(firstResult.sourceId)
     })
@@ -155,6 +162,7 @@ describe('InspectSourceUseCase', () => {
       const result = await useCase.execute({
         url: 'https://test.example.com/manga/test-series/',
         refresh: false,
+        userId: 'user-1',
       })
 
       expect(result.status).toBe('processing')
@@ -175,18 +183,20 @@ describe('InspectSourceUseCase', () => {
         cache: { createdAt: now, updatedAt: now, lastAccessAt: now, cacheTtlHours: 24, retentionDays: 30 },
       })
 
-      const result = await useCase.execute({ url, refresh: true })
+      const result = await useCase.execute({ url, refresh: true, userId: 'user-1' })
       expect(result.status).toBe('processing')
     })
 
-    it('deve enfileirar job quando adquire lock', async () => {
+    it('deve enfileirar job com userId quando adquire lock', async () => {
       await useCase.execute({
         url: 'https://test.example.com/manga/test-series/',
         refresh: false,
+        userId: 'user-1',
       })
 
       expect(sharedInstances.queueService.enqueuedJobs).toHaveLength(1)
       expect(sharedInstances.queueService.enqueuedJobs[0].url).toBe('https://test.example.com/manga/test-series/')
+      expect(sharedInstances.queueService.enqueuedJobs[0].userId).toBe('user-1')
     })
 
     it('deve retornar "processing" mesmo quando lock não é adquirido', async () => {
@@ -195,6 +205,7 @@ describe('InspectSourceUseCase', () => {
       const result = await useCase.execute({
         url: 'https://test.example.com/manga/test-series/',
         refresh: false,
+        userId: 'user-1',
       })
 
       expect(result.status).toBe('processing')
@@ -207,6 +218,7 @@ describe('InspectSourceUseCase', () => {
         useCase.execute({
           url: 'https://test.example.com/manga/unsupported/',
           refresh: false,
+          userId: 'user-1',
         }),
       ).rejects.toThrow('Nenhum provider suporta a URL')
     })
@@ -215,6 +227,7 @@ describe('InspectSourceUseCase', () => {
       const result1 = await useCase.execute({
         url: 'https://test.example.com/manga/test-series/',
         refresh: false,
+        userId: 'user-1',
       })
 
       sharedInstances.repo.reset()
@@ -224,6 +237,7 @@ describe('InspectSourceUseCase', () => {
       const result2 = await useCase.execute({
         url: 'https://test.example.com/manga/test-series/',
         refresh: false,
+        userId: 'user-1',
       })
 
       expect(result1.sourceId).toBe(result2.sourceId)

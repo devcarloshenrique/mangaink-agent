@@ -7,6 +7,7 @@ import { getSourceRepository } from '../../../shared/database/repositories'
 import { CacheService } from '../services/cache.service'
 import { RedisLockService } from '../services/redis-lock.service'
 import { InspectQueueService } from '../services/inspect-queue.service'
+import { setInspectOwner } from '../services/inspect-owner-status-store'
 import type { SourceInspectState } from '../types/source.types'
 import { InvalidUrlError } from '../errors/scraping.errors'
 
@@ -54,6 +55,7 @@ export function setInspectLockService(lock: ILockService): void {
 export interface InspectSourceInput {
   url: string
   refresh: boolean
+  userId: string
 }
 
 /**
@@ -104,7 +106,10 @@ export class InspectSourceUseCase {
         provider: provider.slug,
         url: canonicalUrl,
         refresh: input.refresh,
+        userId: input.userId,
       })
+      // Registra o dono da inspeção para escopar o canal SSE ao job do usuário
+      await setInspectOwner(sourceId, input.userId)
     }
     // Se não adquiriu, outro worker já está processando — apenas retorna 'processing'
 

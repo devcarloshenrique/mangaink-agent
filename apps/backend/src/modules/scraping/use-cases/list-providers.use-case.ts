@@ -1,6 +1,7 @@
 import { KNOWN_PROVIDERS } from '../providers/known-providers'
 import { toProviderResponse, type ProviderResponse } from '../dtos/provider.dto'
 import type { ProviderRepository } from '../repositories/provider.repository'
+import { logger } from '../../../shared/logging/logger'
 
 /**
  * Caso de uso: listar todos os providers a partir do banco (fonte de verdade).
@@ -25,9 +26,9 @@ export class ListProvidersUseCase {
       const providers = await this.repository.findAll()
       return providers.map(toProviderResponse)
     } catch (error) {
-      console.warn(
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error) },
         '[ListProvidersUseCase] falha ao ler providers do banco; usando known-providers.ts como fallback',
-        error,
       )
       return KNOWN_PROVIDERS.map(toProviderResponse)
     }

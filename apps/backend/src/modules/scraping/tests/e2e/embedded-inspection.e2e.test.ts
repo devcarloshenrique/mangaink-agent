@@ -2,7 +2,9 @@ import { vi, describe, it, expect, beforeAll, afterAll, beforeEach } from 'vites
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
+import { JWT_AUDIENCE, JWT_ISSUER } from '../../../auth/services/token.service'
 
 /**
  * E2E embedded (MI_EMBEDDED_MODE=1): o servidor sobe, o POST /inspect enfileira
@@ -77,11 +79,13 @@ vi.mock('../../../../shared/redis/safe-redis', () => ({
 }))
 
 const INSPECT_URL = 'https://mangalivre.to/manga/test/'
+const TEST_USER_ID = 'user-embedded-e2e'
 
 describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
   let app: FastifyInstance
   let tmpDir: string
   let sourceId: string
+  let token: string
 
   beforeAll(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'embedded-inspection-'))
@@ -112,6 +116,7 @@ describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
     sourceId = createSourceId('mangalivre', INSPECT_URL)
 
     app = await serverModule.createServer()
+    token = app.jwt.sign({ sub: TEST_USER_ID, jti: randomUUID(), iss: JWT_ISSUER, aud: JWT_AUDIENCE, role: 'USER' })
   })
 
   afterAll(async () => {
@@ -173,6 +178,7 @@ describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
     const post = await app.inject({
       method: 'POST',
       url: '/api/conversions/source/inspect',
+      headers: { authorization: `Bearer ${token}` },
       payload: { url: INSPECT_URL },
     })
 
@@ -203,11 +209,33 @@ describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/conversions/source/inspect',
+      headers: { authorization: `Bearer ${token}` },
       payload: { url: 'https://example.com/manga/test/' },
     })
 
     expect(response.statusCode).toBe(422)
     expect(response.json()).toHaveProperty('error')
+    expect(createSafeRedisMock).not.toHaveBeenCalled()
+  })
+
+  it('POST /inspect sem token → 401 (auth obrigatória)', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/conversions/source/inspect',
+      payload: { url: INSPECT_URL },
+    })
+
+    expect(response.statusCode).toBe(401)
+    expect(createSafeRedisMock).not.toHaveBeenCalled()
+  })
+
+  it('SSE /events sem token → 401', async () => {
+    const sse = await app.inject({
+      method: 'GET',
+      url: `/api/conversions/source/inspect/${sourceId}/events`,
+    })
+
+    expect(sse.statusCode).toBe(401)
     expect(createSafeRedisMock).not.toHaveBeenCalled()
   })
 
@@ -222,6 +250,7 @@ describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
     const ssePromise = app.inject({
       method: 'GET',
       url: `/api/conversions/source/inspect/${sourceId}/events`,
+      headers: { authorization: `Bearer ${token}` },
     })
 
     // Deixa a assinatura do pub/sub in-memory registrar antes do POST
@@ -230,6 +259,7 @@ describe('Embedded inspection E2E (MI_EMBEDDED_MODE=1)', () => {
     const post = await app.inject({
       method: 'POST',
       url: '/api/conversions/source/inspect',
+      headers: { authorization: `Bearer ${token}` },
       payload: { url: INSPECT_URL },
     })
     expect(post.statusCode).toBe(202)

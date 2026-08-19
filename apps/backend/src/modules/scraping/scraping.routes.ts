@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
+import rateLimit from '@fastify/rate-limit'
 import type { RuntimeAdapters } from '../../shared/infra/factory'
 import { createInspectSourceController } from './controllers/inspect-source.controller'
 import { getSource } from './controllers/preview-source.controller'
@@ -15,10 +16,16 @@ import {
 } from './dtos/provider.dto'
 import { verifyJwtOptional } from '../../shared/middlewares/verify-jwt-optional'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
+import { requireRole } from '../../shared/middlewares/require-role'
 
 interface ScrapingRoutesOptions {
   runtime?: RuntimeAdapters
 }
+
+// Rate limit do POST /inspect: por usuário autenticado (ou IP, se ausente).
+// Escopo apenas desta rota (global: false).
+const INSPECT_RATE_LIMIT_MAX = 10
+const INSPECT_RATE_LIMIT_WINDOW = '1 minute'
 
 const sourceStateSchema = z.object({
   sourceId: z.string(),
@@ -74,24 +81,45 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
   const inspectSource = createInspectSourceController(opts.runtime)
   const sourceEvents = createSourceEventsController(opts.runtime)
 
+  // Rate limit por rota: apenas POST /inspect. keyGenerator usa o usuário
+  // autenticado (sub) quando presente, senão o IP.
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) => {
+      const user = (request as { user?: { sub?: string } }).user
+      return user?.sub ?? request.ip ?? 'unknown'
+    },
+  })
+
   // POST /api/conversions/source/inspect
   app.post(
     '/api/conversions/source/inspect',
     {
+      onRequest: [verifyJwt],
+      config: {
+        rateLimit: {
+          max: INSPECT_RATE_LIMIT_MAX,
+          timeWindow: INSPECT_RATE_LIMIT_WINDOW,
+        },
+      },
       schema: {
         tags: ['Scraping'],
         summary: 'Inspeciona uma obra',
         description:
           'Dispara inspeção assíncrona (scraping) de uma URL de mangá. ' +
           'Retorna 200 se o cache ainda é válido, ou 202 se um novo job de scraping foi enfileirado. ' +
-          'Acompanhe o progresso via GET /source/inspect/:sourceId/events (SSE).',
+          'Acompanhe o progresso via GET /source/inspect/:sourceId/events (SSE). ' +
+          'Requere autenticação e está sujeito a rate limit por usuário/IP.',
+        security: [{ bearerAuth: [] }],
         body: inspectSourceBodySchema,
         querystring: inspectSourceQuerySchema,
         response: {
           200: sourceStateSchema,
           202: sourceStateSchema,
           400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
           422: z.object({ error: z.string() }),
+          429: z.object({ error: z.string() }),
         },
       },
     },
@@ -102,12 +130,15 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
   app.get(
     '/api/conversions/source/inspect/:sourceId/events',
     {
+      onRequest: [verifyJwt],
       schema: {
         tags: ['Scraping'],
         summary: 'Eventos SSE de progresso do scraping',
         description:
           'Stream Server-Sent Events com atualizações em tempo real do scraping. ' +
+          'Requere autenticação e é escopado ao usuário dono do job de inspeção. ' +
           'Eventos: progress (stage, message, progress%), completed, failed.',
+        security: [{ bearerAuth: [] }],
         params: sourceParamsSchema,
       },
     },
@@ -158,7 +189,7 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
   app.patch(
     '/api/conversions/source/providers/:slug',
     {
-      onRequest: [verifyJwt],
+      onRequest: [verifyJwt, requireRole('ADMIN')],
       schema: {
         tags: ['Scraping'],
         summary: 'Atualiza um provider',
