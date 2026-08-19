@@ -26,13 +26,15 @@ export function AddMangaBar({ value, onChange, mode, onModeChange, onReady }: Pr
 
   useEffect(() => {
     if (isUrlMode) {
+      if (value && (!url || url === "")) {
+        setUrl(value);
+      }
       inputRef.current?.focus();
     } else {
       reset();
-      setUrl("");
       hasReportedRef.current = false;
     }
-  }, [isUrlMode, reset]);
+  }, [isUrlMode, reset, value]);
 
   const handleSearch = useCallback(async () => {
     if (!url.trim() || state.status === "processing") return;
@@ -85,11 +87,25 @@ export function AddMangaBar({ value, onChange, mode, onModeChange, onReady }: Pr
           type="text"
           value={inputValue}
           onChange={(e) => {
-            if (isUrlMode) setUrl(e.target.value);
-            else onChange(e.target.value);
+            if (isUrlMode) {
+              setUrl(e.target.value);
+            } else {
+              onChange(e.target.value);
+            }
           }}
           onKeyDown={(e) => {
-            if (!isUrlMode) return;
+            if (!isUrlMode) {
+              const val = value.trim();
+              if (
+                e.key === "Enter" &&
+                (val.startsWith("http://") || val.startsWith("https://"))
+              ) {
+                e.preventDefault();
+                setUrl(val);
+                onModeChange("url");
+              }
+              return;
+            }
             if (e.key === "Enter") void handleSearch();
             if (e.key === "Escape") handleLeave();
           }}
@@ -105,7 +121,10 @@ export function AddMangaBar({ value, onChange, mode, onModeChange, onReady }: Pr
             {url && (
               <button
                 type="button"
-                onClick={() => setUrl("")}
+                onClick={() => {
+                  setUrl("");
+                  onChange("");
+                }}
                 className="shrink-0 p-1.5 rounded-md opacity-50 hover:opacity-100 cursor-pointer"
               >
                 <X className="h-4 w-4" />
