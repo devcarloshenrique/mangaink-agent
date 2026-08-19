@@ -4,6 +4,11 @@ import { InvalidCredentialsError } from '../../errors/auth.errors'
 import { InMemoryUserRepository } from '../helpers/in-memory-user.repository'
 import type { PasswordHasher } from '../../services/password-hasher'
 import type { TokenService } from '../../services/token.service'
+import {
+  JWT_ISSUER,
+  JWT_AUDIENCE,
+  SESSION_EXPIRES_IN,
+} from '../../services/token.service'
 
 const makeHasher = (valid = true): PasswordHasher => ({
   hash: vi.fn(async (v) => `hashed:${v}`),
@@ -70,7 +75,7 @@ describe('LoginUserUseCase', () => {
     ).rejects.toThrow(InvalidCredentialsError)
   })
 
-  it('deve assinar o token com o sub correto (userId)', async () => {
+  it('deve assinar o token com sub, jti, iss, aud e expiração curta', async () => {
     const created = await userRepository.create({
       username: 'johndoe',
       email: 'john@example.com',
@@ -80,8 +85,13 @@ describe('LoginUserUseCase', () => {
     await useCase.execute({ identifier: 'john@example.com', password: 'senha' })
 
     expect(tokenService.sign).toHaveBeenCalledWith(
-      { sub: created.id },
-      { expiresIn: '15d' },
+      expect.objectContaining({
+        sub: created.id,
+        jti: expect.any(String),
+        iss: JWT_ISSUER,
+        aud: JWT_AUDIENCE,
+      }),
+      { expiresIn: SESSION_EXPIRES_IN },
     )
   })
 

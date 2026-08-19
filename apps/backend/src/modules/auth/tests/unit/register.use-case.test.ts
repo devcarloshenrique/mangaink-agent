@@ -4,6 +4,11 @@ import { UserAlreadyExistsError } from '../../errors/auth.errors'
 import { InMemoryUserRepository } from '../helpers/in-memory-user.repository'
 import type { PasswordHasher } from '../../services/password-hasher'
 import type { TokenService } from '../../services/token.service'
+import {
+  JWT_ISSUER,
+  JWT_AUDIENCE,
+  SESSION_EXPIRES_IN,
+} from '../../services/token.service'
 
 const makeHasher = (): PasswordHasher => ({
   hash: vi.fn(async (v) => `hashed:${v}`),
@@ -89,7 +94,7 @@ describe('RegisterUserUseCase', () => {
     ).rejects.toThrow(UserAlreadyExistsError)
   })
 
-  it('deve assinar o token com o sub correto (userId do novo usuário)', async () => {
+  it('deve assinar o token com sub, jti, iss, aud e expiração curta', async () => {
     const result = await useCase.execute({
       username: 'mariasantos',
       email: 'maria@example.com',
@@ -97,8 +102,13 @@ describe('RegisterUserUseCase', () => {
     })
 
     expect(tokenService.sign).toHaveBeenCalledWith(
-      { sub: result.user.id },
-      { expiresIn: '15d' },
+      expect.objectContaining({
+        sub: result.user.id,
+        jti: expect.any(String),
+        iss: JWT_ISSUER,
+        aud: JWT_AUDIENCE,
+      }),
+      { expiresIn: SESSION_EXPIRES_IN },
     )
   })
 })

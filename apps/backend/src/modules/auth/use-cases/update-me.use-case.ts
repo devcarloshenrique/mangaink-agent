@@ -64,6 +64,7 @@ export class UpdateMeUseCase {
       id: updatedUser.id,
       username: updatedUser.username,
       email: updatedUser.email,
+      role: updatedUser.role,
       kindleEmail: updatedUser.kindleEmail,
       avatarUrl: updatedUser.avatarUrl,
     }

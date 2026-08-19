@@ -4,6 +4,7 @@ export type CreateUserInput = {
   username: string
   email: string
   passwordHash: string
+  role?: 'USER' | 'ADMIN'
 }
 
 export type UpdateUserInput = {

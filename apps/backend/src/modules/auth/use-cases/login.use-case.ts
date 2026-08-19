@@ -4,6 +4,12 @@ import type { PasswordHasher } from '../services/password-hasher'
 import type { UserRepository } from '../../user/repositories/user.repository'
 import type { PublicUser } from '../../user/entities/user.entity'
 import { InvalidCredentialsError } from '../errors/auth.errors'
+import {
+  JWT_ISSUER,
+  JWT_AUDIENCE,
+  SESSION_EXPIRES_IN,
+} from '../services/token.service'
+import { randomUUID } from 'node:crypto'
 
 export class LoginUserUseCase {
   constructor(
@@ -29,13 +35,23 @@ export class LoginUserUseCase {
       throw new InvalidCredentialsError()
     }
 
-    const token = await this.tokenService.sign({ sub: user.id }, { expiresIn: '15d' })
+    const token = await this.tokenService.sign(
+      {
+        sub: user.id,
+        role: user.role,
+        jti: randomUUID(),
+        iss: JWT_ISSUER,
+        aud: JWT_AUDIENCE,
+      },
+      { expiresIn: SESSION_EXPIRES_IN },
+    )
 
     return {
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
+        role: user.role,
         kindleEmail: user.kindleEmail,
         avatarUrl: user.avatarUrl,
       },

@@ -1,5 +1,12 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import axiosRetry from 'axios-retry'
+import {
+  assertUrlAllowed,
+  createSsrfRequestInterceptor,
+  stripSensitiveHeadersForCrossOrigin,
+  SsrfBlockedError,
+} from './ssrf-guard'
+import { logger } from '../logging/logger'
 
 export interface HttpClientOptions {
   /** Timeout em ms (padrão: 30000) */
@@ -10,6 +17,12 @@ export interface HttpClientOptions {
   retries?: number
   /** Delay base de retry em ms (padrão: 1000) */
   retryDelay?: number
+  /** Lista de hosts permitidos (guarda de SSRF). Vazio = qualquer host público. */
+  allowedHosts?: string[]
+  /** Bloqueia também redes reservadas/documentação (guard de SSRF estrito). */
+  ssrfStrict?: boolean
+  /** Máximo de redirects seguidos manualmente (padrão: 5). */
+  maxRedirects?: number
 }
 
 const DEFAULT_HEADERS = {
@@ -31,15 +44,61 @@ export function createHttpClient(options: HttpClientOptions = {}): AxiosInstance
     headers = {},
     retries = 3,
     retryDelay = 1_000,
+    allowedHosts,
+    ssrfStrict = false,
+    maxRedirects = 5,
   } = options
 
   const instance = axios.create({
     timeout,
+    maxRedirects: 0, // Redirects são seguidos manualmente com validação SSRF
     headers: {
       ...DEFAULT_HEADERS,
       ...headers,
     },
   })
+
+  // Guard de SSRF: valida a URL (protocolo + resolução DNS + IPs privados) em
+  // cada request e antes de cada redirect. (VULN-3/MEC-67)
+  instance.interceptors.request.use(createSsrfRequestInterceptor(allowedHosts, ssrfStrict))
+
+  // Segue redirects manualmente, validando cada hop com o guard e removendo
+  // headers sensíveis (Authorization/Cookie) em saltos cross-origin.
+  instance.interceptors.response.use(async (response) => {
+    const status = response.status
+    const location = response.headers?.['location']
+    if (status >= 300 && status < 400 && location) {
+      const from = response.config.url ?? ''
+      const to = new URL(location, from).toString()
+      await assertUrlAllowed(to, { allowedHosts, strict: ssrfStrict })
+      stripSensitiveHeadersForCrossOrigin(response.config.headers as Record<string, unknown>, from, to)
+      return instance.request({
+        ...response.config,
+        url: to,
+        headers: { ...response.config.headers },
+      })
+    }
+    return response
+  }, undefined)
+
+  // Limita o número de redirects para evitar loops infinitos.
+  const originalRequest = instance.request.bind(instance)
+  instance.request = (async (config: AxiosRequestConfig) => {
+    let current = config
+    for (let i = 0; i <= maxRedirects; i += 1) {
+      const res = await originalRequest(current)
+      const status = res.status
+      const location = res.headers?.['location']
+      if (status >= 300 && status < 400 && location) {
+        const from = current.url ?? ''
+        const to = new URL(location, from).toString()
+        current = { ...current, url: to }
+        continue
+      }
+      return res
+    }
+    throw new SsrfBlockedError(current.url ?? '', 'limite de redirects excedido')
+  }) as typeof instance.request
 
   axiosRetry(instance, {
     retries,
@@ -61,7 +120,10 @@ export function createHttpClient(options: HttpClientOptions = {}): AxiosInstance
       return status === 429 || (status >= 500 && status < 600)
     },
     onRetry: (retryCount, error) => {
-      console.warn(`[HttpClient] Tentativa ${retryCount} após erro: ${error.message}`)
+      logger.warn(
+        { retryCount, err: error.message, url: error.config?.url },
+        '[HttpClient] Tentativa de retry apos erro',
+      )
     },
   })
 

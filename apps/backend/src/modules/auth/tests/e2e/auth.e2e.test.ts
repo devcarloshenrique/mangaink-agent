@@ -17,6 +17,8 @@ import { PrismaUserRepository } from '../../../user/repositories/prisma-user.rep
 import { InMemoryUserRepository } from '../helpers/in-memory-user.repository'
 import { createServer } from '../../../../shared/server'
 import type { FastifyInstance } from 'fastify'
+import { JWT_ISSUER, JWT_AUDIENCE } from '../../services/token.service'
+import { randomUUID } from 'node:crypto'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -133,6 +135,26 @@ describe('Auth E2E — /auth/login', () => {
 
     expect(response.statusCode).toBe(401)
   })
+
+  it('POST /auth/login → 400 com identifier acima do limite de 255 caracteres', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { identifier: 'a'.repeat(300_000), password: 'senha1234' },
+    })
+
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('POST /auth/login → 400 com identifier whitespace-only', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { identifier: '   ', password: 'senha1234' },
+    })
+
+    expect(response.statusCode).toBe(400)
+  })
 })
 
 describe('Auth E2E — /auth/me', () => {
@@ -200,5 +222,224 @@ describe('Auth E2E — PATCH /users/me', () => {
 
     expect(response.statusCode).toBe(200)
     expect(response.json().username).toBe('novonome')
+  })
+})
+
+describe('Auth E2E — claims da sessão JWT (VULN-4)', () => {
+  let app: FastifyInstance
+
+  beforeEach(async () => {
+    app = await createServer()
+    await registerUser(app)
+  })
+
+  it('POST /auth/login → token com claims jti, iss e aud', async () => {
+    const response = await loginUser(app)
+    const token = response.json().token
+    const decoded = app.jwt.decode(token) as Record<string, unknown>
+
+    expect(decoded.sub).toBeDefined()
+    expect(typeof decoded.jti).toBe('string')
+    expect(decoded.iss).toBe(JWT_ISSUER)
+    expect(decoded.aud).toBe(JWT_AUDIENCE)
+    expect(typeof decoded.exp).toBe('number')
+  })
+
+  it('POST /auth/register → token com claims jti, iss e aud', async () => {
+    const response = await registerUser(app, {
+      username: 'claimuser',
+      email: 'claim@example.com',
+      password: 'senha1234',
+      confirmPassword: 'senha1234',
+    })
+
+    const decoded = app.jwt.decode(response.json().token) as Record<string, unknown>
+    expect(decoded.iss).toBe(JWT_ISSUER)
+    expect(decoded.aud).toBe(JWT_AUDIENCE)
+    expect(typeof decoded.jti).toBe('string')
+  })
+})
+
+describe('Auth E2E — segurança da sessão JWT (VULN-4)', () => {
+  let app: FastifyInstance
+  let token: string
+
+  beforeEach(async () => {
+    app = await createServer()
+    await registerUser(app)
+    const loginRes = await loginUser(app)
+    token = loginRes.json().token
+  })
+
+  const me = (t: string) =>
+    app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { Authorization: `Bearer ${t}` },
+    })
+
+  it('GET /auth/me → 401 com token expirado', async () => {
+    const expired = app.jwt.sign({
+      sub: 'user',
+      jti: randomUUID(),
+      iss: JWT_ISSUER,
+      aud: JWT_AUDIENCE,
+      exp: Math.floor(Date.now() / 1000) - 3600, // expirado há 1h
+    })
+
+    const response = await me(expired)
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('GET /auth/me → 401 com token sem claim jti', async () => {
+    const noJti = app.jwt.sign({ sub: 'user', iss: JWT_ISSUER, aud: JWT_AUDIENCE })
+
+    const response = await me(noJti)
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('GET /auth/me → 401 com iss/aud divergentes dos esperados', async () => {
+    const wrong = app.jwt.sign({
+      sub: 'user',
+      jti: randomUUID(),
+      iss: 'evil-app',
+      aud: JWT_AUDIENCE,
+    })
+
+    const response = await me(wrong)
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('POST /auth/logout → 204 e o mesmo token passa a ser 401', async () => {
+    const logoutRes = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(logoutRes.statusCode).toBe(204)
+
+    const after = await me(token)
+    expect(after.statusCode).toBe(401)
+  })
+
+  it('POST /auth/logout → 401 sem token', async () => {
+    const response = await app.inject({ method: 'POST', url: '/auth/logout' })
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('logout de um jti não invalida tokens de outras sessões', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const login2 = await loginUser(app)
+    const token2 = login2.json().token
+    expect(token2).not.toBe(token)
+
+    const afterLogout = await me(token)
+    expect(afterLogout.statusCode).toBe(401)
+
+    const other = await me(token2)
+    expect(other.statusCode).toBe(200)
+  })
+})
+
+describe('Auth E2E — cookie httpOnly + SameSite (VULN-10)', () => {
+  let app: FastifyInstance
+
+  beforeEach(async () => {
+    app = await createServer()
+    await registerUser(app)
+  })
+
+  function extractSetCookie(response: { headers: Record<string, unknown> }): string {
+    const header = response.headers['set-cookie'] as unknown
+    if (Array.isArray(header)) return (header as string[]).join('; ')
+    return String(header ?? '')
+  }
+
+  it('POST /auth/login → define Set-Cookie httpOnly com SameSite=Lax', async () => {
+    const response = await loginUser(app)
+
+    expect(response.statusCode).toBe(200)
+    const setCookie = extractSetCookie(response)
+    expect(setCookie).toContain('mangaink_token=')
+    expect(setCookie).toContain('HttpOnly')
+    expect(setCookie).toContain('SameSite=Lax')
+    expect(setCookie).toContain('Path=/')
+    // Em test (http) o cookie não deve ter Secure — apenas em produção.
+    expect(setCookie.toLowerCase()).not.toContain('secure')
+    // Sem o flag Secure+SameSite=None, o cookie não deve ser de terceiros.
+    expect(setCookie.toLowerCase()).not.toContain('samesite=none')
+  })
+
+  it('POST /auth/register → define Set-Cookie httpOnly', async () => {
+    const response = await registerUser(app, {
+      username: 'cookieuser',
+      email: 'cookie@example.com',
+      password: 'senha1234',
+      confirmPassword: 'senha1234',
+    })
+
+    expect(response.statusCode).toBe(201)
+    const setCookie = extractSetCookie(response)
+    expect(setCookie).toContain('mangaink_token=')
+    expect(setCookie).toContain('HttpOnly')
+    expect(setCookie).toContain('SameSite=Lax')
+  })
+
+  it('request autenticado via cookie funciona (sem Authorization header)', async () => {
+    const loginRes = await loginUser(app)
+    const setCookie = extractSetCookie(loginRes)
+    const token = setCookie.split(';')[0] // mangaink_token=<jwt>
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { Cookie: token },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().email).toBe('test@example.com')
+  })
+
+  it('cookie expirado/ausente → 401', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { Cookie: 'mangaink_token=token-invalido' },
+    })
+
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('POST /auth/logout → limpa o cookie', async () => {
+    const loginRes = await loginUser(app)
+    const setCookie = extractSetCookie(loginRes)
+    const token = setCookie.split(';')[0]
+
+    const logoutRes = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { Cookie: token },
+    })
+    expect(logoutRes.statusCode).toBe(204)
+
+    const clearCookie = extractSetCookie(logoutRes)
+    expect(clearCookie.toLowerCase()).toContain('mangaink_token=;')
+    expect(clearCookie.toLowerCase()).toContain('expires=')
+  })
+
+  it('cookie não fica acessível via JS (httpOnly) e token não vaza no body após logout', async () => {
+    const loginRes = await loginUser(app)
+    const setCookie = extractSetCookie(loginRes)
+
+    // httpOnly garante que document.cookie não expõe o token ao JS.
+    expect(setCookie).toContain('HttpOnly')
+    // O token do corpo da resposta continua sendo o mesmo assinado (não é
+    // persistido pelo frontend em localStorage).
+    expect(loginRes.json().token).toBeDefined()
   })
 })

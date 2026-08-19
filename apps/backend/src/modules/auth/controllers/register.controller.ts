@@ -5,6 +5,7 @@ import { RegisterUserUseCase } from '../use-cases/register.use-case'
 import { UserAlreadyExistsError } from '../errors/auth.errors'
 import { BcryptPasswordHasher } from '../services/password-hasher'
 import { JwtTokenService } from '../services/token.service'
+import { setAuthCookie } from '../services/auth-cookie'
 import { PrismaUserRepository } from '../../user/repositories/prisma-user.repository'
 
 export async function register(
@@ -30,6 +31,7 @@ export async function register(
 
   try {
     const result = await useCase.execute(request.body)
+    setAuthCookie(reply, result.token)
     return reply.code(201).send(result)
   } catch (error) {
     if (error instanceof UserAlreadyExistsError) {
