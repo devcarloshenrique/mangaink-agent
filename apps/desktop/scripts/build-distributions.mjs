@@ -57,6 +57,27 @@ function log(msg) {
   process.stdout.write(`${msg}\n`)
 }
 
+/**
+ * rmSync com retry para Windows — o sistema de arquivos pode bloquear
+ * temporariamente arquivos (antivírus, OneDrive, Windows Search) causando
+ * ENOTEMPTY mesmo com { recursive: true, force: true }.
+ * Tenta até `maxAttempts` vezes com backoff linear de `delayMs`.
+ */
+function rmSyncRetry(path, maxAttempts = 5, delayMs = 600) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      rmSync(path, { recursive: true, force: true })
+      return
+    } catch (err) {
+      if (attempt === maxAttempts) throw err
+      const wait = delayMs * attempt
+      log(`  ⚠ rmSync falhou (${err.code ?? err.message}) — tentativa ${attempt}/${maxAttempts}, aguardando ${wait}ms…`)
+      // sleep síncrono via Atomics (sem dep extra)
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
+    }
+  }
+}
+
 function resolveStaging() {
   if (existsSync(MANIFEST_PATH)) {
     const m = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'))
@@ -74,7 +95,7 @@ function resolveStaging() {
 }
 
 function copyDir(src, dst) {
-  rmSync(dst, { recursive: true, force: true })
+  rmSyncRetry(dst)
   mkdirSync(dirname(dst), { recursive: true })
   cpSync(src, dst, { recursive: true, dereference: true })
 }
@@ -85,7 +106,7 @@ function buildUnpacked(staging) {
     throw new Error(`exe release ausente: ${RELEASE_EXE} — rode tauri build antes.`)
   }
 
-  rmSync(UNPACKED_DIR, { recursive: true, force: true })
+  rmSyncRetry(UNPACKED_DIR)
   mkdirSync(UNPACKED_DIR, { recursive: true })
 
   // 1. exe do app (nome de produto, paridade com o Electron)

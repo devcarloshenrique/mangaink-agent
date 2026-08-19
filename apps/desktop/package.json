@@ -1,6 +1,6 @@
 {
   "name": "@mangaink/desktop",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "private": true,
   "description": "App desktop do MangaInk Agent (shell Tauri v2)",
   "author": {

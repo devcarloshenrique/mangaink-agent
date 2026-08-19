@@ -512,6 +512,8 @@ impl BackendManager {
                     prisma_cli.to_string_lossy().to_string(),
                     "migrate".to_string(),
                     "deploy".to_string(),
+                    "--schema".to_string(),
+                    "prisma/schema.prisma".to_string(),
                 ],
                 &self.options.resources_backend_path,
                 &env,
@@ -560,6 +562,7 @@ impl BackendManager {
         let mut env: BTreeMap<String, String> = std::env::vars().collect();
         env.insert("PORT".to_string(), port.to_string());
         env.insert("JWT_SECRET".to_string(), current.jwt_secret.clone());
+        env.insert("X_API_TOKEN".to_string(), current.x_api_token.clone());
         env.insert("DATABASE_URL".to_string(), database_url.to_string());
         env.insert("STORAGE_PATH".to_string(), storage.to_string_lossy().to_string());
         env.insert(
@@ -894,6 +897,7 @@ mod tests {
             database_url: "postgresql://mangaink:mangaink@localhost:5432/mangaink_agent_db".to_string(),
             redis_url: "redis://localhost:6379".to_string(),
             jwt_secret: "a".repeat(64),
+            x_api_token: "b".repeat(64),
             managed_postgres_port: None,
         }
     }

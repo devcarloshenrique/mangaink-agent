@@ -1,6 +1,6 @@
 [package]
 name = "mangaink-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "MangaInk Agent desktop shell (Tauri v2)"
 edition = "2021"
 

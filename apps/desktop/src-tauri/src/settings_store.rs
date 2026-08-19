@@ -45,6 +45,10 @@ pub struct DesktopSettings {
     pub redis_url: String,
     #[serde(default)]
     pub jwt_secret: String,
+    /// Token de API injetado no backend como `X_API_TOKEN`.
+    /// Gerado automaticamente na primeira execução (hex 32 bytes).
+    #[serde(default)]
+    pub x_api_token: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_postgres_port: Option<u16>,
 }
@@ -68,6 +72,7 @@ impl Default for DesktopSettings {
             database_url: DEFAULT_DATABASE_URL.to_string(),
             redis_url: DEFAULT_REDIS_URL.to_string(),
             jwt_secret: String::new(),
+            x_api_token: String::new(),
             managed_postgres_port: None,
         }
     }
@@ -106,6 +111,13 @@ impl From<serde_json::Error> for SettingsStoreError {
 /// Gera um JWT secret de 64 hex chars (32 bytes aleatórios) — paridade com
 /// `randomBytes(32).toString('hex')` do Electron.
 fn generate_jwt_secret() -> String {
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Gera um X-API-Token de 64 hex chars (32 bytes aleatórios).
+fn generate_api_token() -> String {
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -213,7 +225,12 @@ impl SettingsStore {
             settings.jwt_secret = generate_jwt_secret();
         }
 
-        if read_failed || !had_parsed || missing_jwt {
+        let missing_token = settings.x_api_token.is_empty();
+        if missing_token {
+            settings.x_api_token = generate_api_token();
+        }
+
+        if read_failed || !had_parsed || missing_jwt || missing_token {
             write_json_atomic(&self.file_path, &settings).await?;
         }
 
@@ -409,6 +426,7 @@ mod tests {
             database_url: DEFAULT_DATABASE_URL.to_string(),
             redis_url: DEFAULT_REDIS_URL.to_string(),
             jwt_secret: "abc".to_string(),
+            x_api_token: "tok".to_string(),
             managed_postgres_port: Some(55432),
         };
         let json = serde_json::to_value(&s).unwrap();
@@ -417,7 +435,22 @@ mod tests {
         assert!(obj.contains_key("databaseUrl"));
         assert!(obj.contains_key("redisUrl"));
         assert!(obj.contains_key("jwtSecret"));
+        assert!(obj.contains_key("xApiToken"));
         assert!(obj.contains_key("managedPostgresPort"));
         assert!(!obj.contains_key("backend_port"));
+    }
+
+    #[tokio::test]
+    async fn gera_e_persiste_x_api_token() {
+        let dir = unique_dir("x-api-token");
+        let file_path = dir.join("settings.json");
+
+        let first = SettingsStore::new(file_path.clone()).load().await.unwrap();
+        assert_eq!(first.x_api_token.len(), 64);
+
+        let again = SettingsStore::new(file_path).load().await.unwrap();
+        assert_eq!(again.x_api_token, first.x_api_token);
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 }
