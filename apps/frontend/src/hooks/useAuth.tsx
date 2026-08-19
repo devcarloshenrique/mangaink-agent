@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    authApi.logout();
+    await authApi.logout();
     setUser(null);
   }, []);
 

@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { authGuard } from "./-authGuard";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/fontes")({
   beforeLoad: authGuard,
@@ -81,6 +82,8 @@ function chipCls(active: boolean) {
 function FontesPage() {
   const { data, isLoading, isError, refetch } = useProviders();
   const providers = useMemo(() => data?.providers ?? [], [data]);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<SourceStatus | "all">("all");
@@ -291,15 +294,17 @@ function FontesPage() {
                       </span>
                     </div>
                   </div>
+                  {isAdmin && (
                   <button
                     type="button"
                     onClick={() => setConfigSlug(p.slug)}
                     aria-label={`Configurar ${p.name}`}
-                    title="Configurar fonte"
+                    title="Configurar fonte (Admin)"
                     className="ml-auto shrink-0 flex h-9 w-9 items-center justify-center rounded-lg border-[3px] border-ink bg-muted text-foreground shadow-comic-sm transition-all hover:-translate-y-0.5 hover:bg-comic-yellow hover:text-comic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-comic-blue active:translate-y-0"
                   >
                     <Settings2 className="h-4 w-4" />
                   </button>
+                  )}
                 </div>
                 {p.description && (
                   <p className="text-xs font-medium opacity-70 mb-2 line-clamp-2">
@@ -338,6 +343,7 @@ function FontesPage() {
           </div>
         )}
 
+        {isAdmin && (
         <ProviderConfigDialog
           provider={providers.find((p) => p.slug === configSlug) ?? null}
           open={configSlug !== null}
@@ -345,6 +351,7 @@ function FontesPage() {
             if (!open) setConfigSlug(null);
           }}
         />
+        )}
       </div>
     </div>
   );

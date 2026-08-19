@@ -294,6 +294,20 @@ function formatJournalEntry(entry: SSEJournalEvent): LogEntry | null {
   const fromCache = (entry.data.fromCache as boolean) ?? false;
 
   switch (entry.type) {
+    case "job.started":
+      return {
+        ...base,
+        type: "info",
+        message: "Iniciando processamento do job…",
+      };
+
+    case "download.started":
+      return {
+        ...base,
+        type: "info",
+        message: `Iniciando download de ${entry.data.totalChapters ?? "?"} capítulos selecionados…`,
+      };
+
     case "download.chapter.started":
       return {
         ...base,
@@ -369,10 +383,15 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   const [apiState, setApiState] = useState<ConversionState | null>(null);
   const [progress, dispatch] = useReducer(progressReducer, INITIAL_PROGRESS);
   const overallProgressRef = useRef(0);
+  const logsRef = useRef(progress.logs);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCancelled, setIsCancelled] = useState(false);
   const sseRef = useRef<{ close: () => void } | null>(null);
+
+  useEffect(() => {
+    logsRef.current = progress.logs;
+  }, [progress.logs]);
 
   const closeSSE = useCallback(() => {
     sseRef.current?.close();
@@ -382,6 +401,52 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   useEffect(() => {
     return () => closeSSE();
   }, [closeSSE]);
+
+  // ── Defensive polling (safety net for SSE) ────────────────────────────────
+  useEffect(() => {
+    if (!conversionId) return;
+    if (apiState && isTerminal(apiState.status)) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const fresh = await conversionsApi.get(conversionId);
+        setApiState(fresh);
+
+        if (isTerminal(fresh.status)) {
+          closeSSE();
+          if (logsRef.current.length === 0) {
+            try {
+              const entries = await conversionsApi.getLogs(conversionId);
+              for (const entry of entries) {
+                const log = formatJournalEntry(entry);
+                if (log) dispatch({ type: "ADD_LOG", entry: log });
+              }
+            } catch {
+              // logs não disponíveis — mantém logs atuais
+            }
+          }
+          const config = fresh.config as { books?: { chapters?: string[] }[] };
+          const processed = fresh.jobs
+            .filter((j) => j.status === "completed")
+            .reduce((sum, j) => {
+              const book = config?.books?.[j.index];
+              return sum + (book?.chapters?.length ?? 0);
+            }, 0);
+          dispatch({
+            type: "SET_TOTALS",
+            totalChapters:
+              config?.books?.reduce((sum, b) => sum + (b.chapters?.length ?? 0), 0) ?? 0,
+            totalJobs: fresh.totalJobs,
+            processedChapters: processed,
+          });
+        }
+      } catch {
+        // ignora erros transitórios no polling defensivo
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [conversionId, apiState?.status, closeSSE]);
 
   // ── Load initial state + SSE ─────────────────────────────────────────────
   useEffect(() => {
@@ -582,6 +647,25 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
               // ── Lifecycle ─────────────────────────────────────────────
               case "job.started":
                 dispatch({ type: "CONVERSION_PROGRESS", progress: 0 });
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: "Iniciando processamento do job…",
+                  },
+                });
+                break;
+
+              case "download.started":
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: `Iniciando download de ${data.totalChapters ?? "?"} capítulos selecionados…`,
+                  },
+                });
                 break;
 
               case "job.finished":

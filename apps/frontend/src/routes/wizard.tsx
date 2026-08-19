@@ -488,6 +488,7 @@ function StepOrigin({
         <Input
           placeholder="https://exemplo.com/manga/meu-mangá"
           value={url}
+          maxLength={2048}
           onChange={(e) => onUrlChange(e.target.value)}
           className="border-[3px] border-ink h-12 text-base shadow-comic-sm focus-visible:ring-comic-blue"
           onKeyDown={(e) => e.key === "Enter" && onFetch()}
@@ -1334,6 +1335,7 @@ function StepConvert({
                   <Label className="font-display text-sm">Título (opcional)</Label>
                   <Input
                     value={data.meta.title}
+                    maxLength={500}
                     onChange={(e) => update("meta", { ...data.meta, title: e.target.value })}
                     placeholder="Usar título da obra"
                     className="border-[2.5px] border-ink h-11"
@@ -1343,6 +1345,7 @@ function StepConvert({
                   <Label className="font-display text-sm">Autor (opcional)</Label>
                   <Input
                     value={data.meta.author}
+                    maxLength={2000}
                     onChange={(e) => update("meta", { ...data.meta, author: e.target.value })}
                     placeholder="Desconhecido"
                     className="border-[2.5px] border-ink h-11"

@@ -38,26 +38,22 @@ import type {
 } from "@/types/reading";
 import { createSSEStream } from "@/lib/sse";
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const TOKEN_KEY = "mangaink_token";
-
 // ─── Gerenciamento de token ───────────────────────────────────────────────────
-/** Token mantido em memória para uso durante a sessão */
+// VULN-10 / MEC-86: o token NÃO é mais persistido em localStorage. A sessão é
+// mantida pelo cookie httpOnly + SameSite=Lax definido pelo backend; o token só
+// fica em memória (fallback curto) para o fluxo atual (ex.: desktop via
+// Authorization header) até o próximo reload, quando o cookie assume.
 let _memoryToken: string | null = null;
 
 export const tokenStore = {
   get(): string | null {
-    if (_memoryToken) return _memoryToken;
-    // Fallback para localStorage (persistência entre reloads)
-    return localStorage.getItem(TOKEN_KEY);
+    return _memoryToken;
   },
   set(token: string): void {
     _memoryToken = token;
-    localStorage.setItem(TOKEN_KEY, token);
   },
   clear(): void {
     _memoryToken = null;
-    localStorage.removeItem(TOKEN_KEY);
   },
 };
 
@@ -88,6 +84,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...options,
     headers,
+    // Envia o cookie httpOnly de sessão em todas as requisições (VULN-10).
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -133,9 +131,15 @@ export const authApi = {
     return request<User>("/auth/me");
   },
 
-  /** Logout local (o backend não possui endpoint dedicado ainda) */
-  logout(): void {
-    tokenStore.clear();
+  /** POST /auth/logout — revoga o token no servidor (denylist) e limpa o local */
+  async logout(): Promise<void> {
+    try {
+      await request<undefined>("/auth/logout", { method: "POST" });
+    } catch {
+      // Backend fora do ar — o logout local ainda limpa o token
+    } finally {
+      tokenStore.clear();
+    }
   },
 };
 
@@ -171,10 +175,11 @@ export const scrapingApi = {
   },
 
   /**
-   * SSE /api/conversions/source/inspect/:sourceId/events
-   * SEM auth (token não necessário para scraping SSE)
-   * Retorna { close } para fechar o stream.
-   */
+    * SSE /api/conversions/source/inspect/:sourceId/events
+    * Requer auth (token injetado via fetch streaming — EventSource nativo não
+    * permite Authorization header).
+    * Retorna { close } para fechar o stream.
+    */
   inspectEvents(
     sourceId: string,
     handlers: {
@@ -185,6 +190,7 @@ export const scrapingApi = {
     },
   ): { close: () => void } {
     const url = `/api/conversions/source/inspect/${sourceId}/events`;
+    const token = tokenStore.get() ?? undefined;
     return createSSEStream(url, {
       onEvent(event, data) {
         if (event === "progress") handlers.onProgress?.(data as never);
@@ -192,8 +198,7 @@ export const scrapingApi = {
         else if (event === "failed") handlers.onFailed?.(data as never);
       },
       onError: handlers.onError,
-    });
-    // sem token — endpoint público
+    }, token);
   },
 
   /** GET /api/conversions/source/providers — lista providers disponíveis */

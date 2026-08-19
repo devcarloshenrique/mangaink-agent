@@ -7,7 +7,7 @@ interface SSEHandlers {
 }
 
 /**
- * Abre um stream SSE usando fetch (suporta Authorization header).
+ * Abre um stream SSE usando fetch (suporta Authorization header e cookie httpOnly).
  * @returns { close } — chama close() para abortar o stream.
  */
 export function createSSEStream(
@@ -23,7 +23,9 @@ export function createSSEStream(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  fetch(url, { headers, signal: controller.signal })
+  // credentials: "include" envia o cookie httpOnly de sessão (VULN-10) —
+  // permite SSE autenticado via cookie quando não há token em memória.
+  fetch(url, { headers, signal: controller.signal, credentials: "include" })
     .then(async (response) => {
       if (!response.ok) {
         throw new Error(`SSE error: HTTP ${response.status}`);
@@ -36,41 +38,51 @@ export function createSSEStream(
       const decoder = new TextDecoder();
       let buffer = "";
 
+      const processFrame = (frame: string) => {
+        if (!frame.trim()) return;
+
+        const lines = frame.split(/\r?\n/);
+        let event = "message";
+        let dataStr = "";
+
+        for (const line of lines) {
+          const trimmed = line.trimStart();
+          if (trimmed.startsWith("event:")) {
+            event = trimmed.slice(6).trim();
+          } else if (trimmed.startsWith("data:")) {
+            dataStr += trimmed.slice(5).trim();
+          } else if (trimmed.startsWith(":")) {
+            // comment / keepalive — ignorar
+          }
+        }
+
+        if (event !== "message" || dataStr) {
+          try {
+            const data = dataStr ? JSON.parse(dataStr) : {};
+            handlers.onEvent(event, data);
+          } catch {
+            handlers.onEvent(event, dataStr);
+          }
+        }
+      };
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          if (buffer.trim()) {
+            processFrame(buffer);
+          }
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
 
-        // SSE frames separados por \n\n
-        const frames = buffer.split("\n\n");
+        // SSE frames separados por \r\n\r\n ou \n\n
+        const frames = buffer.split(/\r?\n\r?\n/);
         buffer = frames.pop() ?? "";
 
         for (const frame of frames) {
-          if (!frame.trim()) continue;
-
-          const lines = frame.split("\n");
-          let event = "message";
-          let dataStr = "";
-
-          for (const line of lines) {
-            if (line.startsWith("event:")) {
-              event = line.slice(6).trim();
-            } else if (line.startsWith("data:")) {
-              dataStr += line.slice(5).trim();
-            } else if (line.startsWith(":")) {
-              // comment / keepalive — ignorar
-            }
-          }
-
-          if (event !== "message" || dataStr) {
-            try {
-              const data = dataStr ? JSON.parse(dataStr) : {};
-              handlers.onEvent(event, data);
-            } catch {
-              handlers.onEvent(event, dataStr);
-            }
-          }
+          processFrame(frame);
         }
       }
     })

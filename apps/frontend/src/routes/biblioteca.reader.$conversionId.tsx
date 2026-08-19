@@ -6,7 +6,7 @@ import { ComicPanel } from "@/components/comic/ComicPanel";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
 import { ArrowLeft, BookOpen, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react";
-import { conversionsApi } from "@/lib/api";
+import { conversionsApi, tokenStore } from "@/lib/api";
 import JSZip from "jszip";
 
 export const Route = createFileRoute("/biblioteca/reader/$conversionId")({
@@ -86,10 +86,11 @@ function ReaderPage() {
         return;
       }
 
-      const token = localStorage.getItem("mangaink_token");
+      const token = tokenStore.get() ?? undefined;
       const url = `/api/conversions/${conversionId}/jobs/${jobId}/download`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
       if (!res.ok) throw new Error("Erro ao baixar arquivo");
       const blob = await res.blob();
@@ -422,10 +423,11 @@ function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) 
 
     async function startPreview() {
       try {
-        const token = localStorage.getItem("mangaink_token");
+        const token = tokenStore.get() ?? undefined;
         const res = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include",
         });
         if (!res.ok && res.status !== 202) throw new Error(`HTTP ${res.status}`);
         const body = await res.json().catch(() => ({}));
@@ -443,6 +445,7 @@ function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) 
           try {
             const sres = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {},
+              credentials: "include",
             });
             if (!sres.ok) return;
             const sbody = await sres.json().catch(() => ({}));
@@ -480,10 +483,10 @@ function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) 
       setPageLoading(true);
       setPageError(null);
       try {
-        const token = localStorage.getItem("mangaink_token");
+        const token = tokenStore.get() ?? undefined;
         const res = await fetch(
           `/api/conversions/${conversionId}/jobs/${jobId}/preview/pages/${index}`,
-          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+          { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: "include" },
         );
         if (res.status === 425) {
           setPageLoading(false);
@@ -528,7 +531,7 @@ function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) 
 
   // Botao de download do MOBI original (caminho secundario)
   const downloadMobiUrl = `/api/conversions/${conversionId}/jobs/${jobId}/download`;
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("mangaink_token") : null;
+  const token = tokenStore.get();
 
   const prev = useCallback(() => setCurrent((c) => Math.max(0, c - 1)), []);
   const next = useCallback(

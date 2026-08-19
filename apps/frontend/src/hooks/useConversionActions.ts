@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { conversionsApi } from "@/lib/api";
+import { conversionsApi, tokenStore } from "@/lib/api";
 import type { ConversionSummary } from "@/types/conversion";
 
 export function useConversionActions() {
@@ -32,10 +32,11 @@ export function useConversionActions() {
 
   async function download(conversionId: string, jobId: string) {
     try {
-      const token = localStorage.getItem("mangaink_token");
+      const token = tokenStore.get() ?? undefined;
       const url = `/api/conversions/${conversionId}/jobs/${jobId}/download`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
