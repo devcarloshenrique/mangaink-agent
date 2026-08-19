@@ -1,12 +1,10 @@
 import { useState, useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ComicHeader } from "@/components/comic/Header";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { highlightMatch } from "@/components/biblioteca/SearchBar";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "sonner";
 import {
   Library,
   FileText,
@@ -125,9 +123,7 @@ function BibliotecaPage() {
   const totalCount = seriesGroups.length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Toaster richColors position="top-right" />
-      <ComicHeader />
+    <div className="min-h-screen bg-background overflow-x-clip">
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
@@ -277,7 +273,7 @@ function BibliotecaPage() {
                     key={group.sourceId}
                     to="/biblioteca/$sourceId"
                     params={{ sourceId: group.sourceId }}
-                    className="block focus:outline-none cursor-pointer group transition-transform group-hover:-translate-y-1"
+                    className="block relative focus:outline-none cursor-pointer group transition-transform group-hover:-translate-y-1"
                   >
                     <div
                       className={cn(
@@ -286,11 +282,11 @@ function BibliotecaPage() {
                       )}
                     >
                       <SeriesCover group={group} />
-                      <div className="absolute bottom-1 left-1 bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs z-10">
+                      <div className="absolute bottom-1 left-1 bg-comic-yellow border-[2.5px] border-ink px-1.5 py-0.5 font-display text-xs z-10 max-w-[calc(100%-8px)] truncate">
                         {highlightMatch(group.title, searchQuery)}
                       </div>
                     </div>
-                    <div className="absolute -top-2 -right-2 z-10">
+                    <div className="absolute top-1 right-1 z-10">
                       {getSeriesStatusBadge(group)}
                     </div>
                   </Link>
@@ -305,7 +301,7 @@ function BibliotecaPage() {
                       to="/biblioteca/$sourceId"
                       params={{ sourceId: group.sourceId }}
                       className={cn(
-                        "flex items-center gap-4 py-3 border-b-2 border-dashed border-ink/30 last:border-0 last:pb-0 hover:bg-muted/50 rounded transition-colors -mx-2 px-2",
+                        "flex items-center gap-4 py-3 border-b-2 border-dashed border-ink/30 last:border-0 last:pb-0 hover:bg-muted/50 rounded transition-colors px-2",
                         i === 0 && "pt-0",
                       )}
                     >
