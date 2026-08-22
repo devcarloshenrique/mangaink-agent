@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MangaInk Agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.mangaink.desktop",
   "build": {
     "beforeDevCommand": "",
@@ -36,6 +36,7 @@
     ],
     "windows": {
       "nsis": {
+        "compression": "zlib",
         "installerHooks": "nsis-hooks.nsh"
       }
     }

@@ -11,7 +11,7 @@
 // de toolchain) em vez do stack cru do child_process.
 
 import { execSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,9 +20,22 @@ const SRC_TAURI = join(SCRIPTS_DIR, '..', 'src-tauri')
 const MANIFEST = join(SRC_TAURI, 'resources-manifest.json')
 const OVERRIDE = join(SRC_TAURI, 'tauri.resources.longpath.json')
 const CONF = join(SRC_TAURI, 'tauri.conf.json')
+const NSIS_TARGET_DIR = join(SRC_TAURI, 'target', 'release', 'bundle', 'nsis')
 
 function err(msg) {
   process.stderr.write(`✗ ${msg}\n`)
+}
+
+// ── limpeza pré-build de instaladores antigos ──
+function cleanPreviousBundles() {
+  if (existsSync(NSIS_TARGET_DIR)) {
+    try {
+      rmSync(NSIS_TARGET_DIR, { recursive: true, force: true })
+      process.stdout.write(`✓ limpeza de instaladores anteriores em target/release/bundle/nsis\n`)
+    } catch {
+      /* best effort */
+    }
+  }
 }
 
 // ── validação do frontendDist (não empacotar frontend vazio) ──
@@ -58,6 +71,7 @@ const bin = join(SCRIPTS_DIR, '..', 'node_modules', '.bin', process.platform ===
 process.stdout.write(`> ${bin} ${args.join(' ')}\n`)
 
 try {
+  cleanPreviousBundles()
   validateFrontendDist()
   execSync(`"${bin}" ${args.join(' ')}`, { stdio: 'inherit', shell: process.platform === 'win32' })
 } catch (e) {

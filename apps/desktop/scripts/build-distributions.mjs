@@ -41,12 +41,40 @@ const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url))
 const DESKTOP_DIR = join(SCRIPTS_DIR, '..')
 const SRC_TAURI = join(DESKTOP_DIR, 'src-tauri')
 const MANIFEST_PATH = join(SRC_TAURI, 'resources-manifest.json')
+const CONF_PATH = join(SRC_TAURI, 'tauri.conf.json')
 const RELEASE_EXE = join(SRC_TAURI, 'target', 'release', 'mangaink-desktop.exe')
 const DIST_DIR = process.env.MI_DIST_DIR
   ? resolve(process.env.MI_DIST_DIR)
   : join(DESKTOP_DIR, 'dist')
 const UNPACKED_DIR = join(DIST_DIR, 'win-unpacked')
 const APP_EXE_NAME = 'MangaInk Agent.exe'
+
+function getCurrentVersion() {
+  if (existsSync(CONF_PATH)) {
+    try {
+      const conf = JSON.parse(readFileSync(CONF_PATH, 'utf8'))
+      if (conf?.version) return conf.version
+    } catch {
+      /* ignore */
+    }
+  }
+  return null
+}
+
+function getManifestTimestamp() {
+  if (existsSync(MANIFEST_PATH)) {
+    try {
+      const m = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'))
+      if (m.timestamp) return new Date(m.timestamp).getTime()
+    } catch {
+      /* ignore */
+    }
+  }
+  if (existsSync(RELEASE_EXE)) {
+    return statSync(RELEASE_EXE).mtimeMs
+  }
+  return 0
+}
 
 // Validação de integridade mínima dos artefatos: um instalador/executável
 // truncado (download corrompido, copy parcial) não deve passar despercebido.
@@ -168,23 +196,47 @@ if (mode === 'unpacked') {
 // como área interna do cargo.
 const nsisDir = join(SRC_TAURI, 'target', 'release', 'bundle', 'nsis')
 let setupCopied = null
+const currentVersion = getCurrentVersion()
+const manifestTime = getManifestTimestamp()
+
+// Limpeza de instaladores obsoletos em dist/ (outras versões)
+if (existsSync(DIST_DIR)) {
+  const existingInDist = readdirSync(DIST_DIR).filter((f) => f.toLowerCase().endsWith('.exe'))
+  for (const f of existingInDist) {
+    if (currentVersion && !f.includes(currentVersion)) {
+      log(`  🗑 removendo instalador de versão antiga em dist/: ${f}`)
+      rmSyncRetry(join(DIST_DIR, f))
+    }
+  }
+}
+
 if (existsSync(nsisDir)) {
-  const setups = readdirSync(nsisDir).filter((f) => f.toLowerCase().endsWith('.exe'))
+  let setups = readdirSync(nsisDir).filter((f) => f.toLowerCase().endsWith('.exe'))
+  if (currentVersion) {
+    setups = setups.filter((f) => f.includes(currentVersion))
+  }
+
   if (setups.length > 0) {
     mkdirSync(DIST_DIR, { recursive: true })
     for (const setup of setups) {
-      const dst = join(DIST_DIR, setup)
-      cpSync(join(nsisDir, setup), dst)
-      const size = statSync(dst).size
+      const srcFile = join(nsisDir, setup)
+      const st = statSync(srcFile)
+      const size = st.size
       if (size < MIN_SETUP_BYTES) {
         throw new Error(
           `${setup} com ${(size / 1024 / 1024).toFixed(1)} MB (< mínimo ` +
             `${MIN_SETUP_BYTES / 1024 / 1024} MB) — instalador truncado/corrompido?`,
         )
       }
+      if (manifestTime > 0 && st.mtimeMs < manifestTime - 10000) {
+        log(`  ⚠ aviso: ${setup} em target/release/bundle/nsis é anterior ao build atual (${new Date(st.mtimeMs).toISOString()} < ${new Date(manifestTime).toISOString()})`)
+      }
+      const dst = join(DIST_DIR, setup)
+      rmSyncRetry(dst)
+      cpSync(srcFile, dst)
     }
     setupCopied = setups.map((s) => join(DIST_DIR, s))
-    log(`  ✓ Setup NSIS → ${relative(DESKTOP_DIR, DIST_DIR)} (${setups.length})`)
+    log(`  ✓ Setup NSIS (${currentVersion ?? 'versão atual'}) → ${relative(DESKTOP_DIR, DIST_DIR)} (${setups.length})`)
   }
 }
 
