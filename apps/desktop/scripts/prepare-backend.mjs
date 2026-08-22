@@ -438,7 +438,11 @@ if (deploy.code === 0 && existsSync(join(STAGING_DEPLOY, 'node_modules'))) {
 // As env vars em runtime são injetadas pelo BackendManager do desktop.
 const STAGING_REMOVE = ['.env', '.env.test', 'storage', 'src', 'bin']
 for (const rel of STAGING_REMOVE) {
-  rmSync(join(BUNDLE, rel), { recursive: true, force: true })
+  try {
+    rmSync(join(BUNDLE, rel), { recursive: true, force: true, maxRetries: 5, retryDelay: 500 })
+  } catch {
+    /* best effort */
+  }
 }
 
 // ── 3b.0 Podar node_modules do bundle (apenas o que o migrate deploy exige) ──
