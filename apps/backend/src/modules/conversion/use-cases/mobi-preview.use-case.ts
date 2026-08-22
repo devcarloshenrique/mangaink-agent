@@ -31,8 +31,10 @@ export interface MobiPreviewQueue {
 
 const ACCEPTED_MOBI_STAGES = new Set(['queued', 'extracting', 'ready', 'failed'])
 
-function isMobiOutputFile(filename: string | undefined): boolean {
-  return !!filename && filename.toLowerCase().endsWith('.mobi')
+function isSupportedPreviewFile(filename: string | undefined): boolean {
+  if (!filename) return false
+  const lower = filename.toLowerCase()
+  return lower.endsWith('.mobi') || lower.endsWith('.pdf')
 }
 
 async function assertAuthorizedJob(
@@ -49,7 +51,7 @@ async function assertAuthorizedJob(
   const job = await jobs.findById(jobId)
   if (!job) throw new ConversionNotFoundError(jobId)
 
-  if (!isMobiOutputFile(job.outputFile)) {
+  if (!isSupportedPreviewFile(job.outputFile)) {
     throw new NotAMobiJobError(
       jobId,
       job.outputFile ? job.outputFile.split('.').pop() ?? '' : 'none',
@@ -132,34 +134,26 @@ export class GetMobiPreviewStatusUseCase {
     jobId: string,
     userId: string,
   ): Promise<MobiPreviewStatusResponse> {
-    await assertAuthorizedJob(this.conversions, this.jobs, conversionId, jobId, userId)
+    const { job } = await assertAuthorizedJob(this.conversions, this.jobs, conversionId, jobId, userId)
+    const outputFile = job.outputFile as string
 
     const live = await this.store.get(jobId)
 
     let totalPages = live?.totalPages ?? 0
-    const readyPages = await this.service.countReadyPages(
-      conversionId,
-      jobId,
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      (await this.jobs.findById(jobId))!.outputFile!,
-    )
+    const readyPages = await this.service.countReadyPages(conversionId, jobId, outputFile)
 
     let cacheUntil: string | null = null
-    const index = await this.service.readIndex(
-      conversionId,
-      jobId,
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      (await this.jobs.findById(jobId))!.outputFile!,
-    )
+    const index = await this.service.readIndex(conversionId, jobId, outputFile)
     if (index) totalPages = index.pages.length
-    cacheUntil = await this.service.cacheUntil(
-      conversionId,
-      jobId,
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      (await this.jobs.findById(jobId))!.outputFile!,
-    )
+    cacheUntil = await this.service.cacheUntil(conversionId, jobId, outputFile)
 
-    const status = live?.status ?? 'queued'
+    // Quando o Redis Hash expirou (TTL 6h) mas o cache FS ainda e valido
+    // (TTL 24h), inferimos o status correto a partir do disco em vez de
+    // retornar o fallback 'queued' que confundiria o frontend.
+    let status = live?.status ?? 'queued'
+    if (!live && await this.service.isCacheValid(conversionId, jobId, outputFile)) {
+      status = 'ready'
+    }
 
     return {
       status: ACCEPTED_MOBI_STAGES.has(status) ? status : 'queued',

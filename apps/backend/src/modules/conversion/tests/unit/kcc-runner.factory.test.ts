@@ -49,4 +49,17 @@ describe('createKccRunner', () => {
     expect(runner).toBeInstanceOf(KccRunnerEmbedded)
     expect((runner as unknown as RunnerWithDeps).deps.runtimePath).toBe('C:\\explicit\\runtime')
   })
+
+  it('MI_EMBEDDED_MODE=1 sem env ou path explícito → resolve fallback automático do monorepo', async () => {
+    vi.stubEnv('MI_EMBEDDED_MODE', '1')
+    vi.stubEnv('MI_EMBEDDED_RUNTIME_PATH', '')
+    vi.resetModules()
+
+    const { createKccRunner } = await import('../../services/kcc-runner.factory')
+    const { KccRunnerEmbedded } = await import('../../services/kcc-runner-embedded.service')
+
+    const runner = createKccRunner(mockEvents)
+    expect(runner).toBeInstanceOf(KccRunnerEmbedded)
+    expect((runner as unknown as RunnerWithDeps).deps.runtimePath).toContain('runtime')
+  })
 })

@@ -27,7 +27,7 @@ function makeServiceStub(overrides: Partial<MobiPreviewService> = {}): MobiPrevi
     resolvePageFile: vi.fn(),
     cacheUntil: vi.fn(async () => null),
     requireMobiFile: vi.fn(async () => `/storage/${CONV}/${JOB}/output/${FILE}`),
-    clearTemp: vi.fn(),
+    clearTemp: vi.fn(async () => {}),
     ...overrides,
   } as unknown as MobiPreviewService
 }
@@ -169,14 +169,16 @@ describe('processMobiPreviewJob', () => {
     }))
   })
 
-  it('em caso de erro do runner, seta status=failed com mensagem e relança MobiExtractionError', async () => {
+  it('em caso de erro do runner, seta status=failed com mensagem, limpa temp e relança MobiExtractionError', async () => {
     ;(deps.runner.run as unknown as Mock).mockRejectedValueOnce(new Error('docker daemon offline'))
     await expect(
       processMobiPreviewJob({ conversionId: CONV, jobId: JOB, outputFile: FILE }, deps),
     ).rejects.toBeInstanceOf(MobiExtractionError)
 
+    expect(deps.service.clearTemp).toHaveBeenCalledWith(CONV, JOB, FILE)
     expect(deps.store.set).toHaveBeenCalledWith(JOB, expect.objectContaining({
       status: 'failed',
+      currentStep: 'Failed',
       error: expect.stringContaining('docker daemon offline'),
     }))
   })

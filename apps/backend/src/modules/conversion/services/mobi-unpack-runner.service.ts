@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
-import { readdir, mkdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { logger } from '../../../shared/logging/logger'
 import { env } from '../../../shared/config/env'
 import { buildUserArgs } from './kcc-runner.service'
+import { createImagePollingLoop } from './image-polling-loop'
 
 export interface MobiUnpackRunOptions {
   jobId: string
@@ -60,28 +61,12 @@ export class MobiUnpackRunnerService implements MobiUnpackRunner {
       })
 
       let stderr = ''
-      let lastSeen = -1
-      let tickPending: Promise<void> | null = null
-      let stop = false
 
-      const poll = async () => {
-        if (stop) return
-        try {
-          const entries = await readdir(resolve(outputDir, 'images')).catch(() => [] as string[])
-          const images = entries.filter((f) => /\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(f))
-          if (images.length !== lastSeen && onTick) {
-            lastSeen = images.length
-            if (!tickPending) {
-              tickPending = Promise.resolve(onTick()).catch(() => {}).finally(() => { tickPending = null })
-            }
-          }
-        } catch {
-          // ignora falhas de poll
-        }
-        if (!stop) {
-          setTimeout(poll, pollIntervalMs)
-        }
-      }
+      const polling = createImagePollingLoop({
+        imagesDir: resolve(outputDir, 'images'),
+        onTick,
+        pollIntervalMs,
+      })
 
       child.stdout?.on('data', (data: Buffer) => {
         const text = data.toString()
@@ -93,7 +78,7 @@ export class MobiUnpackRunnerService implements MobiUnpackRunner {
       })
 
       child.on('close', (exitCode) => {
-        stop = true
+        polling.stop()
         if (exitCode === 0) {
           resolvePromise()
         } else {
@@ -102,12 +87,12 @@ export class MobiUnpackRunnerService implements MobiUnpackRunner {
       })
 
       child.on('error', (err) => {
-        stop = true
+        polling.stop()
         reject(err)
       })
 
       // Inicia o polling apos um pequeno warmup
-      setTimeout(poll, pollIntervalMs)
+      polling.start()
     })
   }
 }

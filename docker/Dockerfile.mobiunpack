@@ -16,9 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir mobi==0.4.1
+RUN pip3 install --no-cache-dir mobi==0.4.1 pymupdf==1.28.2
 
 COPY docker/extract_mobi.py /app/extract_mobi.py
+
+RUN useradd --create-home --shell /bin/bash unpack
+USER unpack
 
 WORKDIR /tmp
 ENV HOME=/tmp

@@ -68,13 +68,12 @@ export function getMobiPreviewPageHandler(useCase: GetMobiPreviewPageUseCase) {
 
     const fileStats = await stat(filePath)
 
-    reply.header('Content-Type', contentType)
-    reply.header('Cache-Control', 'public, max-age=86400, immutable')
-    reply.header('Content-Length', fileStats.size)
-
     const ext = extname(filePath).toLowerCase()
     const mime = MIME_MAP[ext] ?? contentType
+
     reply.header('Content-Type', mime)
+    reply.header('Cache-Control', 'public, max-age=86400, immutable')
+    reply.header('Content-Length', fileStats.size)
 
     return reply.send(createReadStream(filePath))
   }

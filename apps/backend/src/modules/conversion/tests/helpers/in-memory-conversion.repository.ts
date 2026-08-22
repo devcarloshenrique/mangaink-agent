@@ -116,6 +116,8 @@ export class InMemoryConversionRepository implements ConversionRepository {
       conversionId: s.conversionId,
       sourceId: s.config.sourceId,
       title: s.config.metadata.title ?? '',
+      cover: s.config.cover,
+      output: s.config.output,
       status: s.status,
       progress: s.progress,
       totalJobs: s.totalJobs,

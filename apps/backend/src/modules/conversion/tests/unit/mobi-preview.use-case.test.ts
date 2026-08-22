@@ -154,10 +154,24 @@ describe('StartMobiPreviewUseCase', () => {
     await expect(uc.execute(CONV, JOB, TEST_USER)).rejects.toBeInstanceOf(ConversionNotFoundError)
   })
 
-  it('lança NotAMobiJobError quando formato de saída não é MOBI', async () => {
+  it('lança NotAMobiJobError quando formato de saída não é MOBI nem PDF', async () => {
     const job = makeJob({ outputFile: 'Boruto.epub', config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'EPUB' } } })
     const uc = new StartMobiPreviewUseCase(makeConversionRepo(makeConv()), makeJobRepo(job), service, store, queue)
     await expect(uc.execute(CONV, JOB, TEST_USER)).rejects.toBeInstanceOf(NotAMobiJobError)
+  })
+
+  it('aceita formato de saída PDF e enfileira job para extração', async () => {
+    const pdfJob = makeJob({
+      outputFile: 'Boruto - Vol. 01.pdf',
+      config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'PDF' } },
+    })
+    service.isCacheValid = vi.fn(async () => false)
+    const uc = new StartMobiPreviewUseCase(makeConversionRepo(makeConv()), makeJobRepo(pdfJob), service, store, queue)
+    const result = await uc.execute(CONV, JOB, TEST_USER)
+    expect(result).toEqual<MobiPreviewStartResponse>({ status: 'processing', cached: false })
+    expect(queue.enqueue).toHaveBeenCalledWith(expect.objectContaining({
+      outputFile: 'Boruto - Vol. 01.pdf',
+    }))
   })
 
   it('lança NotAMobiJobError quando job não tem outputFile', async () => {
@@ -220,10 +234,22 @@ describe('GetMobiPreviewStatusUseCase', () => {
     await expect(uc.execute(CONV, JOB, OTHER_USER)).rejects.toBeInstanceOf(ForbiddenError)
   })
 
-  it('lança NotAMobiJobError se o job não é MOBI', async () => {
+  it('lança NotAMobiJobError se o job não é MOBI nem PDF', async () => {
     const job = makeJob({ outputFile: 'Boruto.cbz', config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'CBZ' } } })
     const uc = new GetMobiPreviewStatusUseCase(makeConversionRepo(makeConv()), makeJobRepo(job), service, store)
     await expect(uc.execute(CONV, JOB, TEST_USER)).rejects.toBeInstanceOf(NotAMobiJobError)
+  })
+
+  it('aceita job em formato PDF no status preview', async () => {
+    const pdfJob = makeJob({ outputFile: 'Boruto.pdf', config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'PDF' } } })
+    store.get = vi.fn(async (): Promise<MobiPreviewLiveState | null> => ({ status: 'ready', totalPages: 5, readyPages: 5, currentStep: 'Done', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))
+    service.countReadyPages = vi.fn(async () => 5)
+    service.readIndex = vi.fn(async () => ({ sourceMobi: 'Boruto.pdf', extractedAt: new Date().toISOString(), pages: Array.from({ length: 5 }, (_, i) => ({ index: i, filename: `${i}.png`, contentType: 'image/png' })) }))
+    service.cacheUntil = vi.fn(async () => '2099-01-01T00:00:00.000Z')
+    const uc = new GetMobiPreviewStatusUseCase(makeConversionRepo(makeConv()), makeJobRepo(pdfJob), service, store)
+    const status = await uc.execute(CONV, JOB, TEST_USER)
+    expect(status?.status).toBe('ready')
+    expect(status?.totalPages).toBe(5)
   })
 
   it('retorna ready com cacheUntil e totais quando job concluído', async () => {
@@ -286,10 +312,18 @@ describe('GetMobiPreviewPageUseCase', () => {
     await expect(uc.execute(CONV, JOB, OTHER_USER, 0)).rejects.toBeInstanceOf(ForbiddenError)
   })
 
-  it('lança NotAMobiJobError quando o formato não é MOBI', async () => {
+  it('lança NotAMobiJobError quando o formato não é MOBI nem PDF', async () => {
     const job = makeJob({ outputFile: 'Boruto.epub', config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'EPUB' } } })
     const uc = new GetMobiPreviewPageUseCase(makeConversionRepo(makeConv()), makeJobRepo(job), service)
     await expect(uc.execute(CONV, JOB, TEST_USER, 0)).rejects.toBeInstanceOf(NotAMobiJobError)
+  })
+
+  it('permite buscar página quando formato é PDF', async () => {
+    const pdfJob = makeJob({ outputFile: 'Boruto.pdf', config: { ...makeJob().config, output: { deviceId: 'kindle_pw5', format: 'PDF' } } })
+    service.resolvePageFile = vi.fn(async () => ({ filePath: '/temp/images/00000.png', contentType: 'image/png' }))
+    const uc = new GetMobiPreviewPageUseCase(makeConversionRepo(makeConv()), makeJobRepo(pdfJob), service)
+    const r = await uc.execute(CONV, JOB, TEST_USER, 0)
+    expect(r).toEqual({ filePath: '/temp/images/00000.png', contentType: 'image/png' })
   })
 
   it('retorna { filePath, contentType } quando pagina existe', async () => {

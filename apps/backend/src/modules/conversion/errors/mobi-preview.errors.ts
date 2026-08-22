@@ -1,9 +1,9 @@
 import { ConversionError } from './conversion.errors'
 
-/** MOBI de entrada nao encontrado no disco (arquivo sumiu apos a conversao). */
+/** MOBI ou PDF de entrada nao encontrado no disco (arquivo sumiu apos a conversao). */
 export class MobiFileNotFoundError extends ConversionError {
   constructor(jobId: string) {
-    super(`Arquivo MOBI de saída não encontrado no disco para job ${jobId}`, 'JOB_NOT_FOUND')
+    super(`Arquivo de saída (MOBI/PDF) não encontrado no disco para job ${jobId}`, 'JOB_NOT_FOUND')
     this.name = 'MobiFileNotFoundError'
   }
 }
@@ -41,7 +41,7 @@ export class InvalidPageIndexError extends ConversionError {
 export class NotAMobiJobError extends ConversionError {
   constructor(jobId: string, actualFormat: string) {
     super(
-      `Job ${jobId} não é MOBI (formato=${actualFormat}). Preview só se aplica a MOBI.`,
+      `Job ${jobId} não é um formato suportado para preview no servidor (formato=${actualFormat}). Preview suporta MOBI e PDF.`,
       'VALIDATION_ERROR',
     )
     this.name = 'NotAMobiJobError'

@@ -69,13 +69,13 @@ export async function setup() {
 
   if (pgAvailable) {
     try {
-      execSync('npx prisma db push --skip-generate --accept-data-loss', {
+      execSync(`npx prisma db push --accept-data-loss --url "${testDbUrl}"`, {
         cwd: __dirname,
         env: { ...process.env, DATABASE_URL: testDbUrl },
-        stdio: 'ignore',
+        stdio: 'pipe',
       })
-    } catch {
-      // Se db push falhar, segue
+    } catch (e) {
+      console.warn('[vitest globalSetup] prisma db push failed:', (e as Error).message)
     }
   }
 

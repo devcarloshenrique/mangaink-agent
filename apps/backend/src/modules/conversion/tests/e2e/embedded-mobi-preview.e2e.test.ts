@@ -52,6 +52,7 @@ const unpackRunnerMock = vi.hoisted(() => {
         ],
       }
       await writeFile(join(opts.outputDir, 'index.json'), JSON.stringify(index), 'utf8')
+      await writeFile(join(opts.outputDir, 'READY'), new Date().toISOString(), 'utf8')
       await writeFile(join(opts.outputDir, 'images', '0001.png'), Buffer.from('PNG-001'), 'utf8')
       await writeFile(join(opts.outputDir, 'images', '0002.png'), Buffer.from('PNG-002'), 'utf8')
 

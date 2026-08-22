@@ -76,6 +76,7 @@ export interface ConversionJobSummary {
 /** Estado mutável agregado salvo em status.json da Conversion. */
 export interface ConversionStatusFile {
   conversionId: string
+  sourceId?: string
   status: ConversionStatus
   progress: number
   totalJobs: number
@@ -114,6 +115,7 @@ export interface ConversionSummary {
   updatedAt: string
   finishedAt?: string
   cover?: CoverRef
+  output?: ConversionOutput
 }
 
 /** Filtros opcionais para listagem de Conversions por usuário. */

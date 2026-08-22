@@ -37,9 +37,29 @@ export async function resolveProvider(sourceId: string): Promise<IProviderStrate
   const source = await getSourceRepository().load(sourceId)
   if (!source) return null
 
-  const firstChapter = source.chapters[0]
-  if (!firstChapter?.url) return null
-
   const resolver = getProviderResolver()
-  return resolver.resolve(firstChapter.url)
+
+  const chapterWithUrl = source.chapters?.find((c) => !!c.url)
+  if (chapterWithUrl?.url) {
+    try {
+      return resolver.resolve(chapterWithUrl.url)
+    } catch {
+      // continua para os fallbacks
+    }
+  }
+
+  if (source.source?.url) {
+    try {
+      return resolver.resolve(source.source.url)
+    } catch {
+      // continua para os fallbacks
+    }
+  }
+
+  if (source.provider?.slug) {
+    const matching = resolver.listAll().find((p) => p.slug === source.provider.slug)
+    if (matching) return matching
+  }
+
+  return null
 }

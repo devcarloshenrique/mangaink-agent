@@ -12,6 +12,7 @@ export class MobiPreviewQueueService implements MobiPreviewQueue {
   constructor(private readonly queue: IQueueService<MobiPreviewJobData>) {}
 
   async enqueue(data: MobiPreviewJobData): Promise<QueueJob<MobiPreviewJobData>> {
+    await Promise.resolve(this.queue.removeJob(data.jobId)).catch(() => {})
     return this.queue.add(`mobi-preview:${data.jobId}`, data, {
       jobId: data.jobId,
       attempts: 2,

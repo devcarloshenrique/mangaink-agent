@@ -103,6 +103,7 @@ export class PrismaConversionRepository implements ConversionRepository {
           createdAt: true,
           updatedAt: true,
           finishedAt: true,
+          output: true,
         },
       }),
       getPrisma().conversion.count({ where }),
@@ -113,6 +114,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       sourceId: row.sourceId,
       title: (row.metadata as unknown as { title?: string })?.title ?? '',
       cover: (row.cover ?? undefined) as CoverRef | undefined,
+      output: (row.output as unknown as ConversionOutput) ?? undefined,
       status: row.status as ConversionStatus,
       progress: row.progress,
       totalJobs: row.totalJobs,
@@ -358,6 +360,7 @@ export class PrismaConversionRepository implements ConversionRepository {
 
     return {
       conversionId: row.conversionId,
+      sourceId: row.sourceId,
       status: row.status as ConversionStatus,
       progress: row.progress,
       totalJobs: row.totalJobs,

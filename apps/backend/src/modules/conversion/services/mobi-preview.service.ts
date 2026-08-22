@@ -8,6 +8,7 @@ import {
   MobiFileNotFoundError,
   PreviewNotReadyError,
 } from '../errors/mobi-preview.errors'
+import { isImageFile } from '../constants/image-extensions'
 
 export interface MobiPreviewPaths {
   /** Caminho absoluto do arquivo .mobi de saida. */
@@ -54,14 +55,15 @@ export class MobiPreviewService {
     }
   }
 
-  /** Verifica se o cache /temp e valido (index.json existe e mtime < TTL). */
+  /** Verifica se o cache /temp e valido (index.json e READY existem e mtime < TTL). */
   async isCacheValid(
     conversionId: string,
     jobId: string,
     outputFile: string,
   ): Promise<boolean> {
-    const { indexPath } = this.resolvePaths(conversionId, jobId, outputFile)
+    const { indexPath, readyPath } = this.resolvePaths(conversionId, jobId, outputFile)
     if (!(await pathExists(indexPath))) return false
+    if (!(await pathExists(readyPath))) return false
     try {
       const stats = await stat(indexPath)
       const ageMs = Date.now() - stats.mtimeMs
@@ -91,7 +93,7 @@ export class MobiPreviewService {
     if (!(await pathExists(imagesDir))) return 0
     try {
       const entries = await readdir(imagesDir)
-      return entries.filter((f) => /\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(f)).length
+      return entries.filter((f) => isImageFile(f)).length
     } catch {
       return 0
     }

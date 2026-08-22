@@ -195,14 +195,15 @@ def extract_epub_images(epub_path: str, out_images_dir: str) -> list[dict]:
                         (it for it in manifest.values() if it['path'] == target),
                         None,
                     )
-                    # Tenta Path-matching relativo (com case-insensitive util)
-                    target_item = next(
-                        (
-                            it for it in manifest.values()
-                            if os.path.normpath(it['path']).lower() == target.lower()
-                        ),
-                        None,
-                    )
+                    # Fallback: path-matching case-insensitive (apenas se exact match falhou)
+                    if target_item is None:
+                        target_item = next(
+                            (
+                                it for it in manifest.values()
+                                if os.path.normpath(it['path']).lower() == target.lower()
+                            ),
+                            None,
+                        )
                     if target_item is None or target_item['path'] not in z.namelist():
                         continue
                     seen_paths.add(target_item['path'])
@@ -292,41 +293,67 @@ def plan_epub_pages(epub_path: str) -> list[dict]:
     return pages
 
 
-def extract_pdf_images(pdf_path: str, out_images_dir: str) -> list[dict]:
-    """Para MOBI Print Replica (PDF) — lista imagens no diretorio de extract."""
-    pages: list[dict] = []
-    base_dir = os.path.dirname(pdf_path)
+def _is_pdf(path: str) -> bool:
+    if path.lower().endswith('.pdf'):
+        return True
     try:
-        entries = sorted(os.listdir(base_dir))
-    except OSError:
-        return pages
-    image_exts = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.avif')
-    idx = 0
-    for entry in entries:
-        if entry.lower().endswith(image_exts):
-            src = os.path.join(base_dir, entry)
-            ext = _ext_from_filename(entry)
-            filename = f'{idx:05d}.{ext}'
-            shutil.copyfile(src, os.path.join(out_images_dir, filename))
-            pages.append({
-                'index': idx,
-                'filename': filename,
-                'contentType': f'image/{ext}' if ext in ('png', 'gif', 'webp', 'bmp', 'avif') else 'image/jpeg',
-            })
-            idx += 1
+        with open(path, 'rb') as f:
+            header = f.read(5)
+            return header.startswith(b'%PDF')
+    except Exception:
+        return False
+
+
+def render_pdf_pages(pdf_path: str, output_dir: str, images_dir: str) -> list[dict]:
+    """Renderiza todas as páginas de um PDF em imagens PNG (150 DPI) usando PyMuPDF."""
+    try:
+        import pymupdf as fitz
+    except ImportError:
+        import fitz
+
+    doc = fitz.open(pdf_path)
+    total_pages = doc.page_count
+
+    # Plan primeiro: escreve index.json imediatamente para notificar totalPages ao backend/frontend
+    plan = [
+        {
+            'index': i,
+            'filename': f'{i:05d}.png',
+            'contentType': 'image/png',
+        }
+        for i in range(total_pages)
+    ]
+    _write_index(output_dir, pdf_path, plan)
+    print(f'[extract_mobi] index.json escrito (PDF): {total_pages} pagina(s) previstas', flush=True)
+
+    pages: list[dict] = []
+    for i in range(total_pages):
+        page = doc.load_page(i)
+        pix = page.get_pixmap(dpi=150)
+        filename = f'{i:05d}.png'
+        dest = os.path.join(images_dir, filename)
+        pix.save(dest)
+        pages.append({
+            'index': i,
+            'filename': filename,
+            'contentType': 'image/png',
+        })
+
+    doc.close()
+    _rewrite_index(output_dir, pdf_path, pages)
     return pages
 
 
 def main() -> int:
     if len(sys.argv) < 3:
-        print('Uso: extract_mobi.py <input.mobi> <output_dir>', file=sys.stderr)
+        print('Uso: extract_mobi.py <input.mobi|input.pdf> <output_dir>', file=sys.stderr)
         return 2
 
     input_path = sys.argv[1]
     output_dir = sys.argv[2]
 
     if not os.path.isfile(input_path):
-        print(f'Arquivo MOBI nao encontrado: {input_path}', file=sys.stderr)
+        print(f'Arquivo nao encontrado: {input_path}', file=sys.stderr)
         return 1
 
     os.makedirs(output_dir, exist_ok=True)
@@ -334,6 +361,20 @@ def main() -> int:
     os.makedirs(images_dir, exist_ok=True)
 
     print(f'[extract_mobi] Iniciando extracao: {input_path} -> {output_dir}', flush=True)
+
+    # Se a entrada for diretamente um PDF, renderiza as páginas com PyMuPDF
+    if _is_pdf(input_path):
+        pages = render_pdf_pages(input_path, output_dir, images_dir)
+        if not pages:
+            print('[extract_mobi] AVISO: nenhuma imagem encontrada no PDF', file=sys.stderr)
+
+        # Sinal atomico de conclusao
+        ready_path = os.path.join(output_dir, 'READY')
+        with open(ready_path, 'w', encoding='utf-8') as f:
+            f.write(datetime.now(timezone.utc).isoformat())
+
+        print(f'[extract_mobi] Concluido (PDF): {len(pages)} pagina(s) extraida(s)', flush=True)
+        return 0
 
     tempdir, filepath = mobi.extract(input_path)
     print(f'[extract_mobi] mobi.extract -> {filepath}', flush=True)
@@ -361,8 +402,8 @@ def main() -> int:
                     public = {k: v for k, v in entry.items() if not k.startswith('_')}
                     pages.append(public)
             _rewrite_index(output_dir, input_path, pages)
-        elif ext == '.pdf':
-            pages = extract_pdf_images(filepath, images_dir)
+        elif ext == '.pdf' or _is_pdf(filepath):
+            pages = render_pdf_pages(filepath, output_dir, images_dir)
             _rewrite_index(output_dir, input_path, pages)
         else:
             # HTML: varre diretorio de extracao por imagens

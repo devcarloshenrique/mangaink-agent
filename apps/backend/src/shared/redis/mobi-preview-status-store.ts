@@ -26,9 +26,11 @@ export class MobiPreviewStatusStore {
   ) {}
 
   async set(jobId: string, partial: Partial<MobiPreviewLiveState>): Promise<void> {
-    const flat: Record<string, string | number | undefined> = {}
+    const flat: Record<string, string | number> = {}
     for (const [field, value] of Object.entries(partial)) {
-      if (value !== undefined) flat[field] = value
+      if (value !== undefined && value !== null) {
+        flat[field] = value
+      }
     }
     if (Object.keys(flat).length === 0) return
     await this.store.set(key(jobId), flat, env.JOB_STATUS_TTL_SEC)

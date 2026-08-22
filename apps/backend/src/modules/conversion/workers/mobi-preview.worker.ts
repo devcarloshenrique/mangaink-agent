@@ -54,8 +54,17 @@ export async function processMobiPreviewJob(
 
   const { mobiPath, tempDir } = service.resolvePaths(conversionId, jobId, outputFile)
 
+  let cachedTotalPages: number | null = null
+
   const onTick = async () => {
-    const totalPages = (await service.readIndex(conversionId, jobId, outputFile))?.pages.length ?? 0
+    // index.json e escrito apenas uma vez (plan-first) pelo extract_mobi.py
+    // — cacheamos totalPages apos a primeira leitura bem-sucedida para evitar
+    // re-parsear JSON a cada 250ms.
+    if (cachedTotalPages === null) {
+      const index = await service.readIndex(conversionId, jobId, outputFile)
+      if (index) cachedTotalPages = index.pages.length
+    }
+    const totalPages = cachedTotalPages ?? 0
     const readyPages = await service.countReadyPages(conversionId, jobId, outputFile)
     await store.set(jobId, {
       status: 'extracting',
@@ -92,6 +101,7 @@ export async function processMobiPreviewJob(
     await store.set(jobId, {
       status: 'failed',
       error: message,
+      currentStep: 'Failed',
       updatedAt: new Date().toISOString(),
     })
     await jobs.appendLog(jobId, `Preview MOBI: extração falhou — ${message}`)

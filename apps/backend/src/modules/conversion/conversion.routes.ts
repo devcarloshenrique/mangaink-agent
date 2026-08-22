@@ -110,6 +110,7 @@ interface ConversionRoutesOptions {
 
 const conversionStateSchema = z.object({
   conversionId: z.string(),
+  sourceId: z.string().optional(),
   status: z.enum(['queued', 'processing', 'completed', 'failed', 'cancelled', 'partial']),
   progress: z.number(),
   totalJobs: z.number(),
@@ -145,6 +146,7 @@ const conversionStateSchema = z.object({
     }),
   ),
   config: z.any(),
+  output: z.object({ format: z.string(), deviceId: z.string() }).optional(),
 })
 
 const conversionSummarySchema = z.object({
@@ -160,6 +162,7 @@ const conversionSummarySchema = z.object({
   updatedAt: z.string(),
   finishedAt: z.string().optional(),
   cover: z.object({ kind: z.string() }).passthrough().optional(),
+  output: z.object({ format: z.string(), deviceId: z.string() }).optional(),
 })
 
 const listConversionsResponseSchema = z.object({

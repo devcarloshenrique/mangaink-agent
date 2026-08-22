@@ -19,8 +19,8 @@ function makeMockQueue() {
       data: {} as MobiPreviewJobData,
       attemptsMade: 0,
     })),
-    getJob: vi.fn(),
-    removeJob: vi.fn(),
+    getJob: vi.fn(async () => null),
+    removeJob: vi.fn(async () => {}),
   }
 }
 
@@ -33,10 +33,11 @@ describe('MobiPreviewQueueService', () => {
     queueService = new MobiPreviewQueueService(mockQueue as unknown as IQueueService<MobiPreviewJobData>)
   })
 
-  it('delega enqueue para queue.add com jobId, attempts 2, backoff 3000 e retenção', async () => {
+  it('remove job anterior e delega enqueue para queue.add com jobId, attempts 2, backoff 3000 e retenção', async () => {
     const data = makeData()
     const result = await queueService.enqueue(data)
 
+    expect(mockQueue.removeJob).toHaveBeenCalledWith('job_001')
     expect(mockQueue.add).toHaveBeenCalledWith(
       'mobi-preview:job_001',
       data,

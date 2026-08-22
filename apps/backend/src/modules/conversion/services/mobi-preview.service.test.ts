@@ -119,6 +119,10 @@ function setupReadyIndex(totalPages = 3, ageMs = 1000): void {
     stat: { mtimeMs: Date.now() - ageMs, size: 0 },
     content: JSON.stringify(index),
   })
+  hoisted.fsMock.storage.set(hoisted.join(tempBase(), 'READY'), {
+    stat: { mtimeMs: Date.now() - ageMs, size: 0 },
+    content: new Date().toISOString(),
+  })
   for (let i = 0; i < totalPages; i++) {
     const fname = `${String(i).padStart(5, '0')}.jpg`
     hoisted.fsMock.storage.set(hoisted.join(tempBase(), 'images', fname), {
@@ -159,6 +163,13 @@ describe('MobiPreviewService', () => {
       setupReadyIndex(3, 1000)
       const ok = await service.isCacheValid(CONV, JOB, `${MOBI_BASE}.mobi`)
       expect(ok).toBe(true)
+    })
+
+    it('retorna false se index.json existe mas READY nao existe', async () => {
+      setupReadyIndex(3, 1000)
+      hoisted.fsMock.storage.delete(hoisted.join(tempBase(), 'READY'))
+      const ok = await service.isCacheValid(CONV, JOB, `${MOBI_BASE}.mobi`)
+      expect(ok).toBe(false)
     })
 
     it('retorna false se index.json nao existe', async () => {
