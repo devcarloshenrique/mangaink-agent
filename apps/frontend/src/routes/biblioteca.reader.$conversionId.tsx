@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { ComicPanel } from "@/components/comic/ComicPanel";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BookOpen, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { ArrowLeft, BookOpen, Loader2 } from "lucide-react";
 import { conversionsApi, tokenStore } from "@/lib/api";
+import { ReaderCore } from "@/components/reader/ReaderCore";
+import type { ReaderIndexItem } from "@/components/reader/ReaderChapterIndex";
 import JSZip from "jszip";
-
 
 export const Route = createFileRoute("/biblioteca/reader/$conversionId")({
   validateSearch: z.object({
@@ -27,10 +27,12 @@ function getFormat(filename: string): string {
 function ReaderPage() {
   const { conversionId } = Route.useParams();
   const { jobId: preselectedJobId } = Route.useSearch();
+  const nav = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readerData, setReaderData] = useState<{ url: string; format: string } | null>(null);
   const [title, setTitle] = useState("");
+  const [sourceId, setSourceId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Array<{ jobId: string; title: string; outputFile?: string }>>(
     [],
   );
@@ -48,19 +50,20 @@ function ReaderPage() {
         setJobs(
           completed.map((j) => ({ jobId: j.jobId, title: j.title, outputFile: j.outputFile })),
         );
-        setTitle(
-          state.config && typeof state.config === "object" && "metadata" in state.config
-            ? ((state.config as any).metadata?.title ?? "Conversão")
-            : "Conversão",
-        );
-        setMangaMode(
-          state.config && typeof state.config === "object" && "options" in state.config
-            ? !!(state.config as any).options?.mangaMode
-            : false,
-        );
+        const config = state.config as {
+          sourceId?: string;
+          metadata?: { title?: string };
+          options?: { mangaMode?: boolean };
+        } | null;
+        const resolvedSourceId = config?.sourceId || state.sourceId || null;
+        if (resolvedSourceId) {
+          setSourceId(resolvedSourceId);
+        }
+        setTitle(config?.metadata?.title ?? "Conversão");
+        setMangaMode(!!config?.options?.mangaMode);
         setLoading(false);
-      } catch (err: any) {
-        if (!cancelled) setError(err?.message ?? "Erro ao carregar");
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Erro ao carregar");
         setLoading(false);
       }
     }
@@ -76,10 +79,13 @@ function ReaderPage() {
       setSelectedJob(jobId);
       const format = outputFile ? getFormat(outputFile) : "epub";
 
-      // MOBI: preview no navegador via extracao de paginas no /temp/ do backend.
-      // Nao baixa o arquivo inteiro — apenas aciona POST /preview e renderiza
-      // as paginas individualmente (fetch /preview/pages/:index).
-      if (format === "mobi") {
+      // Revoga Object URL anterior para evitar vazamento de memória
+      if (readerData?.url) {
+        URL.revokeObjectURL(readerData.url);
+      }
+
+      // MOBI e PDF: preview incremental no navegador via endpoint de stream do backend
+      if (format === "mobi" || format === "pdf") {
         setReaderData({ url: "", format });
         setLoading(false);
         return;
@@ -96,38 +102,71 @@ function ReaderPage() {
       const objUrl = URL.createObjectURL(blob);
       setReaderData({ url: objUrl, format });
       setLoading(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false);
-      setError(err?.message ?? "Erro ao abrir");
+      setError(err instanceof Error ? err.message : "Erro ao abrir");
     }
   }
 
+  const handleNavigateJob = (newJobId: string) => {
+    nav({
+      to: "/biblioteca/reader/$conversionId",
+      params: { conversionId },
+      search: { jobId: newJobId },
+    });
+    const target = jobs.find((j) => j.jobId === newJobId);
+    if (target) {
+      openJob(target.jobId, target.outputFile);
+    }
+  };
+
+  // Auto-abrir o job selecionado ou o primeiro disponível
   useEffect(() => {
-    if (
-      preselectedJobId &&
-      jobs.length > 0 &&
-      !readerData &&
-      !loading &&
-      !autoSelectFired.current
-    ) {
-      const target = jobs.find((j) => j.jobId === preselectedJobId);
-      if (target) {
-        autoSelectFired.current = true;
-        openJob(target.jobId, target.outputFile);
-      }
+    if (!readerData && !loading && jobs.length > 0 && !autoSelectFired.current) {
+      autoSelectFired.current = true;
+      const target = preselectedJobId
+        ? (jobs.find((j) => j.jobId === preselectedJobId) ?? jobs[0])
+        : jobs[0];
+      openJob(target.jobId, target.outputFile);
     }
   }, [preselectedJobId, jobs, readerData, loading]);
 
-  const goBack = () => {
+  const handleGoBack = useCallback(() => {
     if (readerData?.url) URL.revokeObjectURL(readerData.url);
-    setReaderData(null);
-    setSelectedJob(null);
-  };
+    if (sourceId) {
+      nav({
+        to: "/biblioteca/$sourceId",
+        params: { sourceId },
+        search: { tab: "conversoes" as const },
+      });
+    } else {
+      nav({ to: "/biblioteca" });
+    }
+  }, [sourceId, readerData, nav]);
+
+  const volumeNavItems: ReaderIndexItem[] = useMemo(() => {
+    return jobs.map((j, idx) => ({
+      id: j.jobId,
+      title: j.title || `Vol. ${idx + 1}`,
+      number: `Vol. ${idx + 1}`,
+      isDownloaded: true,
+    }));
+  }, [jobs]);
+
+  const currentJobIndex = selectedJob ? jobs.findIndex((j) => j.jobId === selectedJob) : -1;
+  const prevJobId = currentJobIndex > 0 ? jobs[currentJobIndex - 1].jobId : null;
+  const nextJobId =
+    currentJobIndex >= 0 && currentJobIndex < jobs.length - 1
+      ? jobs[currentJobIndex + 1].jobId
+      : null;
+  const currentJob = currentJobIndex >= 0 ? jobs[currentJobIndex] : null;
 
   if (loading && !readerData) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-comic-blue" />
+      <div className="fixed inset-0 z-50 bg-reader-bg flex flex-col items-center justify-center gap-5">
+        <BookOpen className="w-8 h-8 text-reader-muted/50 animate-pulse" strokeWidth={1.25} />
+        <p className="text-[11px] uppercase tracking-[0.3em] text-reader-muted/70">Mangaink</p>
+        <p className="text-xs text-reader-muted/60">Carregando páginas…</p>
       </div>
     );
   }
@@ -140,7 +179,7 @@ function ReaderPage() {
           <Button
             onClick={() => {
               setError(null);
-              window.history.back();
+              handleGoBack();
             }}
           >
             Voltar
@@ -150,155 +189,251 @@ function ReaderPage() {
     );
   }
 
-  if (!readerData && jobs.length > 0) {
+  // Visualizador unificado com ReaderCore para formatos renderizados pelo backend (MOBI e PDF)
+  if (readerData && (readerData.format === "mobi" || readerData.format === "pdf")) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="mx-auto max-w-4xl px-4 py-10">
-          <div className="flex items-center gap-3 mb-6">
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              className="h-10 w-10 border-[3px] border-ink rounded-lg bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
-            >
-              <ArrowLeft />
-            </button>
-            <div>
-              <h1 className="font-display text-3xl uppercase leading-none truncate">{title}</h1>
-              <p className="text-sm font-medium opacity-70 mt-1">Selecione um volume para ler</p>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {jobs.map((job) => (
-              <ComicPanel
-                key={job.jobId}
-                bg="card"
-                padding="md"
-                tilt="none"
-                className="cursor-pointer hover:-translate-y-1 transition-transform"
-              >
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => openJob(job.jobId, job.outputFile)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-16 w-12 shrink-0 border-[3px] border-ink rounded bg-muted flex items-center justify-center">
-                      <BookOpen className="h-6 w-6 opacity-40" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-display text-lg truncate">{job.title}</h3>
-                      <p className="text-xs opacity-50">{job.outputFile}</p>
-                    </div>
-                  </div>
-                </button>
-              </ComicPanel>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ConversionServerPreviewReader
+        conversionId={conversionId}
+        jobId={selectedJob ?? ""}
+        mangaTitle={title}
+        volumeTitle={currentJob?.title ?? "Volume"}
+        onBack={handleGoBack}
+        mangaMode={mangaMode}
+        volumeNavItems={volumeNavItems}
+        prevJobId={prevJobId}
+        nextJobId={nextJobId}
+        onNavigateJob={handleNavigateJob}
+      />
     );
   }
 
+  // Visualizador unificado com ReaderCore para CBZ e EPUB (arquivos ZIP de imagens no KCC)
+  if (readerData && (readerData.format === "cbz" || readerData.format === "epub")) {
+    return (
+      <ConversionArchiveReader
+        url={readerData.url}
+        mangaTitle={title}
+        volumeTitle={currentJob?.title ?? "Volume"}
+        onBack={handleGoBack}
+        mangaMode={mangaMode}
+        volumeNavItems={volumeNavItems}
+        currentJobId={selectedJob ?? ""}
+        prevJobId={prevJobId}
+        nextJobId={nextJobId}
+        onNavigateJob={handleNavigateJob}
+      />
+    );
+  }
+
+  // Visualizador de EPUB e PDF com chrome consistente
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3 border-b-[3px] border-ink bg-card shrink-0">
+    <div className="h-screen bg-reader-bg flex flex-col overflow-hidden select-none">
+      <div className="bg-reader-bg/90 backdrop-blur-sm border-b border-reader-border px-3 sm:px-4 py-2.5 grid grid-cols-[auto_1fr_auto] items-center gap-3 shrink-0">
         <button
-          type="button"
-          onClick={goBack}
-          className="h-9 w-9 border-[2.5px] border-ink rounded-md bg-comic-yellow flex items-center justify-center shadow-comic-sm hover:-translate-y-0.5 transition-transform"
+          onClick={handleGoBack}
+          className="h-8 w-8 rounded-md flex items-center justify-center text-reader-muted hover:text-reader-foreground hover:bg-reader-surface transition-colors shrink-0 justify-self-start"
+          aria-label="Voltar"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
         </button>
-        <h2 className="font-display text-lg uppercase truncate flex-1">{title}</h2>
+        <span className="text-sm text-reader-foreground truncate text-center min-w-0">{title}</span>
+        <span className="text-xs text-reader-muted truncate text-right justify-self-end max-w-[40vw]">
+          {currentJob?.title ?? "Volume"}
+        </span>
       </div>
-      <div className="flex-1 relative overflow-hidden">
-        {readerData && readerData.format === "epub" && <EpubViewer url={readerData.url} />}
-        {readerData && readerData.format === "pdf" && <PdfViewer url={readerData.url} />}
-        {readerData && readerData.format === "cbz" && (
-          <CbzViewer url={readerData.url} mangaMode={mangaMode} />
-        )}
-        {readerData && readerData.format === "mobi" && (
-          <MobiViewer
-            conversionId={conversionId}
-            jobId={selectedJob ?? ""}
-            title={title}
-            mangaMode={mangaMode}
-          />
-        )}
+      <div className="flex-1 relative overflow-hidden bg-reader-bg">
+        {/* Futuros visualizadores customizados iriam aqui */}
       </div>
     </div>
   );
 }
 
-function EpubViewer({ url }: { url: string }) {
-  const [ReactReader, setReactReader] = useState<any>(null);
-  const [readerStyles, setReaderStyles] = useState<any>(null);
-  const [arrayBuffer, setArrayBuffer] = useState<ArrayBuffer | null>(null);
-  const [error, setError] = useState(false);
+interface ConversionServerPreviewReaderProps {
+  conversionId: string;
+  jobId: string;
+  mangaTitle: string;
+  volumeTitle: string;
+  onBack: () => void;
+  mangaMode?: boolean;
+  volumeNavItems: ReaderIndexItem[];
+  prevJobId: string | null;
+  nextJobId: string | null;
+  onNavigateJob: (jobId: string) => void;
+}
 
-  useEffect(() => {
-    import("react-reader").then((mod) => {
-      setReactReader(() => mod.ReactReader);
-      setReaderStyles(() => ({
-        ...mod.ReactReaderStyle,
-        container: { ...mod.ReactReaderStyle.container, height: "100%", width: "100%" },
-        readerArea: { ...mod.ReactReaderStyle.readerArea, backgroundColor: "#f5f0e8" },
-      }));
-    });
+function ConversionServerPreviewReader({
+  conversionId,
+  jobId,
+  mangaTitle,
+  volumeTitle,
+  onBack,
+  mangaMode,
+  volumeNavItems,
+  prevJobId,
+  nextJobId,
+  onNavigateJob,
+}: ConversionServerPreviewReaderProps) {
+  const [status, setStatus] = useState<"starting" | "extracting" | "ready" | "failed">("starting");
+  const [totalPages, setTotalPages] = useState(0);
+  const [readyPages, setReadyPages] = useState(0);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const handleRetry = useCallback(() => {
+    setStatus("starting");
+    setExtractError(null);
+    setTotalPages(0);
+    setReadyPages(0);
+    setRetryCount((c) => c + 1);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(url)
-      .then((res) => res.arrayBuffer())
-      .then((buf) => {
-        if (!cancelled) setArrayBuffer(buf);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      });
+    let poll: ReturnType<typeof setInterval> | null = null;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function startPreview() {
+      try {
+        const token = tokenStore.get() ?? undefined;
+        const res = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include",
+        });
+        if (!res.ok && res.status !== 202) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json().catch(() => ({}));
+
+        if (body.status === "ready") {
+          setStatus("ready");
+          setTotalPages(body.totalPages ?? 0);
+          setReadyPages(body.totalPages ?? 0);
+          return;
+        }
+
+        setStatus("extracting");
+
+        let lastKnownReadyPages = 0;
+        const resetTimeout = () => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+          timeoutTimer = setTimeout(() => {
+            if (cancelled) return;
+            if (poll) clearInterval(poll);
+            setStatus("failed");
+            setExtractError(
+              "Tempo limite excedido ao preparar o preview. Clique em tentar novamente.",
+            );
+          }, 120_000);
+        };
+        resetTimeout();
+
+        poll = setInterval(async () => {
+          if (cancelled) return;
+          try {
+            const sres = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+              credentials: "include",
+            });
+            if (!sres.ok) return;
+            const sbody = await sres.json().catch(() => ({}));
+            const currentTotal = sbody.totalPages ?? 0;
+            const currentReady = sbody.readyPages ?? 0;
+            setTotalPages(currentTotal);
+            setReadyPages(currentReady);
+
+            if (currentReady > lastKnownReadyPages) {
+              lastKnownReadyPages = currentReady;
+              resetTimeout();
+            }
+
+            if (sbody.status === "ready") {
+              if (poll) clearInterval(poll);
+              if (timeoutTimer) clearTimeout(timeoutTimer);
+              setStatus("ready");
+            } else if (sbody.status === "failed") {
+              if (poll) clearInterval(poll);
+              if (timeoutTimer) clearTimeout(timeoutTimer);
+              setStatus("failed");
+              setExtractError(sbody.error ?? "Falha na extração");
+            }
+          } catch {
+            // mantém poll ativo
+          }
+        }, 1000);
+      } catch (err: unknown) {
+        setStatus("failed");
+        setExtractError(err instanceof Error ? err.message : "Erro ao iniciar preview");
+      }
+    }
+
+    startPreview();
     return () => {
       cancelled = true;
+      if (poll) clearInterval(poll);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
     };
-  }, [url]);
+  }, [conversionId, jobId, retryCount]);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="font-display text-lg text-comic-red">Erro ao carregar EPUB</p>
-      </div>
+  const pageUrls = useMemo(() => {
+    if (totalPages === 0) return [];
+    return Array.from(
+      { length: totalPages },
+      (_, i) => `/api/conversions/${conversionId}/jobs/${jobId}/preview/pages/${i}`,
     );
-  }
-
-  if (!ReactReader || !arrayBuffer || !readerStyles) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  }, [conversionId, jobId, totalPages]);
 
   return (
-    <div className="h-full w-full">
-      <ReactReader
-        url={arrayBuffer}
-        title=""
-        showToc={true}
-        location={null}
-        locationChanged={() => {}}
-        readerStyles={readerStyles}
-      />
-    </div>
+    <ReaderCore
+      pageUrls={pageUrls}
+      totalPages={totalPages}
+      mangaTitle={mangaTitle}
+      itemTitle={volumeTitle}
+      onBack={onBack}
+      mangaMode={mangaMode}
+      navItems={volumeNavItems}
+      currentNavId={jobId}
+      prevNavId={prevJobId}
+      nextNavId={nextJobId}
+      onNavigateNavId={onNavigateJob}
+      navItemLabel="Volumes"
+      onRetry={handleRetry}
+      isLoading={status === "starting" || (status === "extracting" && totalPages === 0)}
+      hasError={status === "failed"}
+      errorMessage={extractError ?? "Falha ao carregar visualização"}
+      transitionMessage={
+        status === "extracting" && totalPages > 0
+          ? `Carregando páginas… (${readyPages}/${totalPages})`
+          : "Carregando páginas…"
+      }
+    />
   );
 }
 
-function PdfViewer({ url }: { url: string }) {
-  return <iframe src={url} className="w-full h-full border-0" title="PDF Viewer" />;
+interface ConversionArchiveReaderProps {
+  url: string;
+  mangaTitle: string;
+  volumeTitle: string;
+  onBack: () => void;
+  mangaMode?: boolean;
+  volumeNavItems: ReaderIndexItem[];
+  currentJobId: string;
+  prevJobId: string | null;
+  nextJobId: string | null;
+  onNavigateJob: (jobId: string) => void;
 }
 
-function CbzViewer({ url, mangaMode }: { url: string; mangaMode?: boolean }) {
+function ConversionArchiveReader({
+  url,
+  mangaTitle,
+  volumeTitle,
+  onBack,
+  mangaMode,
+  volumeNavItems,
+  currentJobId,
+  prevJobId,
+  nextJobId,
+  onNavigateJob,
+}: ConversionArchiveReaderProps) {
   const [pages, setPages] = useState<string[]>([]);
-  const [current, setCurrent] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -309,8 +444,8 @@ function CbzViewer({ url, mangaMode }: { url: string; mangaMode?: boolean }) {
         const blob = await res.blob();
         const zip = await JSZip.loadAsync(blob);
         const imageFiles = Object.keys(zip.files)
-          .filter((f) => /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(f))
-          .sort();
+          .filter((f) => !zip.files[f].dir && /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(f))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         const urls: string[] = [];
         for (const file of imageFiles) {
           const data = await zip.files[file].async("blob");
@@ -336,297 +471,22 @@ function CbzViewer({ url, mangaMode }: { url: string; mangaMode?: boolean }) {
     };
   }, [pages]);
 
-  const prev = useCallback(() => setCurrent((c) => Math.max(0, c - 1)), []);
-  const next = useCallback(
-    () => setCurrent((c) => Math.min(pages.length - 1, c + 1)),
-    [pages.length],
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (pages.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Nenhuma página encontrada no CBZ</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-full bg-[#2a2a2a]">
-      <div className="flex items-center justify-between px-4 py-2 bg-card border-b-[2px] border-ink shrink-0">
-        <Button
-          size="sm"
-          variant="outline"
-          className="border-[2px] border-ink shadow-comic-sm"
-          onClick={mangaMode ? next : prev}
-          disabled={mangaMode ? current >= pages.length - 1 : current === 0}
-        >
-          {mangaMode ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
-        <span className="font-display text-sm">
-          {current + 1} / {pages.length}
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          className="border-[2px] border-ink shadow-comic-sm"
-          onClick={mangaMode ? prev : next}
-          disabled={mangaMode ? current === 0 : current >= pages.length - 1}
-        >
-          {mangaMode ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-      </div>
-      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-        <img
-          src={pages[current]}
-          alt={`Página ${current + 1}`}
-          className="max-h-full max-w-full object-contain shadow-2xl"
-        />
-      </div>
-    </div>
-  );
-}
-
-interface MobiViewerProps {
-  conversionId: string;
-  jobId: string;
-  title: string;
-  mangaMode?: boolean;
-}
-
-function MobiViewer({ conversionId, jobId, title, mangaMode }: MobiViewerProps) {
-  const [status, setStatus] = useState<"starting" | "extracting" | "ready" | "failed">("starting");
-  const [totalPages, setTotalPages] = useState(0);
-  const [readyPages, setReadyPages] = useState(0);
-  const [current, setCurrent] = useState(0);
-  const [pageUrl, setPageUrl] = useState<string | null>(null);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const objectUrlsRef = useRef<string[]>([]);
-  const pageUrlRef = useRef<string | null>(null);
-
-  // Poll de status enquanto extrai
-  useEffect(() => {
-    let cancelled = false;
-    let poll: ReturnType<typeof setInterval> | null = null;
-
-    async function startPreview() {
-      try {
-        const token = tokenStore.get() ?? undefined;
-        const res = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          credentials: "include",
-        });
-        if (!res.ok && res.status !== 202) throw new Error(`HTTP ${res.status}`);
-        const body = await res.json().catch(() => ({}));
-
-        if (body.status === "ready") {
-          setStatus("ready");
-          setTotalPages(body.totalPages ?? 0);
-          setReadyPages(body.totalPages ?? 0);
-          return;
-        }
-
-        setStatus("extracting");
-        poll = setInterval(async () => {
-          if (cancelled) return;
-          try {
-            const sres = await fetch(`/api/conversions/${conversionId}/jobs/${jobId}/preview`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-              credentials: "include",
-            });
-            if (!sres.ok) return;
-            const sbody = await sres.json().catch(() => ({}));
-            setTotalPages(sbody.totalPages ?? 0);
-            setReadyPages(sbody.readyPages ?? 0);
-            if (sbody.status === "ready") {
-              if (poll) clearInterval(poll);
-              setStatus("ready");
-            } else if (sbody.status === "failed") {
-              if (poll) clearInterval(poll);
-              setStatus("failed");
-              setExtractError(sbody.error ?? "Falha na extração");
-            }
-          } catch {
-            // mantém poll ativo
-          }
-        }, 1000);
-      } catch (err: any) {
-        setStatus("failed");
-        setExtractError(err?.message ?? "Erro ao iniciar preview");
-      }
-    }
-
-    startPreview();
-    return () => {
-      cancelled = true;
-      if (poll) clearInterval(poll);
-    };
-  }, [conversionId, jobId]);
-
-  // Carrega a pagina atual sob demanda
-  const loadPage = useCallback(
-    async (index: number) => {
-      if (index < 0 || (totalPages > 0 && index >= totalPages)) return;
-      setPageLoading(true);
-      setPageError(null);
-      try {
-        const token = tokenStore.get() ?? undefined;
-        const res = await fetch(
-          `/api/conversions/${conversionId}/jobs/${jobId}/preview/pages/${index}`,
-          { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: "include" },
-        );
-        if (res.status === 425) {
-          setPageLoading(false);
-          setPageError("Página ainda sendo extraída…");
-          return;
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        // Revoga URL anterior da lista de object URLs
-        const prev = pageUrlRef.current;
-        if (prev) {
-          URL.revokeObjectURL(prev);
-        }
-        pageUrlRef.current = url;
-        objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== prev);
-        objectUrlsRef.current.push(url);
-        setPageUrl(url);
-        setPageLoading(false);
-      } catch (err: any) {
-        setPageError(err?.message ?? "Erro ao carregar página");
-        setPageLoading(false);
-      }
-    },
-    [conversionId, jobId, totalPages],
-  );
-
-  // Carrega pagina 0 assim que temos status (ready ou readyPages > 0)
-  useEffect(() => {
-    if (status === "ready" || readyPages > 0) {
-      loadPage(current);
-    }
-  }, [status, readyPages, current, loadPage]);
-
-  // Cleanup de object URLs
-  useEffect(() => {
-    return () => {
-      objectUrlsRef.current.forEach(URL.revokeObjectURL);
-      objectUrlsRef.current = [];
-    };
-  }, []);
-
-  // Botao de download do MOBI original (caminho secundario)
-  const downloadMobiUrl = `/api/conversions/${conversionId}/jobs/${jobId}/download`;
-  const token = tokenStore.get();
-
-  const prev = useCallback(() => setCurrent((c) => Math.max(0, c - 1)), []);
-  const next = useCallback(
-    () => setCurrent((c) => Math.min(Math.max(totalPages - 1, readyPages - 1, c), c + 1)),
-    [totalPages, readyPages],
-  );
-
-  if (status === "failed") {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center max-w-md">
-          <BookOpen className="h-16 w-16 mx-auto mb-4 opacity-30" />
-          <h3 className="font-display text-2xl uppercase mb-2">Falha na extração</h3>
-          <p className="text-sm opacity-70 mb-6">{extractError}</p>
-          <a
-            href={downloadMobiUrl}
-            download={`${title || "manga"}.mobi`}
-            className="inline-flex items-center gap-2 bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display text-sm px-4 py-2 rounded-md hover:-translate-y-0.5 transition-transform"
-            {...(token ? { "data-auth": "1" } : {})}
-          >
-            <Download className="h-4 w-4" /> Baixar MOBI
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === "starting" || (status === "extracting" && readyPages === 0)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8">
-        <Loader2 className="h-10 w-10 animate-spin text-comic-blue" />
-        <p className="font-display text-lg uppercase">Extraindo MOBI…</p>
-        <p className="text-xs opacity-60">A primeira página aparecerá em instantes.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-[#2a2a2a]">
-      <div className="flex items-center justify-between px-4 py-2 bg-card border-b-[2px] border-ink shrink-0">
-        <Button
-          size="sm"
-          variant="outline"
-          className="border-[2px] border-ink shadow-comic-sm"
-          onClick={mangaMode ? next : prev}
-          disabled={mangaMode ? status === "ready" && current >= totalPages - 1 : current === 0}
-        >
-          {mangaMode ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
-        <div className="flex items-center gap-3">
-          <span className="font-display text-sm">
-            {status === "extracting" ? (
-              <span className="text-comic-yellow">
-                Extraindo… {readyPages}/{totalPages || "…"}
-              </span>
-            ) : (
-              <span>
-                {current + 1} / {totalPages}
-              </span>
-            )}
-          </span>
-          <a
-            href={downloadMobiUrl}
-            download={`${title || "manga"}.mobi`}
-            className="inline-flex items-center gap-1 text-xs font-display border-[2px] border-ink rounded px-2 py-1 bg-comic-red text-primary-foreground hover:-translate-y-0.5 transition-transform shadow-comic-sm"
-            {...(token ? { "data-auth": "1" } : {})}
-          >
-            <Download className="h-3 w-3" /> Baixar MOBI
-          </a>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="border-[2px] border-ink shadow-comic-sm"
-          onClick={mangaMode ? prev : next}
-          disabled={mangaMode ? current === 0 : status === "ready" && current >= totalPages - 1}
-        >
-          {mangaMode ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-      </div>
-      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-        {pageLoading && <Loader2 className="h-8 w-8 animate-spin" />}
-        {pageError && !pageLoading && (
-          <div className="text-center text-comic-yellow">
-            <p className="font-display text-lg mb-2">{pageError}</p>
-            <Button size="sm" variant="outline" onClick={() => loadPage(current)}>
-              Tentar novamente
-            </Button>
-          </div>
-        )}
-        {!pageLoading && !pageError && pageUrl && (
-          <img
-            src={pageUrl}
-            alt={`Página ${current + 1}`}
-            className="max-h-full max-w-full object-contain shadow-2xl"
-          />
-        )}
-      </div>
-    </div>
+    <ReaderCore
+      pageUrls={pages}
+      totalPages={pages.length}
+      mangaTitle={mangaTitle}
+      itemTitle={volumeTitle}
+      onBack={onBack}
+      mangaMode={mangaMode}
+      navItems={volumeNavItems}
+      currentNavId={currentJobId}
+      prevNavId={prevJobId}
+      nextNavId={nextJobId}
+      onNavigateNavId={onNavigateJob}
+      navItemLabel="Volumes"
+      isLoading={loading}
+      transitionMessage="Carregando páginas…"
+    />
   );
 }

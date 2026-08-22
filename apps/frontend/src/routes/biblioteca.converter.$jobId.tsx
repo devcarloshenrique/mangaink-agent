@@ -33,8 +33,6 @@ export const Route = createFileRoute("/biblioteca/converter/$jobId")({
   component: ConverterPage,
 });
 
-
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const stageIcons: Record<StageId, React.ReactNode> = {
@@ -119,7 +117,7 @@ function ConverterPage() {
   // ── Loading ─────────────────────────────────────────────────────────────
   if (isLoading && !state) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="flex-1 bg-background">
         <div className="mx-auto max-w-3xl px-4 py-20 text-center">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-comic-blue" />
           <p className="font-display text-xl">Carregando conversão…</p>
@@ -131,7 +129,7 @@ function ConverterPage() {
   // ── Error ──────────────────────────────────────────────────────────────
   if (error && !state) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="flex-1 bg-background">
         <div className="mx-auto max-w-3xl px-4 py-20 text-center">
           <h1 className="font-display text-4xl uppercase mb-4">Conversão não encontrada</h1>
           <p className="text-sm font-medium opacity-70 mb-6">{error}</p>
@@ -165,9 +163,8 @@ function ConverterPage() {
   const format = (state.config as { output?: { format?: string } })?.output?.format ?? "";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-3xl px-4 py-10">
-
         <button
           type="button"
           onClick={() => window.history.back()}

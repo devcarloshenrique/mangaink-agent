@@ -13,7 +13,6 @@ export const Route = createFileRoute("/biblioteca/reader-chapter/$sourceId")({
   component: ChapterReaderPage,
 });
 
-
 function ChapterReaderPage() {
   const { sourceId } = Route.useParams();
   const { chapterId } = Route.useSearch();
@@ -22,6 +21,11 @@ function ChapterReaderPage() {
   const [source, setSource] = useState<SourceInspectResponse | null>(null);
   const [cachedTotalPages, setCachedTotalPages] = useState<number | null>(null);
   const [downloadTriggered, setDownloadTriggered] = useState(false);
+
+  useEffect(() => {
+    setDownloadTriggered(false);
+    setCachedTotalPages(null);
+  }, [chapterId]);
 
   useEffect(() => {
     scrapingApi.getSource(sourceId).then(setSource).catch(console.error);
@@ -81,6 +85,14 @@ function ChapterReaderPage() {
     });
   };
 
+  const handleBack = () => {
+    nav({
+      to: "/biblioteca/$sourceId",
+      params: { sourceId },
+      search: { tab: "capitulos" },
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-reader-bg">
       <ChapterReader
@@ -92,7 +104,7 @@ function ChapterReaderPage() {
         onRetry={handleRetry}
         mangaTitle={source?.metadata?.title}
         chapterTitle={chapter?.title ?? `Capítulo ${chapterId}`}
-        backUrl={`/biblioteca/${sourceId}`}
+        onBack={handleBack}
         chapters={source?.chapters ?? []}
         prevChapterId={prevChapterId}
         nextChapterId={nextChapterId}

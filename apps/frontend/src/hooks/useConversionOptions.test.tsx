@@ -29,11 +29,12 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-let mockApiResponse: ConversionOptions | Error = mockOptions;
+let mockApiResponse: ConversionOptions | Error | Promise<ConversionOptions> = mockOptions;
 vi.mock("@/lib/api", () => ({
   conversionsApi: {
     getOptions: vi.fn().mockImplementation(() => {
       if (mockApiResponse instanceof Error) throw mockApiResponse;
+      if (mockApiResponse instanceof Promise) return mockApiResponse;
       return Promise.resolve(mockApiResponse);
     }),
   },
@@ -55,7 +56,7 @@ describe("useConversionOptions", () => {
   });
 
   it("deve retornar isLoading enquanto carrega", () => {
-    mockApiResponse = new Promise(() => {}) as any;
+    mockApiResponse = new Promise<ConversionOptions>(() => {});
 
     const { result } = renderHook(() => useConversionOptions(), { wrapper });
 

@@ -53,27 +53,29 @@ const meta: Meta<typeof ReconvertDialog> = {
 
 export default meta;
 
+function ReconvertDialogDefaultStory() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <Button
+        onClick={() => setIsOpen(true)}
+        className="border-[3px] border-ink shadow-comic font-display"
+      >
+        Reconverter Série
+      </Button>
+      <ReconvertDialog
+        series={mockSeries}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        onReconvertFile={() => {}}
+        onReconvertChapters={() => {}}
+      />
+    </div>
+  );
+}
+
 export const Default: Story = {
-  render: () => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-      <div>
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="border-[3px] border-ink shadow-comic font-display"
-        >
-          Reconverter Série
-        </Button>
-        <ReconvertDialog
-          series={mockSeries}
-          open={isOpen}
-          onOpenChange={setIsOpen}
-          onReconvertFile={() => {}}
-          onReconvertChapters={() => {}}
-        />
-      </div>
-    );
-  },
+  render: () => <ReconvertDialogDefaultStory />,
 };
 
 export const Open: Story = {

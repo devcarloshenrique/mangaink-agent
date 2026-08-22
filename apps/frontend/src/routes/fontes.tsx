@@ -146,9 +146,8 @@ function FontesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-6xl px-4 py-10 space-y-6">
-
         <div className="flex items-center gap-3 mb-4">
           <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
             <Sparkles />
@@ -292,15 +291,15 @@ function FontesPage() {
                     </div>
                   </div>
                   {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setConfigSlug(p.slug)}
-                    aria-label={`Configurar ${p.name}`}
-                    title="Configurar fonte (Admin)"
-                    className="ml-auto shrink-0 flex h-9 w-9 items-center justify-center rounded-lg border-[3px] border-ink bg-muted text-foreground shadow-comic-sm transition-all hover:-translate-y-0.5 hover:bg-comic-yellow hover:text-comic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-comic-blue active:translate-y-0"
-                  >
-                    <Settings2 className="h-4 w-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfigSlug(p.slug)}
+                      aria-label={`Configurar ${p.name}`}
+                      title="Configurar fonte (Admin)"
+                      className="ml-auto shrink-0 flex h-9 w-9 items-center justify-center rounded-lg border-[3px] border-ink bg-muted text-foreground shadow-comic-sm transition-all hover:-translate-y-0.5 hover:bg-comic-yellow hover:text-comic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-comic-blue active:translate-y-0"
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </button>
                   )}
                 </div>
                 {p.description && (
@@ -341,13 +340,13 @@ function FontesPage() {
         )}
 
         {isAdmin && (
-        <ProviderConfigDialog
-          provider={providers.find((p) => p.slug === configSlug) ?? null}
-          open={configSlug !== null}
-          onOpenChange={(open) => {
-            if (!open) setConfigSlug(null);
-          }}
-        />
+          <ProviderConfigDialog
+            provider={providers.find((p) => p.slug === configSlug) ?? null}
+            open={configSlug !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfigSlug(null);
+            }}
+          />
         )}
       </div>
     </div>

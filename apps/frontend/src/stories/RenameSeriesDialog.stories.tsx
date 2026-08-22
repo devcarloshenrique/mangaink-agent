@@ -11,26 +11,28 @@ const meta: Meta<typeof RenameSeriesDialog> = {
 
 export default meta;
 
+function RenameSeriesDialogDefaultStory() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <Button
+        onClick={() => setIsOpen(true)}
+        className="border-[3px] border-ink shadow-comic font-display"
+      >
+        Renomear Série
+      </Button>
+      <RenameSeriesDialog
+        currentTitle="Berserk"
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        onConfirm={() => setIsOpen(false)}
+      />
+    </div>
+  );
+}
+
 export const Default: Story = {
-  render: () => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-      <div>
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="border-[3px] border-ink shadow-comic font-display"
-        >
-          Renomear Série
-        </Button>
-        <RenameSeriesDialog
-          currentTitle="Berserk"
-          open={isOpen}
-          onOpenChange={setIsOpen}
-          onConfirm={() => setIsOpen(false)}
-        />
-      </div>
-    );
-  },
+  render: () => <RenameSeriesDialogDefaultStory />,
 };
 
 export const Open: Story = {

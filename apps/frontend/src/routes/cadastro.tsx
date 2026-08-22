@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { Lock, Mail, User as UserIcon, Loader2 } from "lucide-react";
 import { ApiError } from "@/lib/api";
 
-
 // ─── Schema de validação ───────────────────────────────────────────────────────
 const cadastroSchema = z
   .object({
@@ -76,7 +75,7 @@ function CadastroPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background flex flex-col justify-center">
       <div className="mx-auto max-w-md px-4 py-12">
         <div className="text-center mb-6">
           <SpeechBubble variant="blue" tail="bottom" className="mb-4">

@@ -19,35 +19,37 @@ const meta: Meta = {
 
 export default meta;
 
+function AlertDialogDefaultStory() {
+  const [open, setOpen] = useState(false);
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button className="border-[3px] border-ink shadow-comic font-display text-destructive">
+          Excluir Item
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="border-[3px] border-ink shadow-comic-lg">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-display text-2xl">Tem certeza?</AlertDialogTitle>
+          <AlertDialogDescription className="text-base font-medium text-foreground">
+            Esta ação não pode ser desfeita. O item será permanentemente removido.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex justify-end gap-3">
+          <AlertDialogCancel className="border-[3px] border-ink shadow-comic-sm font-display">
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90 border-[3px] border-ink shadow-comic font-display">
+            Excluir
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export const Default: Story = {
-  render: () => {
-    const [open, setOpen] = useState(false);
-    return (
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogTrigger asChild>
-          <Button className="border-[3px] border-ink shadow-comic font-display text-destructive">
-            Excluir Item
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent className="border-[3px] border-ink shadow-comic-lg">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-display text-2xl">Tem certeza?</AlertDialogTitle>
-            <AlertDialogDescription className="text-base font-medium text-foreground">
-              Esta ação não pode ser desfeita. O item será permanentemente removido.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-3">
-            <AlertDialogCancel className="border-[3px] border-ink shadow-comic-sm font-display">
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90 border-[3px] border-ink shadow-comic font-display">
-              Excluir
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-    );
-  },
+  render: () => <AlertDialogDefaultStory />,
 };
 
 export const Open: Story = {

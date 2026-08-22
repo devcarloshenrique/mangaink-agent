@@ -123,7 +123,7 @@ function BibliotecaPage() {
   const totalCount = seriesGroups.length;
 
   return (
-    <div className="min-h-screen bg-background overflow-x-clip">
+    <div className="flex-1 bg-background overflow-x-clip">
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
@@ -286,9 +286,7 @@ function BibliotecaPage() {
                         {highlightMatch(group.title, searchQuery)}
                       </div>
                     </div>
-                    <div className="absolute top-1 right-1 z-10">
-                      {getSeriesStatusBadge(group)}
-                    </div>
+                    <div className="absolute top-1 right-1 z-10">{getSeriesStatusBadge(group)}</div>
                   </Link>
                 ))}
               </div>

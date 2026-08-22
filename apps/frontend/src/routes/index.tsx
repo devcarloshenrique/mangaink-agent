@@ -58,9 +58,7 @@ function Dashboard() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background">
-
-
+    <div className="flex-1 bg-background">
       <section className="border-b-[3px] border-ink bg-comic-yellow relative overflow-hidden">
         <div className="absolute inset-0 bg-halftone opacity-25 pointer-events-none" />
         <div className="relative mx-auto max-w-6xl px-4 py-10 md:py-14">

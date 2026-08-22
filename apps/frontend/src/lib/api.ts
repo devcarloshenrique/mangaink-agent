@@ -175,11 +175,11 @@ export const scrapingApi = {
   },
 
   /**
-    * SSE /api/conversions/source/inspect/:sourceId/events
-    * Requer auth (token injetado via fetch streaming — EventSource nativo não
-    * permite Authorization header).
-    * Retorna { close } para fechar o stream.
-    */
+   * SSE /api/conversions/source/inspect/:sourceId/events
+   * Requer auth (token injetado via fetch streaming — EventSource nativo não
+   * permite Authorization header).
+   * Retorna { close } para fechar o stream.
+   */
   inspectEvents(
     sourceId: string,
     handlers: {
@@ -191,14 +191,18 @@ export const scrapingApi = {
   ): { close: () => void } {
     const url = `/api/conversions/source/inspect/${sourceId}/events`;
     const token = tokenStore.get() ?? undefined;
-    return createSSEStream(url, {
-      onEvent(event, data) {
-        if (event === "progress") handlers.onProgress?.(data as never);
-        else if (event === "completed") handlers.onCompleted?.(data as never);
-        else if (event === "failed") handlers.onFailed?.(data as never);
+    return createSSEStream(
+      url,
+      {
+        onEvent(event, data) {
+          if (event === "progress") handlers.onProgress?.(data as never);
+          else if (event === "completed") handlers.onCompleted?.(data as never);
+          else if (event === "failed") handlers.onFailed?.(data as never);
+        },
+        onError: handlers.onError,
       },
-      onError: handlers.onError,
-    }, token);
+      token,
+    );
   },
 
   /** GET /api/conversions/source/providers — lista providers disponíveis */

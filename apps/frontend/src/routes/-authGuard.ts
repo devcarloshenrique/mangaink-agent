@@ -29,4 +29,3 @@ export async function guestGuard() {
     throw redirect({ to: "/" });
   }
 }
-

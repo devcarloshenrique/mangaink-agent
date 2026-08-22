@@ -31,7 +31,7 @@ describe("createSSEStream", () => {
       ok: true,
       body: mockReadable,
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse as any);
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
   });
 
   it("deve chamar onEvent para cada frame SSE", async () => {
@@ -40,7 +40,7 @@ describe("createSSEStream", () => {
       'event: completed\ndata: {"sourceId":"src_123"}\n\n',
     ]);
     const mockResponse = { ok: true, body: mockReadable };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse as any);
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
 
     const onEvent = vi.fn();
     const stream = createSSEStream("/test", { onEvent });
@@ -57,7 +57,7 @@ describe("createSSEStream", () => {
   it("deve injetar token como Authorization header", () => {
     global.fetch = vi
       .fn()
-      .mockResolvedValue({ ok: true, body: createMockReadableStream([]) } as any);
+      .mockResolvedValue({ ok: true, body: createMockReadableStream([]) } as unknown as Response);
 
     createSSEStream("/test", { onEvent: vi.fn() }, "my-token-123");
 
@@ -77,7 +77,7 @@ describe("createSSEStream", () => {
       'event: test\ndata: {"msg":"hello"}\n\n',
     ]);
     const mockResponse = { ok: true, body: mockReadable };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse as any);
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
 
     const onEvent = vi.fn();
     const stream = createSSEStream("/test", { onEvent });
@@ -94,7 +94,7 @@ describe("createSSEStream", () => {
     const abortSpy = vi.spyOn(AbortController.prototype, "abort");
     mockReadable = createMockReadableStream([": keepalive\n\n"]);
     const mockResponse = { ok: true, body: mockReadable };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse as any);
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
 
     const stream = createSSEStream("/test", { onEvent: vi.fn() });
 

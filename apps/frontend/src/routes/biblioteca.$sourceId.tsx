@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -15,7 +15,6 @@ import { ComicPanel } from "@/components/comic/ComicPanel";
 import { scrapingApi, chaptersApi } from "@/lib/api";
 import { useReadingProgress, useToggleRead } from "@/hooks/useReadingProgress";
 import type { SourceInspectResponse } from "@/types/scraping";
-import { MOCK_LOTS } from "@/lib/manga-detail-mocks";
 
 const mangaDetailSearchSchema = z.object({
   tab: z.enum(["detalhes", "capitulos", "conversoes"]).optional().default("detalhes"),
@@ -29,12 +28,26 @@ export const Route = createFileRoute("/biblioteca/$sourceId")({
 function MangaDetailPage() {
   const { sourceId } = Route.useParams();
   const search = Route.useSearch();
-  const activeTab = search.tab ?? "detalhes";
   const navigate = useNavigate();
+
+  // Local state for instant tab switching; initialize from URL search param
+  const [activeTab, setActiveTab] = useState<string>(search.tab ?? "detalhes");
+  const rafRef = useRef<number>(0);
+
+  // Sync state if URL search param changes externally (e.g. Back button from Reader)
+  useEffect(() => {
+    if (search.tab && search.tab !== activeTab) {
+      setActiveTab(search.tab);
+    }
+  }, [search.tab, activeTab]);
 
   const [isFavorite, setIsFavorite] = useState(false);
 
-  const { data: source, isLoading: sourceLoading, isError } = useQuery<SourceInspectResponse>({
+  const {
+    data: source,
+    isLoading: sourceLoading,
+    isError,
+  } = useQuery<SourceInspectResponse>({
     queryKey: ["source", sourceId],
     queryFn: () => scrapingApi.getSource(sourceId),
     staleTime: 30_000,
@@ -56,7 +69,7 @@ function MangaDetailPage() {
   );
 
   const chapters = source?.chapters ?? [];
-  const seriesTitle = source?.metadata?.title ?? (sourceLoading ? "Carregando obra…" : "Obra");
+  const seriesTitle = source?.metadata?.title ?? "";
   const chapterCount = chapters.length;
   const isLoading = sourceLoading || progressLoading;
 
@@ -74,19 +87,42 @@ function MangaDetailPage() {
     }
   };
 
-  const handleTabChange = (newTab: string) => {
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        tab: newTab as "detalhes" | "capitulos" | "conversoes",
-      }),
-      replace: true,
+  // Instant local tab switch + lightweight URL sync (no router overhead)
+  const handleTabChange = useCallback((newTab: string) => {
+    setActiveTab(newTab);
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", newTab);
+      window.history.replaceState(window.history.state, "", url.toString());
     });
-  };
+  }, []);
+
+  const handleToggleRead = useCallback(
+    (chapterId: string, isRead: boolean) => toggleRead.mutate({ chapterId, isRead }),
+    [toggleRead],
+  );
+
+  const handleDownloadRequest = useCallback(
+    (sid: string, cid: string, title: string) =>
+      setDownloadTarget({ sourceId: sid, chapterId: cid, title }),
+    [],
+  );
+
+  const mangaDetails = useMemo(
+    () => ({
+      title: source?.metadata?.title ?? "",
+      author: source?.metadata?.author ?? "",
+      status: source?.metadata?.status ?? null,
+      description: source?.metadata?.description ?? "Nenhuma sinopse informada.",
+      genres: source?.metadata?.genres ?? [],
+    }),
+    [source?.metadata],
+  );
 
   if (!sourceLoading && (isError || !source)) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="flex-1 bg-background">
         <div className="mx-auto max-w-6xl px-4 py-10">
           <div className="flex items-center gap-3 mb-8">
             <Link
@@ -117,7 +153,7 @@ function MangaDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex items-center gap-3 mb-8">
           <Link
@@ -130,11 +166,7 @@ function MangaDetailPage() {
 
         <div className="grid md:grid-cols-[320px_1fr] gap-8">
           <div className="space-y-6 md:max-w-[320px] mx-auto md:mx-0 w-full">
-            <MangaCover
-              sourceId={sourceId}
-              title={seriesTitle}
-              className="aspect-[2/3]"
-            />
+            <MangaCover sourceId={sourceId} title={seriesTitle} className="aspect-[2/3]" />
             <ReadButton
               sourceId={sourceId}
               readChapterIds={readChapterIds}
@@ -152,7 +184,7 @@ function MangaDetailPage() {
                   Carregando obra…
                 </span>
               ) : (
-                seriesTitle
+                seriesTitle || "Obra"
               )}
             </h1>
 
@@ -160,46 +192,40 @@ function MangaDetailPage() {
               <TabsList className="border-[3px] border-ink rounded-xl shadow-comic bg-card p-0 w-full flex overflow-hidden h-auto">
                 <TabsTrigger
                   value="detalhes"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80"
+                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
                 >
                   Detalhes
                 </TabsTrigger>
                 <TabsTrigger
                   value="capitulos"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80"
+                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
                 >
                   Capítulos {sourceLoading ? "" : `(${chapterCount})`}
                 </TabsTrigger>
                 <TabsTrigger
                   value="conversoes"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80"
+                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
                 >
                   Conversões
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="detalhes" className="mt-4 animate-slide-up min-h-[420px]">
+              <TabsContent value="detalhes" className="mt-4 animate-fade-in min-h-[420px]">
                 {sourceLoading ? (
                   <ComicPanel bg="card" padding="md">
                     <div className="space-y-4 py-8 text-center">
                       <Loader2 className="h-8 w-8 animate-spin mx-auto text-comic-blue" />
-                      <p className="font-display text-base opacity-70">Carregando detalhes da obra…</p>
+                      <p className="font-display text-base opacity-70">
+                        Carregando detalhes da obra…
+                      </p>
                     </div>
                   </ComicPanel>
                 ) : (
-                  <TabDetalhes
-                    details={{
-                      title: source?.metadata?.title ?? "",
-                      author: source?.metadata?.author ?? "",
-                      status: source?.metadata?.status ?? null,
-                      description: source?.metadata?.description ?? "Nenhuma sinopse informada.",
-                      genres: source?.metadata?.genres ?? [],
-                    }}
-                  />
+                  <TabDetalhes details={mangaDetails} />
                 )}
               </TabsContent>
 
-              <TabsContent value="capitulos" className="mt-4 animate-slide-up min-h-[420px]">
+              <TabsContent value="capitulos" className="mt-4 animate-fade-in min-h-[420px]">
                 {sourceLoading ? (
                   <ComicPanel bg="card" padding="md">
                     <div className="space-y-4 py-8 text-center">
@@ -212,16 +238,14 @@ function MangaDetailPage() {
                     chapters={chapters}
                     sourceId={sourceId}
                     readChapterIds={readChapterIds}
-                    onToggleRead={(chapterId, isRead) => toggleRead.mutate({ chapterId, isRead })}
-                    onDownloadRequest={(sid, cid, title) =>
-                      setDownloadTarget({ sourceId: sid, chapterId: cid, title })
-                    }
+                    onToggleRead={handleToggleRead}
+                    onDownloadRequest={handleDownloadRequest}
                   />
                 )}
               </TabsContent>
 
-              <TabsContent value="conversoes" className="mt-4 animate-slide-up min-h-[420px]">
-                <TabConversoes sourceId={sourceId} lots={MOCK_LOTS} />
+              <TabsContent value="conversoes" className="mt-4 animate-fade-in min-h-[420px]">
+                <TabConversoes sourceId={sourceId} seriesTitle={seriesTitle} />
               </TabsContent>
             </Tabs>
           </div>
@@ -239,4 +263,3 @@ function MangaDetailPage() {
     </div>
   );
 }
-

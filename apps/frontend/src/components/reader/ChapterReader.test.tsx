@@ -10,11 +10,11 @@ const mockUseChapterDownload = vi.fn();
 const mockUseChapterPages = vi.fn();
 
 vi.mock("@/hooks/useChapterDownload", () => ({
-  useChapterDownload: (...args: any[]) => mockUseChapterDownload(...args),
+  useChapterDownload: (...args: unknown[]) => mockUseChapterDownload(...args),
 }));
 
 vi.mock("@/hooks/useChapterPages", () => ({
-  useChapterPages: (...args: any[]) => mockUseChapterPages(...args),
+  useChapterPages: (...args: unknown[]) => mockUseChapterPages(...args),
 }));
 
 import { ChapterReader } from "@/components/reader/ChapterReader";

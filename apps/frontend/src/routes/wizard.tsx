@@ -427,11 +427,7 @@ function WizardPage() {
       if (mode === "custom" && (d.volumeSizes.length === 0 || !isVolumeSizesManual)) {
         const total = d.selectedChapters.size || 1;
         const defaultCount =
-          total >= 6 && total % 3 === 0
-            ? 3
-            : total >= 4
-              ? 2
-              : Math.max(1, total);
+          total >= 6 && total % 3 === 0 ? 3 : total >= 4 ? 2 : Math.max(1, total);
         nextData.volumeSizes = computeEqualVolumeSizes(total, defaultCount);
       }
       return nextData;
@@ -451,7 +447,9 @@ function WizardPage() {
     }
     const sizes = computeEqualVolumeSizes(total, count);
     update("volumeSizes", sizes);
-    toast.success(`${total} capítulo(s) divididos em ${sizes.length} volumes (${sizes.join(", ")})`);
+    toast.success(
+      `${total} capítulo(s) divididos em ${sizes.length} volumes (${sizes.join(", ")})`,
+    );
   };
 
   const finish = async () => {
@@ -496,10 +494,12 @@ function WizardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-5xl px-4 py-8 md:py-12">
         <div className="text-center mb-8 pt-2">
-          <h1 className="font-display text-4xl md:text-5xl uppercase tracking-tight">Mangá pro Kindle</h1>
+          <h1 className="font-display text-4xl md:text-5xl uppercase tracking-tight">
+            Mangá pro Kindle
+          </h1>
           <p className="text-sm md:text-base font-medium opacity-80 mt-2">
             Configure e converta seus mangás favoritos para leitura otimizada no Kindle
           </p>
@@ -903,7 +903,9 @@ function StepChapters({
                     onClick={() => onVolumeMode("fixed")}
                     className={cn(
                       "font-display text-xs px-2.5 py-1 rounded border-[2px] border-ink transition-all shadow-comic-sm cursor-pointer",
-                      volumeMode === "fixed" ? "bg-comic-red text-primary-foreground -translate-y-0.5" : "bg-card hover:bg-muted"
+                      volumeMode === "fixed"
+                        ? "bg-comic-red text-primary-foreground -translate-y-0.5"
+                        : "bg-card hover:bg-muted",
                     )}
                   >
                     Quantidade fixa
@@ -913,7 +915,9 @@ function StepChapters({
                     onClick={() => onVolumeMode("custom")}
                     className={cn(
                       "font-display text-xs px-2.5 py-1 rounded border-[2px] border-ink transition-all shadow-comic-sm cursor-pointer",
-                      volumeMode === "custom" ? "bg-comic-red text-primary-foreground -translate-y-0.5" : "bg-card hover:bg-muted"
+                      volumeMode === "custom"
+                        ? "bg-comic-red text-primary-foreground -translate-y-0.5"
+                        : "bg-card hover:bg-muted",
                     )}
                   >
                     Por volume (personalizado)
@@ -941,7 +945,10 @@ function StepChapters({
                       max={effectiveTotal || 1}
                       value={volumeSize}
                       onChange={(e) => {
-                        const v = Math.max(1, Math.min(effectiveTotal || 1, Number(e.target.value) || 1));
+                        const v = Math.max(
+                          1,
+                          Math.min(effectiveTotal || 1, Number(e.target.value) || 1),
+                        );
                         onVolumeSize(v);
                       }}
                       className="border-[2.5px] border-ink h-8 w-16 shadow-comic-sm text-center font-display text-sm"
@@ -966,7 +973,10 @@ function StepChapters({
                   {/* Inputs de cada volume */}
                   <div className="flex flex-wrap gap-2">
                     {volumeSizes.map((size, i) => (
-                      <div key={i} className="flex items-center gap-1 bg-card border-[2px] border-ink rounded px-2 py-1 shadow-comic-sm">
+                      <div
+                        key={i}
+                        className="flex items-center gap-1 bg-card border-[2px] border-ink rounded px-2 py-1 shadow-comic-sm"
+                      >
                         <span className="font-display text-xs">Vol. {i + 1}:</span>
                         <Input
                           type="number"
@@ -1000,7 +1010,9 @@ function StepChapters({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => onSplitEqually(Math.min(effectiveTotal, volumeSizes.length + 1))}
+                      onClick={() =>
+                        onSplitEqually(Math.min(effectiveTotal, volumeSizes.length + 1))
+                      }
                       disabled={volumeSizes.length >= effectiveTotal}
                       className="border-[2px] border-ink shadow-comic-sm font-display text-xs h-7 cursor-pointer"
                     >
@@ -1018,7 +1030,15 @@ function StepChapters({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => onSplitEqually(volumeSizes.length > 0 ? volumeSizes.length : (effectiveTotal >= 6 && effectiveTotal % 3 === 0 ? 3 : 2))}
+                      onClick={() =>
+                        onSplitEqually(
+                          volumeSizes.length > 0
+                            ? volumeSizes.length
+                            : effectiveTotal >= 6 && effectiveTotal % 3 === 0
+                              ? 3
+                              : 2,
+                        )
+                      }
                       className="border-[2px] border-ink shadow-comic-sm font-display text-xs h-7 bg-comic-yellow/30 hover:bg-comic-yellow cursor-pointer"
                     >
                       Dividir por igual ({volumeSizes.length} vols)
@@ -1091,7 +1111,7 @@ function StepChapters({
               onClick={() => setShowRangePicker(!showRangePicker)}
               className={cn(
                 "border-[2.5px] border-ink shadow-comic-sm font-display text-xs h-8",
-                showRangePicker && "bg-comic-yellow text-comic-ink"
+                showRangePicker && "bg-comic-yellow text-comic-ink",
               )}
             >
               Faixa de Caps
@@ -1130,7 +1150,10 @@ function StepChapters({
 
         <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
           <MousePointer className="h-3.5 w-3.5 shrink-0" />
-          <span>Clique e arraste para selecionar vários capítulos em lote, ou segure Shift + clique para intervalo.</span>
+          <span>
+            Clique e arraste para selecionar vários capítulos em lote, ou segure Shift + clique para
+            intervalo.
+          </span>
         </p>
 
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-[460px] overflow-y-auto pr-1 select-none">

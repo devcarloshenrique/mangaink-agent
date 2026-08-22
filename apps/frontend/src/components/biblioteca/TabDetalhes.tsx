@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { ScrollText, User } from "lucide-react";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import type { MangaDetails } from "@/types/manga-detail";
@@ -7,7 +7,7 @@ interface TabDetalhesProps {
   details: MangaDetails;
 }
 
-export function TabDetalhes({ details }: TabDetalhesProps) {
+export const TabDetalhes = memo(function TabDetalhes({ details }: TabDetalhesProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -59,4 +59,4 @@ export function TabDetalhes({ details }: TabDetalhesProps) {
       </div>
     </ComicPanel>
   );
-}
+});

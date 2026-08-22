@@ -58,11 +58,13 @@ function AppShell() {
   }
 
   return (
-    <>
+    <div className="min-h-screen flex flex-col bg-background">
       <Toaster richColors position="top-right" />
       {!isFullscreenReader && <ComicHeader />}
-      <Outlet />
-    </>
+      <main className="flex-1 flex flex-col min-w-0">
+        <Outlet />
+      </main>
+    </div>
   );
 }
 
@@ -84,4 +86,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

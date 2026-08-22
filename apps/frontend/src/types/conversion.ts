@@ -88,6 +88,7 @@ export type ConversionStatus =
 /** Estado agregado retornado pelo GET /api/conversions/:id */
 export interface ConversionState {
   conversionId: string;
+  sourceId?: string;
   status: ConversionStatus;
   progress: number;
   totalJobs: number;
@@ -118,6 +119,7 @@ export interface ConversionSummary {
   updatedAt: string;
   finishedAt?: string;
   cover?: CoverRef;
+  output?: { deviceId: string; format: string };
 }
 
 /** Resultado paginado GET /api/conversions */

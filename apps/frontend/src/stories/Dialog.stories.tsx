@@ -19,49 +19,49 @@ const meta: Meta = {
 
 export default meta;
 
-export const Default: Story = {
-  render: () => {
-    const [open, setOpen] = useState(false);
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button className="border-[3px] border-ink shadow-comic font-display">
-            Abrir Dialog
+function DialogDefaultStory() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="border-[3px] border-ink shadow-comic font-display">Abrir Dialog</Button>
+      </DialogTrigger>
+      <DialogContent className="border-[3px] border-ink shadow-comic-lg">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl">Título do Dialog</DialogTitle>
+          <DialogDescription>Descrição do dialog com mais detalhes.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-1.5">
+            <Label className="font-display">Nome</Label>
+            <Input
+              placeholder="Digite seu nome"
+              className="border-[3px] border-ink shadow-comic-sm"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            className="border-[3px] border-ink shadow-comic-sm font-display"
+          >
+            Cancelar
           </Button>
-        </DialogTrigger>
-        <DialogContent className="border-[3px] border-ink shadow-comic-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Título do Dialog</DialogTitle>
-            <DialogDescription>Descrição do dialog com mais detalhes.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-1.5">
-              <Label className="font-display">Nome</Label>
-              <Input
-                placeholder="Digite seu nome"
-                className="border-[3px] border-ink shadow-comic-sm"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setOpen(false)}
-              className="border-[3px] border-ink shadow-comic-sm font-display"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => setOpen(false)}
-              className="bg-comic-red text-primary-foreground border-[3px] border-ink shadow-comic font-display"
-            >
-              Confirmar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  },
+          <Button
+            onClick={() => setOpen(false)}
+            className="bg-comic-red text-primary-foreground border-[3px] border-ink shadow-comic font-display"
+          >
+            Confirmar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export const Default: Story = {
+  render: () => <DialogDefaultStory />,
 };
 
 export const Open: Story = {

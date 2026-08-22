@@ -11,26 +11,28 @@ const meta: Meta<typeof DeleteConfirmDialog> = {
 
 export default meta;
 
+function DeleteConfirmDialogDefaultStory() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <Button
+        onClick={() => setIsOpen(true)}
+        className="border-[3px] border-ink shadow-comic font-display"
+      >
+        Excluir Série
+      </Button>
+      <DeleteConfirmDialog
+        title="Berserk"
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        onConfirm={() => setIsOpen(false)}
+      />
+    </div>
+  );
+}
+
 export const Default: Story = {
-  render: () => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-      <div>
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="border-[3px] border-ink shadow-comic font-display"
-        >
-          Excluir Série
-        </Button>
-        <DeleteConfirmDialog
-          title="Berserk"
-          open={isOpen}
-          onOpenChange={setIsOpen}
-          onConfirm={() => setIsOpen(false)}
-        />
-      </div>
-    );
-  },
+  render: () => <DeleteConfirmDialogDefaultStory />,
 };
 
 export const Open: Story = {

@@ -15,8 +15,8 @@ export function useConversionActions() {
       await conversionsApi.cancel(conversionId);
       toast.success("Conversão cancelada");
       invalidate();
-    } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao cancelar");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao cancelar");
     }
   }
 
@@ -25,8 +25,8 @@ export function useConversionActions() {
       await conversionsApi.remove(conversionId);
       toast.success("Conversão removida");
       invalidate();
-    } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao remover");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover");
     }
   }
 
@@ -39,8 +39,8 @@ export function useConversionActions() {
         credentials: "include",
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as any)?.error ?? "Erro ao baixar arquivo");
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body?.error ?? "Erro ao baixar arquivo");
       }
       const blob = await res.blob();
       const disposition = res.headers.get("content-disposition");
@@ -53,21 +53,23 @@ export function useConversionActions() {
       a.click();
       URL.revokeObjectURL(objUrl);
       toast.success("Download iniciado");
-    } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao baixar");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao baixar");
     }
   }
 
   async function reconvert(conversionId: string) {
     try {
       const state = await conversionsApi.get(conversionId);
-      const config = state.config as any;
-      navigate({
-        to: "/wizard",
-        search: { sourceId: config.sourceId, conversionId },
-      });
-    } catch (err: any) {
-      toast.error(err?.message ?? "Erro ao reconverter");
+      const config = state.config as { sourceId?: string } | null;
+      if (config?.sourceId) {
+        navigate({
+          to: "/wizard",
+          search: { sourceId: config.sourceId, conversionId },
+        });
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reconverter");
     }
   }
 

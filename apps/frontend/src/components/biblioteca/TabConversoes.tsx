@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   BookOpen,
@@ -18,21 +19,26 @@ import {
   Tablet,
   Trash2,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { MOCK_LOTS } from "@/lib/manga-detail-mocks";
-import type { MockLot, MockVol, MockVolState } from "@/lib/manga-detail-mocks";
+import { useSourceConversions } from "@/hooks/useSourceConversions";
+import { useConversionActions } from "@/hooks/useConversionActions";
+import { ConversionLogsModal } from "@/components/biblioteca/ConversionLogsModal";
+import type { ConversionLot, ConversionVolume } from "@/types/conversion-tab.types";
+import { extractSeriesInitials } from "@/types/conversion-tab.types";
+import type { ConversionStatus, JobStatus } from "@/types/conversion";
 
 interface TabConversoesProps {
   sourceId: string;
-  lots?: MockLot[];
+  seriesTitle?: string;
 }
 
 /* ── Status / formatos ─────────────────────────────────────── */
 
 const LOT_STATUS: Record<
-  MockLot["status"],
+  ConversionStatus,
   { chip: string; label: string; dot: string; pulse?: boolean }
 > = {
   completed: {
@@ -61,38 +67,27 @@ const LOT_STATUS: Record<
     label: "Na fila",
     dot: "bg-muted-foreground",
   },
-  downloading: {
-    chip: "bg-[color-mix(in_oklch,var(--comic-blue)_22%,white)] text-comic-blue",
-    label: "Baixando",
-    dot: "bg-comic-blue",
-    pulse: true,
+  cancelled: {
+    chip: "bg-muted text-muted-foreground",
+    label: "Cancelado",
+    dot: "bg-muted-foreground",
   },
 };
 
-const VOL_STATUS: Record<MockVolState, { icon: typeof Clock; cls: string; label: string }> = {
-  sent: { icon: CheckCircle2, cls: "text-comic-blue", label: "Pronto" },
-  ready: { icon: CheckCircle2, cls: "text-comic-blue", label: "Pronto" },
-  done: { icon: CheckCircle2, cls: "text-comic-blue", label: "Pronto" },
+const VOL_STATUS: Record<JobStatus, { icon: typeof Clock; cls: string; label: string }> = {
+  completed: { icon: CheckCircle2, cls: "text-comic-blue", label: "Pronto" },
   converting: { icon: Loader2, cls: "text-ink", label: "Convertendo" },
-  queued: { icon: Clock, cls: "text-muted-foreground", label: "Na fila" },
+  packaging: { icon: Loader2, cls: "text-ink", label: "Empacotando" },
   downloading: { icon: Download, cls: "text-ink", label: "Baixando" },
+  preparing: { icon: Clock, cls: "text-muted-foreground", label: "Preparando" },
+  queued: { icon: Clock, cls: "text-muted-foreground", label: "Na fila" },
   failed: { icon: AlertTriangle, cls: "text-comic-red", label: "Falhou" },
   cancelled: { icon: Clock, cls: "text-muted-foreground", label: "Cancelado" },
 };
 
-const isSelectable = (v: MockVol) =>
-  v.state === "ready" || v.state === "done" || v.state === "sent";
-const isSendable = (v: MockVol) => isSelectable(v);
+const isSelectable = (v: ConversionVolume) => v.state === "completed";
 
-function totalMB(vs: MockVol[]): string {
-  const mb = vs.reduce((acc, v) => {
-    const n = parseFloat(String(v.size).replace(",", "."));
-    return acc + (isNaN(n) ? 0 : n);
-  }, 0);
-  return mb.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB";
-}
-
-/* ── Botões (estilo C07c) ──────────────────────────────────── */
+/* ── Botões (estilo Comic) ──────────────────────────────────── */
 
 const btnBase =
   "inline-flex items-center justify-center gap-1.5 border-[2.5px] border-ink rounded-lg font-display text-[11px] uppercase tracking-wider px-2.5 py-1.5 whitespace-nowrap transition-all hover:-translate-y-0.5 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:translate-y-0";
@@ -105,8 +100,8 @@ const btnIcon =
 
 /* ── Peças pequenas ────────────────────────────────────────── */
 
-function StChip({ status, small }: { status: MockLot["status"]; small?: boolean }) {
-  const s = LOT_STATUS[status];
+function StChip({ status, small }: { status: ConversionStatus; small?: boolean }) {
+  const s = LOT_STATUS[status] ?? LOT_STATUS.queued;
   return (
     <span
       className={cn(
@@ -130,11 +125,14 @@ function DeviceTag({ device }: { device: string }) {
   );
 }
 
-function VolCover({ vol }: { vol: string }) {
+function VolCover({ vol, seriesTitle }: { vol: string; seriesTitle?: string }) {
+  const initials = extractSeriesInitials(seriesTitle);
   return (
     <div className="relative h-[50px] w-[34px] shrink-0 border-[2.5px] border-ink rounded-md shadow-comic-sm bg-comic-yellow bg-halftone flex flex-col items-center justify-center overflow-hidden">
       <span className="absolute -top-[3px] -right-[3px] h-[14px] w-[14px] bg-comic-red rotate-45" />
-      <span className="font-display text-xs text-comic-red -rotate-[4deg] leading-none">TBV</span>
+      <span className="font-display text-xs text-comic-red -rotate-[4deg] leading-none">
+        {initials}
+      </span>
       <span className="font-display text-[8px] tracking-wider text-ink leading-none mt-0.5">
         {vol.toUpperCase()}
       </span>
@@ -147,7 +145,7 @@ function VolCheck({
   checked,
   onToggle,
 }: {
-  v: MockVol;
+  v: ConversionVolume;
   checked: boolean;
   onToggle: (c: boolean) => void;
 }) {
@@ -155,7 +153,7 @@ function VolCheck({
   return (
     <label
       className="inline-flex items-center shrink-0 cursor-pointer"
-      title={ok ? "Selecionar volume" : "Volume não disponível"}
+      title={ok ? "Selecionar volume" : "Volume ainda não disponível para seleção"}
     >
       <input
         type="checkbox"
@@ -169,12 +167,14 @@ function VolCheck({
   );
 }
 
-function VolStatusCell({ v }: { v: MockVol }) {
-  const s = VOL_STATUS[v.state];
+function VolStatusCell({ v }: { v: ConversionVolume }) {
+  const s = VOL_STATUS[v.state] ?? VOL_STATUS.queued;
   const Icon = s.icon;
+  const isSpinning =
+    v.state === "converting" || v.state === "packaging" || v.state === "downloading";
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-semibold shrink-0">
-      <Icon className={cn("h-3.5 w-3.5", s.cls, s.icon === Loader2 && "animate-spin")} />
+      <Icon className={cn("h-3.5 w-3.5", s.cls, isSpinning && "animate-spin")} />
       {s.label}
     </span>
   );
@@ -183,14 +183,9 @@ function VolStatusCell({ v }: { v: MockVol }) {
 function MiniProgress({ pct }: { pct: number }) {
   return (
     <span className="h-1.5 w-[72px] border-[1.5px] border-ink rounded-full overflow-hidden bg-card shrink-0">
-      <i className="block h-full bg-comic-yellow" style={{ width: pct + "%" }} />
+      <i className="block h-full bg-comic-yellow" style={{ width: `${pct}%` }} />
     </span>
   );
-}
-
-interface SendState {
-  phase: "sending" | "sent";
-  sentAt?: string;
 }
 
 /* ── Menu suspenso (dropdown) ──────────────────────────────── */
@@ -199,46 +194,62 @@ interface MenuItemDef {
   icon: typeof FileText;
   label: string;
   danger?: boolean;
+  disabled?: boolean;
+  title?: string;
   onClick: () => void;
 }
 
 function MoreMenu({ items, onClose }: { items: MenuItemDef[]; onClose: () => void }) {
   return (
-    <div className="absolute right-0 top-[calc(100%+6px)] z-10 min-w-[190px] bg-card border-[3px] border-ink rounded-lg shadow-comic p-1.5 animate-slide-up">
-      {items.map((it) => (
-        <button
-          key={it.label}
-          type="button"
-          onClick={() => {
-            onClose();
-            it.onClick();
-          }}
-          className={cn(
-            "flex items-center gap-2 w-full text-left font-semibold text-[13px] px-2.5 py-2 rounded-md hover:bg-muted",
-            it.danger && "text-comic-red hover:bg-comic-red/10",
-          )}
-        >
-          <it.icon className="h-3.5 w-3.5" />
-          {it.label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div
+        className="fixed inset-0 z-40"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      />
+      <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[200px] bg-card border-[3px] border-ink rounded-lg shadow-comic p-1.5 animate-slide-up">
+        {items.map((it) => (
+          <button
+            key={it.label}
+            type="button"
+            disabled={it.disabled}
+            title={it.title}
+            onClick={() => {
+              if (it.disabled) return;
+              onClose();
+              it.onClick();
+            }}
+            className={cn(
+              "flex items-center gap-2 w-full text-left font-semibold text-[13px] px-2.5 py-2 rounded-md transition-colors",
+              it.disabled
+                ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                : "hover:bg-muted cursor-pointer",
+              it.danger && !it.disabled && "text-comic-red hover:bg-comic-red/10",
+            )}
+          >
+            <it.icon className="h-3.5 w-3.5 shrink-0" />
+            {it.label}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
 /* ── Linha de volume ───────────────────────────────────────── */
 
 interface VolumeRowProps {
-  lot: MockLot;
-  v: MockVol;
+  lot: ConversionLot;
+  v: ConversionVolume;
   checked: boolean;
-  sending: boolean;
-  sent: boolean;
-  reading: boolean;
   menuOpen: boolean;
   onToggleCheck: (c: boolean) => void;
-  onSend: () => void;
   onRead: () => void;
+  onDownload: () => void;
+  onReconvert: () => void;
+  onOpenLogs: () => void;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
 }
@@ -247,105 +258,203 @@ function VolumeRow({
   lot,
   v,
   checked,
-  sending,
-  sent,
-  reading,
   menuOpen,
   onToggleCheck,
-  onSend,
   onRead,
+  onDownload,
+  onReconvert,
+  onOpenLogs,
   onToggleMenu,
   onCloseMenu,
 }: VolumeRowProps) {
-  const serie = lot.series ?? "Boruto Two Blue Vortex";
-  const file = `${serie} - ${v.vol}.${lot.format.toLowerCase()}`;
-  const unavailable = ["failed", "cancelled", "queued", "downloading"].includes(v.state);
-  const canSend = isSendable(v) && !sent;
+  const serie = lot.series || "Obra";
+  const file = v.outputFile || `${serie} - ${v.vol}.${lot.format.toLowerCase()}`;
+  const isCompleted = v.state === "completed";
+  const hasProgress =
+    (v.state === "converting" || v.state === "packaging" || v.state === "downloading") &&
+    v.pct != null;
 
   return (
     <div
       className={cn(
         "flex items-center gap-3.5 border-2 border-ink rounded-[10px] px-3 py-2.5 transition-colors bg-[color-mix(in_oklch,var(--muted)_35%,white)] hover:bg-[color-mix(in_oklch,var(--muted)_75%,white)]",
         checked && "bg-[color-mix(in_oklch,var(--comic-yellow)_26%,white)]",
+        menuOpen ? "relative z-30" : "relative z-0",
       )}
     >
       <VolCheck v={v} checked={checked} onToggle={onToggleCheck} />
-      <VolCover vol={v.vol} />
+      <VolCover vol={v.vol} seriesTitle={serie} />
       <div className="flex-1 min-w-0">
         <div className="font-display text-sm uppercase tracking-wide leading-tight">
           {v.vol} <span className="opacity-55">·</span> {v.ch}
         </div>
         <div className="text-[10.5px] text-muted-foreground font-medium mt-0.5 truncate">
-          {file}
+          {file} {v.size !== "—" ? `(${v.size})` : ""}
         </div>
       </div>
       <VolStatusCell v={v} />
-      {(v.state === "converting" || v.state === "downloading") && <MiniProgress pct={v.pct ?? 0} />}
+      {hasProgress && <MiniProgress pct={v.pct ?? 0} />}
       <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-        {sent ? (
-          <button
-            type="button"
-            disabled
-            className={cn(btnBase, "bg-comic-blue text-white relative")}
-            aria-label="Enviado ao Kindle"
-          >
-            <Check className="h-3.5 w-3.5" /> Enviado
-            {v.sentAt && (
-              <span className="absolute -bottom-[14px] right-0 font-sans text-[9.5px] font-semibold text-muted-foreground">
-                {v.sentAt}
-              </span>
-            )}
-          </button>
-        ) : sending ? (
-          <button type="button" disabled className={cn(btnBase, "bg-comic-yellow text-ink")}>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando…
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={!canSend}
-            title={canSend ? undefined : "Volume indisponível"}
-            className={cn(btnBase, "bg-comic-yellow text-ink shadow-comic-sm")}
-          >
-            <Mail className="h-3.5 w-3.5" /> Enviar
-          </button>
-        )}
-        <button type="button" onClick={onRead} disabled={unavailable} className={btnBlue}>
-          <Eye className="h-3.5 w-3.5" /> {reading ? "Abrindo…" : "Ler"}
-        </button>
+        {/* Botão Enviar ao Kindle (desabilitado conforme especificação) */}
         <button
           type="button"
-          onClick={onToggleMenu}
-          disabled={unavailable}
-          className={btnIcon}
-          title="Mais ações"
+          disabled
+          title="Envio ao Kindle em breve"
+          className={cn(
+            btnBase,
+            "bg-comic-yellow text-ink shadow-comic-sm opacity-50 cursor-not-allowed",
+          )}
         >
-          <MoreHorizontal className="h-3.5 w-3.5" />
+          <Mail className="h-3.5 w-3.5" /> Enviar
         </button>
-        {menuOpen && (
-          <MoreMenu
-            onClose={onCloseMenu}
-            items={[
-              {
-                icon: RotateCw,
-                label: "Reconverter volume",
-                onClick: () => toast.info("Reconversão de volume em breve"),
-              },
-              {
-                icon: SlidersHorizontal,
-                label: "Configurar",
-                onClick: () => toast.info("Configurações em breve"),
-              },
-              {
-                icon: Trash2,
-                label: "Excluir volume",
-                danger: true,
-                onClick: () => toast.info("Exclusão de volume em breve"),
-              },
-            ]}
-          />
-        )}
+
+        {/* Botão Ler */}
+        <button
+          type="button"
+          onClick={onRead}
+          disabled={!isCompleted}
+          title={isCompleted ? "Ler no navegador" : "Volume ainda não concluído"}
+          className={btnBlue}
+        >
+          <Eye className="h-3.5 w-3.5" /> Ler
+        </button>
+
+        {/* Botão Baixar */}
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={!isCompleted}
+          title={isCompleted ? "Baixar arquivo" : "Volume ainda não concluído"}
+          className={btnGhost}
+        >
+          <Download className="h-3.5 w-3.5" />
+        </button>
+
+        {/* Menu mais ações */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={onToggleMenu}
+            className={btnIcon}
+            title="Mais ações do volume"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+          {menuOpen && (
+            <MoreMenu
+              onClose={onCloseMenu}
+              items={[
+                {
+                  icon: RotateCw,
+                  label: "Reconverter no Wizard",
+                  onClick: onReconvert,
+                },
+                {
+                  icon: FileText,
+                  label: "Ver logs",
+                  onClick: onOpenLogs,
+                },
+                {
+                  icon: Trash2,
+                  label: "Excluir volume",
+                  disabled: true,
+                  title:
+                    "Exclusão individual ainda não disponível — use 'Remover lote' nas ações do lote",
+                  danger: true,
+                  onClick: () => {},
+                },
+              ]}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Skeleton do Container Completo (Premium Comic Pop-Art) ─────── */
+
+function SkeletonVolRow({ delay }: { delay: number }) {
+  return (
+    <div
+      className="flex items-center gap-3.5 border-[2.5px] border-ink/12 rounded-[10px] px-3 py-2.5 bg-[color-mix(in_oklch,var(--muted)_25%,white)] skeleton-shimmer animate-slide-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      {/* Checkbox bone */}
+      <div className="h-5 w-5 rounded-md border-[2.5px] border-ink/12 skeleton-bone shrink-0" />
+
+      {/* Mini-cover placeholder — matches VolCover iconic shape */}
+      <div className="relative h-[50px] w-[34px] shrink-0 border-[2.5px] border-ink/15 rounded-md overflow-hidden bg-[color-mix(in_oklch,var(--comic-yellow)_35%,var(--card))] bg-halftone">
+        <span className="absolute -top-[3px] -right-[3px] h-[14px] w-[14px] bg-comic-red/20 rotate-45" />
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="h-3 w-5 rounded skeleton-bone" />
+        </span>
+      </div>
+
+      {/* Text content */}
+      <div className="flex-1 space-y-2 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-20 skeleton-bone-dark rounded" />
+          <div className="h-4 w-px bg-ink/10" />
+          <div className="h-3.5 w-28 skeleton-bone rounded" />
+        </div>
+        <div className="h-3 w-44 skeleton-bone rounded" />
+      </div>
+
+      {/* Status chip bone */}
+      <div className="h-6 w-[72px] rounded-full border-[2px] border-ink/10 skeleton-bone shrink-0 hidden sm:block" />
+
+      {/* Action button bones */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <div className="h-8 w-[72px] rounded-lg border-[2.5px] border-ink/12 skeleton-bone hidden sm:block" />
+        <div className="h-8 w-[52px] rounded-lg border-[2.5px] border-ink/12 skeleton-bone hidden sm:block" />
+        <div className="h-8 w-8 rounded-lg border-[2.5px] border-ink/12 skeleton-bone" />
+        <div className="h-[34px] w-[34px] rounded-md border-[2.5px] border-ink/12 skeleton-bone" />
+      </div>
+    </div>
+  );
+}
+
+export function TabConversoesSkeleton() {
+  return (
+    <div className="rounded-xl border-[3px] border-ink shadow-comic bg-card overflow-hidden animate-slide-up">
+      {/* ── Header skeleton ── */}
+      <div className="flex items-center gap-3 px-4 py-3.5 border-b-2 border-ink/15 bg-[color-mix(in_oklch,var(--comic-yellow)_42%,white)]">
+        {/* Dropdown title bone */}
+        <div className="flex items-center gap-1.5">
+          <div className="h-8 w-48 rounded-lg skeleton-shimmer skeleton-bone border-[2px] border-ink/15" />
+          <div className="h-4 w-4 rounded skeleton-bone" />
+        </div>
+        <span className="flex-1" />
+        {/* Nova conversão button bone */}
+        <div className="h-8 w-[140px] rounded-lg border-[2.5px] border-ink/12 bg-[color-mix(in_oklch,var(--comic-red)_15%,var(--card))] skeleton-shimmer skeleton-bone hidden sm:block" />
+        {/* Menu icon bone */}
+        <div className="h-[34px] w-[34px] rounded-md skeleton-shimmer skeleton-bone border-[2.5px] border-ink/12 shrink-0" />
+      </div>
+
+      {/* ── Body skeleton ── */}
+      <div className="p-[18px] flex flex-col gap-3.5 min-w-0">
+        {/* Metadata row */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Device tag bone */}
+          <div className="inline-flex items-center gap-1.5 h-7 w-24 rounded-md border-[2px] border-ink/12 skeleton-bone skeleton-shimmer" />
+          {/* Status chip bone */}
+          <div className="inline-flex items-center gap-1.5 h-7 w-20 rounded-full border-[2px] border-ink/12 skeleton-bone skeleton-shimmer" />
+          {/* Volume count bone */}
+          <div className="ml-auto h-4 w-36 rounded skeleton-bone" />
+          {/* Select-all bone */}
+          <div className="flex items-center gap-1.5">
+            <div className="h-4 w-4 rounded border-[2px] border-ink/12 skeleton-bone" />
+            <div className="h-3 w-[90px] rounded skeleton-bone" />
+          </div>
+        </div>
+
+        {/* ── Volume row skeletons (staggered entrance) ── */}
+        <div className="flex flex-col gap-2.5">
+          <SkeletonVolRow delay={0} />
+          <SkeletonVolRow delay={80} />
+          <SkeletonVolRow delay={160} />
+        </div>
       </div>
     </div>
   );
@@ -353,27 +462,33 @@ function VolumeRow({
 
 /* ── Componente principal ──────────────────────────────────── */
 
-export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesProps) {
-  const [lots, setLots] = useState<MockLot[]>(initialLots);
-  const [selectedId, setSelectedId] = useState<string>(initialLots[0]?.id ?? "");
+export const TabConversoes = memo(function TabConversoes({
+  sourceId,
+  seriesTitle,
+}: TabConversoesProps) {
+  const navigate = useNavigate();
+  const { lots, selectedLot, selectedId, setSelectedId, isLoading, isDetailsLoading, refetch } =
+    useSourceConversions(sourceId, seriesTitle);
+
+  const { remove, download } = useConversionActions();
+
   const [ddOpen, setDdOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [selectedVols, setSelectedVols] = useState<Set<string>>(new Set());
-  const [sendMap, setSendMap] = useState<Record<string, SendState>>({});
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [readingVol, setReadingVol] = useState<string | null>(null);
-  const [bulkBusy, setBulkBusy] = useState<"idle" | "sending" | "downloading">("idle");
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState<"idle" | "downloading">("idle");
   const [bulkDlLabel, setBulkDlLabel] = useState<string | null>(null);
-  const [ddNote, setDdNote] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
 
-  const lot = lots.find((l) => l.id === selectedId) ?? lots[0] ?? null;
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onDown(ev: MouseEvent) {
       if (!rootRef.current?.contains(ev.target as Node)) {
         setDdOpen(false);
         setOpenMenu(null);
+        setTopMenuOpen(false);
         setConfirmId(null);
       }
     }
@@ -387,105 +502,86 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
     setConfirmId(null);
     setDdOpen(false);
     setOpenMenu(null);
+    setTopMenuOpen(false);
   }
 
-  function sendFlow(vol: string) {
-    if (sendMap[vol]) return;
-    setSendMap((m) => ({ ...m, [vol]: { phase: "sending" } }));
-    setTimeout(() => {
-      setSendMap((m) => ({ ...m, [vol]: { phase: "sent", sentAt: "agora" } }));
-    }, 1600);
+  function handleNewConversion() {
+    navigate({
+      to: "/wizard",
+      search: { sourceId },
+    });
   }
 
-  function addVolume() {
-    if (!lot) return;
-    const n = lot.vols.length + 1;
-    const novo: MockVol = {
-      vol: "Vol. " + n,
-      ch: "Cap. " + (n * 6 - 5) + " – " + n * 6,
-      size: "12,4 MB",
-      state: "ready",
-    };
-    setLots((prev) =>
-      prev.map((l) =>
-        l.id === lot.id
-          ? { ...l, vols: [...l.vols, novo], totalMB: totalMB([...l.vols, novo]) }
-          : l,
-      ),
-    );
+  function handleReconvert(conversionId: string) {
+    navigate({
+      to: "/wizard",
+      search: { sourceId, conversionId },
+    });
   }
 
-  function deleteLot(id: string) {
-    const idx = lots.findIndex((l) => l.id === id);
-    setLots((prev) => prev.filter((l) => l.id !== id));
-    if (selectedId === id) {
-      const next = lots[idx + 1] ?? lots[idx - 1] ?? null;
-      setSelectedId(next ? next.id : "");
-      setSelectedVols(new Set());
+  async function handleDeleteLot(conversionId: string) {
+    try {
+      await remove(conversionId);
+      refetch();
+    } catch {
+      // Toast é tratado pelo useConversionActions
     }
     setConfirmId(null);
     setDdOpen(false);
-    setDdNote("1 excluída ✓");
-    setTimeout(() => setDdNote(null), 1400);
+    setTopMenuOpen(false);
+  }
+
+  function handleRead(jobId: string) {
+    if (!selectedLot) return;
+    navigate({
+      to: "/biblioteca/reader/$conversionId",
+      params: { conversionId: selectedLot.id },
+      search: { jobId },
+    });
+  }
+
+  function handleDownloadJob(jobId: string) {
+    if (!selectedLot) return;
+    download(selectedLot.id, jobId);
   }
 
   function toggleAll(checked: boolean) {
-    if (!lot) return;
-    const enabled = lot.vols.filter(isSelectable).map((v) => v.vol);
-    setSelectedVols(checked ? new Set(enabled) : new Set());
+    if (!selectedLot) return;
+    const completedIds = selectedLot.vols.filter(isSelectable).map((v) => v.id);
+    setSelectedVols(checked ? new Set(completedIds) : new Set());
   }
 
-  function bulkSend() {
-    if (!lot || bulkBusy !== "idle") return;
-    const pending = lot.vols.filter(
-      (v) => selectedVols.has(v.vol) && isSendable(v) && !sendMap[v.vol]?.phase,
-    );
-    if (!pending.length) {
-      setSelectedVols(new Set());
-      return;
-    }
-    setBulkBusy("sending");
-    let i = 0;
-    const tick = setInterval(() => {
-      if (i >= pending.length) {
-        clearInterval(tick);
-        setBulkBusy("idle");
-        setSelectedVols(new Set());
-        return;
-      }
-      sendFlow(pending[i].vol);
-      i++;
-    }, 700);
-  }
-
-  function bulkDownload() {
-    const n = selectedVols.size;
-    if (!n || bulkBusy !== "idle") return;
+  async function handleBulkDownload() {
+    if (!selectedLot || bulkBusy !== "idle" || selectedVols.size === 0) return;
     setBulkBusy("downloading");
-    setBulkDlLabel("Baixando " + n + "…");
+    const count = selectedVols.size;
+    let downloadedCount = 0;
+    setBulkDlLabel(`Baixando 0/${count}...`);
+
+    for (const jobId of selectedVols) {
+      try {
+        await download(selectedLot.id, jobId);
+        downloadedCount++;
+        setBulkDlLabel(`Baixando ${downloadedCount}/${count}...`);
+      } catch (err) {
+        console.error(`Erro ao baixar volume ${jobId}:`, err);
+      }
+    }
+
+    setBulkDlLabel(`${downloadedCount} baixado(s)!`);
     setTimeout(() => {
-      setBulkDlLabel(n + " baixados");
-      setTimeout(() => {
-        setBulkBusy("idle");
-        setBulkDlLabel(null);
-        setSelectedVols(new Set());
-      }, 1400);
-    }, 1300);
+      setBulkBusy("idle");
+      setBulkDlLabel(null);
+      setSelectedVols(new Set());
+    }, 1500);
   }
 
-  function bulkRemove() {
-    if (!lot) return;
-    const rem = new Set(selectedVols);
-    setLots((prev) =>
-      prev.map((l) => {
-        if (l.id !== lot.id) return l;
-        const vols = l.vols.filter((v) => !rem.has(v.vol));
-        return { ...l, vols, totalMB: totalMB(vols) };
-      }),
-    );
-    setSelectedVols(new Set());
+  // Loading skeleton estilo LinkedIn
+  if (isLoading && lots.length === 0) {
+    return <TabConversoesSkeleton />;
   }
 
+  // Empty state
   if (!lots.length) {
     return (
       <div className="bg-card border-[3px] border-dashed border-ink rounded-xl bg-halftone px-6 py-14 text-center animate-slide-up">
@@ -494,18 +590,20 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
         </div>
         <h3 className="font-display text-[26px] mb-2">Nenhuma conversão ainda</h3>
         <p className="max-w-[460px] mx-auto mb-5 font-medium text-muted-foreground">
-          Converta os capítulos desta série e acompanhe os lotes aqui — para ler no navegador,
-          baixar ou enviar direto ao seu Kindle.
+          Converta os capítulos desta obra e acompanhe os lotes aqui — para ler no navegador, baixar
+          ou enviar direto ao seu Kindle.
         </p>
         <div className="flex gap-2.5 justify-center flex-wrap">
+          <button type="button" className={btnRed} onClick={handleNewConversion}>
+            <Plus className="h-4 w-4" /> Converter esta obra
+          </button>
           <button
             type="button"
-            className={btnRed}
-            onClick={() => toast.info("Converter esta série em breve")}
+            className={btnGhost}
+            onClick={() =>
+              toast.info("Selecione os capítulos no assistente para gerar EPUB, MOBI ou PDF.")
+            }
           >
-            Converter esta série
-          </button>
-          <button type="button" className={btnGhost} onClick={() => toast.info("Guia em breve")}>
             Como funciona?
           </button>
         </div>
@@ -513,15 +611,15 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
     );
   }
 
-  if (!lot) return null;
+  if (!selectedLot) return null;
 
-  const enabledCount = lot.vols.filter(isSelectable).length;
+  const enabledCount = selectedLot.vols.filter(isSelectable).length;
   const allChecked = enabledCount > 0 && selectedVols.size === enabledCount;
   const volsTotal = lots.reduce((acc, l) => acc + l.vols.length, 0);
 
   return (
     <div ref={rootRef} className="rounded-xl border-[3px] border-ink shadow-comic bg-card">
-      {/* Topo */}
+      {/* Topo do Lote */}
       <div className="flex items-center gap-3 flex-wrap px-4 py-3.5 border-b-2 border-ink/15 bg-[color-mix(in_oklch,var(--comic-yellow)_42%,white)] rounded-t-[9px]">
         <div className="relative">
           <button
@@ -529,14 +627,15 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
             onClick={() => {
               setDdOpen((o) => !o);
               setOpenMenu(null);
+              setTopMenuOpen(false);
             }}
             aria-haspopup="listbox"
             aria-expanded={ddOpen}
             className={cn(
-              "inline-flex items-center gap-1.5 font-display text-[28px] uppercase tracking-wide px-2 py-1 rounded-lg transition-colors hover:bg-ink/10",
+              "inline-flex items-center gap-1.5 font-display text-[26px] md:text-[28px] uppercase tracking-wide px-2 py-1 rounded-lg transition-colors hover:bg-ink/10 cursor-pointer",
             )}
           >
-            {lot.title}
+            {selectedLot.title}
             <ChevronDown
               className={cn(
                 "h-[18px] w-[18px] transition-transform duration-200",
@@ -562,16 +661,20 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
                         selectLot(l.id);
                       }}
                       role="option"
-                      aria-selected={l.id === lot.id}
+                      aria-selected={l.id === selectedLot.id}
                       className={cn(
                         "flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-left font-semibold text-[13px] cursor-pointer hover:bg-muted",
-                        l.id === lot.id && "bg-[color-mix(in_oklch,var(--comic-yellow)_30%,white)]",
+                        l.id === selectedLot.id &&
+                          "bg-[color-mix(in_oklch,var(--comic-yellow)_30%,white)]",
                       )}
                     >
                       <span
-                        className={cn("h-2 w-2 rounded-full shrink-0", LOT_STATUS[l.status].dot)}
+                        className={cn(
+                          "h-2 w-2 rounded-full shrink-0",
+                          LOT_STATUS[l.status]?.dot ?? "bg-muted-foreground",
+                        )}
                       />
-                      <span className="min-w-0 truncate">{l.title}</span>
+                      <span className="min-w-0 truncate flex-1">{l.title}</span>
                       <StChip status={l.status} small />
                       <span className="tabular-nums text-[10px] font-bold bg-comic-ink text-comic-cream rounded-full px-1.5 py-px shrink-0">
                         {l.vols.length}
@@ -582,7 +685,7 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteLot(l.id);
+                              handleDeleteLot(l.id);
                             }}
                             title="Confirmar exclusão"
                             className="h-[26px] w-[26px] border-2 border-ink rounded-md bg-comic-blue text-white inline-flex items-center justify-center shrink-0"
@@ -609,7 +712,7 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
                             setConfirmId(l.id);
                           }}
                           title="Excluir conversão"
-                          className="h-[26px] w-[26px] border-2 border-ink rounded-md bg-card inline-flex items-center justify-center shrink-0 hover:bg-comic-red/10 hover:text-comic-red"
+                          className="h-[26px] w-[26px] border-2 border-ink rounded-md bg-card inline-flex items-center justify-center shrink-0 hover:bg-comic-red/10 hover:text-comic-red cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -619,7 +722,7 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
                 })}
               </div>
               <div className="flex items-center gap-2 flex-wrap border-t-2 border-dashed border-ink/25 mt-1.5 pt-1.5 px-2 pb-1 text-[11px] font-bold text-muted-foreground">
-                {ddNote ?? `${lots.length} conversões · ${volsTotal} volumes`}
+                {lots.length} {lots.length === 1 ? "conversão" : "conversões"} · {volsTotal} volumes
               </div>
             </div>
           )}
@@ -627,44 +730,40 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
 
         <span className="flex-1" />
 
-        <button type="button" className={btnYellow} onClick={addVolume}>
-          <Plus className="h-3.5 w-3.5" /> Adicionar obra
-        </button>
-        <button
-          type="button"
-          className={btnRed}
-          onClick={() => toast.info("Nova conversão em breve")}
-        >
+        {/* Botão Nova Conversão */}
+        <button type="button" className={btnRed} onClick={handleNewConversion}>
           <Plus className="h-3.5 w-3.5" /> Nova conversão
         </button>
+
+        {/* Ações do lote */}
         <div className="relative">
           <button
             type="button"
             className={btnIcon}
-            onClick={() => setOpenMenu((m) => (m === "top" ? null : "top"))}
+            onClick={() => setTopMenuOpen((m) => !m)}
             title="Ações do lote"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
-          {openMenu === "top" && (
+          {topMenuOpen && (
             <MoreMenu
-              onClose={() => setOpenMenu(null)}
+              onClose={() => setTopMenuOpen(false)}
               items={[
                 {
                   icon: FileText,
-                  label: "Ver log de conversão",
-                  onClick: () => toast.info("Log de conversão em breve"),
+                  label: "Ver logs de conversão",
+                  onClick: () => setLogsModalOpen(true),
                 },
                 {
                   icon: RotateCw,
                   label: "Reconverter todos",
-                  onClick: () => toast.info("Reconversão em breve"),
+                  onClick: () => handleReconvert(selectedLot.id),
                 },
                 {
                   icon: Trash2,
                   label: "Remover lote",
                   danger: true,
-                  onClick: () => toast.info("Exclusão em breve"),
+                  onClick: () => handleDeleteLot(selectedLot.id),
                 },
               ]}
             />
@@ -672,16 +771,23 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
         </div>
       </div>
 
-      {/* Detalhe */}
+      {/* Detalhes do Lote */}
       <div className="p-[18px] flex flex-col gap-3.5 min-w-0">
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="flex items-center gap-2 min-w-0">
-            <DeviceTag device={lot.device} />
-            <StChip status={lot.status} />
+            <DeviceTag device={selectedLot.device} />
+            <StChip status={selectedLot.status} />
           </span>
-          <span className="ml-auto text-[11.5px] font-bold text-muted-foreground uppercase tracking-wider tabular-nums">
-            {lot.vols.length} {lot.vols.length === 1 ? "volume" : "volumes"} · {lot.totalMB}
-          </span>
+          <div className="ml-auto flex items-center">
+            {isDetailsLoading ? (
+              <div className="h-4 w-28 bg-ink/10 rounded animate-pulse" />
+            ) : (
+              <span className="text-[11.5px] font-bold text-muted-foreground uppercase tracking-wider tabular-nums animate-fade-in">
+                {selectedLot.vols.length} {selectedLot.vols.length === 1 ? "volume" : "volumes"}
+                {selectedLot.totalMB !== "—" ? ` · ${selectedLot.totalMB}` : ""}
+              </span>
+            )}
+          </div>
           <label className="inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none">
             <input
               type="checkbox"
@@ -694,90 +800,100 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
           </label>
         </div>
 
-        {lot.status === "failed" && (
-          <div className="flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-red text-white shadow-comic-sm px-3.5 py-2.5">
+        {/* Alerta de erro do lote */}
+        {selectedLot.status === "failed" && (
+          <div className="flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-red text-white shadow-comic-sm px-3.5 py-2.5 animate-fade-in">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="flex-1 min-w-[200px] font-semibold text-[13.5px]">
-              {lot.vols[0]?.err ?? "Falha ao baixar capítulos — HTTP 503 do servidor de origem."}
+              {selectedLot.vols[0]?.err ?? "Falha na conversão de um ou mais volumes."}
             </span>
             <button
               type="button"
               className={cn(btnBase, "bg-white text-ink")}
-              onClick={() => toast.info("Log de conversão em breve")}
+              onClick={() => setLogsModalOpen(true)}
             >
-              Ver log
+              Ver logs
             </button>
             <button
               type="button"
               className={cn(btnBase, "bg-white text-ink")}
-              onClick={() =>
-                setLots((prev) =>
-                  prev.map((l) => (l.id === lot.id ? { ...l, status: "processing" } : l)),
-                )
-              }
+              onClick={() => handleReconvert(selectedLot.id)}
             >
-              <RotateCw className="h-3.5 w-3.5" /> Tentar novamente
+              <RotateCw className="h-3.5 w-3.5" /> Reconverter
             </button>
           </div>
         )}
 
-        {lot.status === "partial" && (
-          <div className="flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-ink text-comic-cream shadow-comic-sm px-3.5 py-2.5">
+        {/* Alerta de conversão parcial */}
+        {selectedLot.status === "partial" && (
+          <div className="flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-ink text-comic-cream shadow-comic-sm px-3.5 py-2.5 animate-fade-in">
             <Clock className="h-4 w-4 shrink-0" />
             <span className="font-semibold text-[13.5px]">
-              2 volumes cancelados por você — os concluídos seguem disponíveis.
+              Conversão parcial — os volumes concluídos seguem disponíveis para leitura e download.
             </span>
           </div>
         )}
 
-        <div className="flex flex-col gap-2.5">
-          {lot.vols.map((v) => {
-            const send = sendMap[v.vol];
-            return (
-              <VolumeRow
-                key={v.vol}
-                lot={lot}
-                v={v}
-                checked={selectedVols.has(v.vol)}
-                sending={send?.phase === "sending"}
-                sent={send?.phase === "sent" || v.state === "sent"}
-                reading={readingVol === v.vol}
-                menuOpen={openMenu === v.vol}
-                onToggleCheck={(c) =>
-                  setSelectedVols((prev) => {
-                    const next = new Set(prev);
-                    if (c) next.add(v.vol);
-                    else next.delete(v.vol);
-                    return next;
-                  })
-                }
-                onSend={() => sendFlow(v.vol)}
-                onRead={() => setReadingVol(v.vol)}
-                onToggleMenu={() => setOpenMenu((m) => (m === v.vol ? null : v.vol))}
-                onCloseMenu={() => setOpenMenu(null)}
-              />
-            );
-          })}
-        </div>
+        {/* Lista de Volumes */}
+        {isDetailsLoading ? (
+          <div className="flex flex-col gap-2.5">
+            {Array.from({ length: selectedLot.vols.length || 2 }).map((_, i) => (
+              <SkeletonVolRow key={i} delay={i * 60} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5 animate-fade-in">
+            {selectedLot.vols.map((v, idx) => {
+              const isMenuOpen = openMenu === v.id;
+              return (
+                <div
+                  key={v.id}
+                  className={cn("animate-fade-in", isMenuOpen ? "relative z-30" : "relative z-0")}
+                  style={{ animationDelay: `${idx * 40}ms` }}
+                >
+                  <VolumeRow
+                    lot={selectedLot}
+                    v={v}
+                    checked={selectedVols.has(v.id)}
+                    menuOpen={isMenuOpen}
+                    onToggleCheck={(c) =>
+                      setSelectedVols((prev) => {
+                        const next = new Set(prev);
+                        if (c) next.add(v.id);
+                        else next.delete(v.id);
+                        return next;
+                      })
+                    }
+                    onRead={() => handleRead(v.id)}
+                    onDownload={() => handleDownloadJob(v.id)}
+                    onReconvert={() => handleReconvert(selectedLot.id)}
+                    onOpenLogs={() => setLogsModalOpen(true)}
+                    onToggleMenu={() => setOpenMenu((m) => (m === v.id ? null : v.id))}
+                    onCloseMenu={() => setOpenMenu(null)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
 
+        {/* Barra fixa de ações em lote */}
         {selectedVols.size > 0 && (
-          <div className="sticky bottom-3 z-[15] flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-ink text-comic-cream shadow-comic-sm px-3.5 py-2.5 animate-slide-up">
-            <span className="mr-auto font-bold text-xs tabular-nums">
+          <div className="sticky bottom-3 z-[15] flex items-center gap-2.5 flex-wrap border-[3px] border-ink rounded-lg bg-comic-yellow shadow-comic-sm px-3.5 py-2.5 animate-slide-up">
+            <span className="mr-auto font-bold text-xs tabular-nums text-ink">
               {selectedVols.size} {selectedVols.size === 1 ? "selecionado" : "selecionados"}
             </span>
+
+            {/* Botão Baixar Selecionados */}
             <button
               type="button"
-              className={cn(btnBase, "bg-comic-cream text-ink")}
-              onClick={bulkDownload}
+              className={btnBlue}
+              onClick={handleBulkDownload}
               disabled={bulkBusy !== "idle"}
             >
               {bulkBusy === "downloading" && bulkDlLabel ? (
                 <>
-                  {bulkDlLabel.startsWith("Baixando") ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Check className="h-3.5 w-3.5" />
-                  )}
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   {bulkDlLabel}
                 </>
               ) : (
@@ -786,33 +902,30 @@ export function TabConversoes({ lots: initialLots = MOCK_LOTS }: TabConversoesPr
                 </>
               )}
             </button>
+
+            {/* Botão Enviar ao Kindle (desabilitado conforme especificação) */}
             <button
               type="button"
-              className={btnRed}
-              onClick={bulkSend}
-              disabled={bulkBusy !== "idle"}
-            >
-              {bulkBusy === "sending" ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando…
-                </>
-              ) : (
-                <>
-                  <Mail className="h-3.5 w-3.5" /> Enviar ao Kindle
-                </>
+              disabled
+              title="Envio ao Kindle em breve"
+              className={cn(
+                btnBase,
+                "bg-muted text-muted-foreground opacity-60 cursor-not-allowed",
               )}
-            </button>
-            <button
-              type="button"
-              className={cn(btnBase, "bg-comic-cream text-ink")}
-              onClick={bulkRemove}
-              disabled={bulkBusy !== "idle"}
             >
-              <Trash2 className="h-3.5 w-3.5" /> Remover
+              <Mail className="h-3.5 w-3.5" /> Enviar ao Kindle
             </button>
           </div>
         )}
       </div>
+
+      {/* Modal de Logs */}
+      <ConversionLogsModal
+        conversionId={selectedLot.id}
+        lotTitle={selectedLot.title}
+        open={logsModalOpen}
+        onOpenChange={setLogsModalOpen}
+      />
     </div>
   );
-}
+});

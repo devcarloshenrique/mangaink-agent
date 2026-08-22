@@ -14,10 +14,7 @@ import { ApiError } from "@/lib/api";
 
 // ─── Schema de validação ───────────────────────────────────────────────────────
 const loginSchema = z.object({
-  identifier: z
-    .string()
-    .trim()
-    .min(1, "Informe seu e-mail ou nome de usuário"),
+  identifier: z.string().trim().min(1, "Informe seu e-mail ou nome de usuário"),
   password: z.string().min(1, "Informe sua senha"),
 });
 
@@ -44,9 +41,7 @@ function LoginPage() {
     try {
       await login(values);
       toast.success("Login realizado com sucesso!");
-      const target = search.redirect && !search.redirect.includes("/login")
-        ? search.redirect
-        : "/";
+      const target = search.redirect && !search.redirect.includes("/login") ? search.redirect : "/";
       navigate({ to: target as "/" });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -64,7 +59,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background flex flex-col justify-center">
       <div className="mx-auto max-w-md px-4 py-12">
         <div className="text-center mb-6">
           <SpeechBubble variant="yellow" tail="bottom" className="mb-4">

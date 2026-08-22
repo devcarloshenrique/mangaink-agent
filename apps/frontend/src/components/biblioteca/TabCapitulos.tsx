@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, CloudOff, ArrowDownUp, ArrowUpDown, Eye, EyeOff } from "lucide-react";
@@ -28,7 +28,7 @@ interface TabCapitulosProps {
   onDownloadRequest: (sourceId: string, chapterId: string, title: string) => void;
 }
 
-export function TabCapitulos({
+export const TabCapitulos = memo(function TabCapitulos({
   chapters,
   sourceId,
   readChapterIds,
@@ -456,4 +456,4 @@ export function TabCapitulos({
       )}
     </ComicPanel>
   );
-}
+});

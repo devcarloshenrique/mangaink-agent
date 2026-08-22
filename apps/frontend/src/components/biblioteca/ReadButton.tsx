@@ -53,8 +53,10 @@ export function ReadButton({
     label = "Começar a ler";
   } else if (allRead) {
     label = "Re-ler cap 1";
-  } else {
+  } else if (targetChapter) {
     label = `Continuar lendo cap ${targetChapter.number}`;
+  } else {
+    label = "Começar a ler";
   }
 
   function handleClick() {

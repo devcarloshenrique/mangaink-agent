@@ -96,10 +96,7 @@ export function AddMangaBar({ value, onChange, mode, onModeChange, onReady }: Pr
           onKeyDown={(e) => {
             if (!isUrlMode) {
               const val = value.trim();
-              if (
-                e.key === "Enter" &&
-                (val.startsWith("http://") || val.startsWith("https://"))
-              ) {
+              if (e.key === "Enter" && (val.startsWith("http://") || val.startsWith("https://"))) {
                 e.preventDefault();
                 setUrl(val);
                 onModeChange("url");

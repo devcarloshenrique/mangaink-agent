@@ -8,14 +8,14 @@ const mockGetDownloadStatus = vi.fn();
 const mockToken = "test-token-123";
 
 vi.mock("@/lib/sse", () => ({
-  createSSEStream: (...args: any[]) => mockCreateSSEStream(...args),
+  createSSEStream: (...args: unknown[]) => mockCreateSSEStream(...args),
 }));
 
 vi.mock("@/lib/api", () => ({
   chaptersApi: {
     downloadEventsUrl: (sourceId: string, chapterId: string) =>
       `/api/sources/${sourceId}/chapters/${chapterId}/download/events`,
-    getDownloadStatus: (...args: any[]) => mockGetDownloadStatus(...args),
+    getDownloadStatus: (...args: unknown[]) => mockGetDownloadStatus(...args),
   },
   tokenStore: {
     get: () => mockToken,
@@ -54,10 +54,16 @@ describe("useChapterDownload", () => {
   it("deve atualizar estado com evento progress", async () => {
     let onEvent: (event: string, data: unknown) => void = () => {};
 
-    mockCreateSSEStream.mockImplementation((_url: string, handlers: any, _token?: string) => {
-      onEvent = handlers.onEvent;
-      return { close: mockSseClose };
-    });
+    mockCreateSSEStream.mockImplementation(
+      (
+        _url: string,
+        handlers: { onEvent: (event: string, data: unknown) => void },
+        _token?: string,
+      ) => {
+        onEvent = handlers.onEvent;
+        return { close: mockSseClose };
+      },
+    );
 
     const { result } = renderHook(() => useChapterDownload("src", "ch", true));
 
@@ -75,10 +81,16 @@ describe("useChapterDownload", () => {
   it("deve atualizar estado com evento completed", async () => {
     let onEvent: (event: string, data: unknown) => void = () => {};
 
-    mockCreateSSEStream.mockImplementation((_url: string, handlers: any, _token?: string) => {
-      onEvent = handlers.onEvent;
-      return { close: mockSseClose };
-    });
+    mockCreateSSEStream.mockImplementation(
+      (
+        _url: string,
+        handlers: { onEvent: (event: string, data: unknown) => void },
+        _token?: string,
+      ) => {
+        onEvent = handlers.onEvent;
+        return { close: mockSseClose };
+      },
+    );
 
     const { result } = renderHook(() => useChapterDownload("src", "ch", true));
 
@@ -103,10 +115,12 @@ describe("useChapterDownload", () => {
   it("deve iniciar poll fallback quando SSE onError é chamado", () => {
     let onError: (error: Error) => void = () => {};
 
-    mockCreateSSEStream.mockImplementation((_url: string, handlers: any, _token?: string) => {
-      onError = handlers.onError;
-      return { close: mockSseClose };
-    });
+    mockCreateSSEStream.mockImplementation(
+      (_url: string, handlers: { onError: (error: Error) => void }, _token?: string) => {
+        onError = handlers.onError;
+        return { close: mockSseClose };
+      },
+    );
 
     renderHook(() => useChapterDownload("src", "ch", true));
 

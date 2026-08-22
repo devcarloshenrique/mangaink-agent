@@ -76,8 +76,7 @@ function ConfigPage() {
       await updateProfile({ kindleEmail });
       toast.success("Email do Kindle atualizado com sucesso!");
     } catch (err) {
-      const msg =
-        err instanceof ApiError ? err.message : "Erro ao salvar email do Kindle";
+      const msg = err instanceof ApiError ? err.message : "Erro ao salvar email do Kindle";
       toast.error(msg);
     } finally {
       setKindleSaving(false);
@@ -132,8 +131,7 @@ function ConfigPage() {
     if (!currentPassword) return toast.error("Informe a senha atual");
     if (!newPassword) return toast.error("Informe a nova senha");
     if (newPassword !== confirmPassword) return toast.error("As novas senhas não coincidem");
-    if (newPassword.length < 8)
-      return toast.error("Nova senha deve ter no mínimo 8 caracteres");
+    if (newPassword.length < 8) return toast.error("Nova senha deve ter no mínimo 8 caracteres");
     setPasswordSaving(true);
     try {
       await userApi.updateMe({
@@ -173,7 +171,7 @@ function ConfigPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-4xl px-4 py-10 space-y-8">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
@@ -331,11 +329,7 @@ function ConfigPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-ink opacity-50 hover:opacity-100 transition-opacity"
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
@@ -354,11 +348,7 @@ function ConfigPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-ink opacity-50 hover:opacity-100 transition-opacity"
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
@@ -378,11 +368,7 @@ function ConfigPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-ink opacity-50 hover:opacity-100 transition-opacity"
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
@@ -440,8 +426,12 @@ function ConfigPage() {
                   </span>
                 </div>
                 <div className="text-xs font-medium space-y-1 opacity-80 pt-2 border-t-2 border-dashed border-ink/20">
-                  <p>Porta: <code className="font-bold">3000</code></p>
-                  <p>Versão: <code className="font-bold">0.1.1</code></p>
+                  <p>
+                    Porta: <code className="font-bold">3000</code>
+                  </p>
+                  <p>
+                    Versão: <code className="font-bold">0.1.1</code>
+                  </p>
                 </div>
               </ComicPanel>
 
@@ -459,8 +449,12 @@ function ConfigPage() {
                   </span>
                 </div>
                 <div className="text-xs font-medium space-y-1 opacity-80 pt-2 border-t-2 border-dashed border-ink/20">
-                  <p>Fila: <code className="font-bold">Ativa (0 pendentes)</code></p>
-                  <p>Formatos: <code className="font-bold">MOBI, EPUB, PDF, CBZ</code></p>
+                  <p>
+                    Fila: <code className="font-bold">Ativa (0 pendentes)</code>
+                  </p>
+                  <p>
+                    Formatos: <code className="font-bold">MOBI, EPUB, PDF, CBZ</code>
+                  </p>
                 </div>
               </ComicPanel>
 
@@ -478,8 +472,12 @@ function ConfigPage() {
                   </span>
                 </div>
                 <div className="text-xs font-medium space-y-1 opacity-80 pt-2 border-t-2 border-dashed border-ink/20">
-                  <p>Pool: <code className="font-bold">10 conexões ativas</code></p>
-                  <p>Latência: <code className="font-bold">~2 ms</code></p>
+                  <p>
+                    Pool: <code className="font-bold">10 conexões ativas</code>
+                  </p>
+                  <p>
+                    Latência: <code className="font-bold">~2 ms</code>
+                  </p>
                 </div>
               </ComicPanel>
 
@@ -497,8 +495,12 @@ function ConfigPage() {
                   </span>
                 </div>
                 <div className="text-xs font-medium space-y-1 opacity-80 pt-2 border-t-2 border-dashed border-ink/20">
-                  <p>Ambiente: <code className="font-bold">Windows x64</code></p>
-                  <p>Engine: <code className="font-bold">WebView2 / Rust</code></p>
+                  <p>
+                    Ambiente: <code className="font-bold">Windows x64</code>
+                  </p>
+                  <p>
+                    Engine: <code className="font-bold">WebView2 / Rust</code>
+                  </p>
                 </div>
               </ComicPanel>
             </div>
@@ -522,11 +524,15 @@ function ConfigPage() {
                 <dl className="text-xs font-medium space-y-1.5 pt-2">
                   <div className="flex justify-between border-b-2 border-dashed border-ink/20 py-1">
                     <dt className="opacity-70">Diretório de cache & conversões</dt>
-                    <dd><code>./storage/conversions</code></dd>
+                    <dd>
+                      <code>./storage/conversions</code>
+                    </dd>
                   </div>
                   <div className="flex justify-between border-b-2 border-dashed border-ink/20 py-1">
                     <dt className="opacity-70">Diretório de capas</dt>
-                    <dd><code>./storage/covers</code></dd>
+                    <dd>
+                      <code>./storage/covers</code>
+                    </dd>
                   </div>
                   <div className="flex justify-between py-1">
                     <dt className="opacity-70">Retenção automática de temporários</dt>
@@ -541,4 +547,3 @@ function ConfigPage() {
     </div>
   );
 }
-

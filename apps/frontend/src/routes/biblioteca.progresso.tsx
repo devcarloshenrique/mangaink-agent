@@ -157,7 +157,7 @@ function MockProgressPage() {
   const currentChapter = request.chapters[chapterIndex];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex-1 bg-background">
       <div className="mx-auto max-w-3xl px-4 py-10">
         <button
           type="button"

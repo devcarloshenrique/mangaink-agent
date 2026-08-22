@@ -152,11 +152,8 @@
   * {
     border-color: var(--color-border);
   }
-  /* Evita o "pulo" de layout quando Radix trava o scroll do body
-     (selects, dropdowns, dialogs) — a calha da scrollbar fica reservada. */
   html {
-    scrollbar-gutter: stable;
-    overflow-y: scroll;
+    overflow-y: auto;
   }
   body {
     background-color: var(--color-background);
@@ -268,6 +265,78 @@
   }
   .animate-pulse-glow {
     animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes skeleton-breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      color-mix(in oklch, var(--comic-yellow) 18%, rgba(255, 255, 255, 0.5)) 45%,
+      rgba(255, 255, 255, 0.65) 55%,
+      color-mix(in oklch, var(--comic-yellow) 12%, rgba(255, 255, 255, 0.35)) 65%,
+      transparent 80%
+    );
+    animation: shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .skeleton-bone {
+    background-color: color-mix(in oklch, var(--comic-ink) 10%, var(--card));
+    border-radius: 6px;
+    animation: skeleton-breathe 2.4s ease-in-out infinite;
+  }
+  .skeleton-bone-dark {
+    background-color: color-mix(in oklch, var(--comic-ink) 18%, var(--card));
+    border-radius: 6px;
+    animation: skeleton-breathe 2.4s ease-in-out infinite;
+  }
+  /* Staggered delay utilities for skeleton row entrance */
+  .skeleton-delay-1 {
+    animation-delay: 80ms;
+  }
+  .skeleton-delay-2 {
+    animation-delay: 160ms;
+  }
+  .skeleton-delay-3 {
+    animation-delay: 240ms;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   @keyframes slide-up {
