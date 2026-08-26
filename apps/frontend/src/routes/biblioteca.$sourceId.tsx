@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowLeft, Loader2, BookOpen } from "lucide-react";
 import { MangaCover } from "@/components/biblioteca/MangaCover";
@@ -12,7 +12,7 @@ import { TabConversoes } from "@/components/biblioteca/TabConversoes";
 import { DownloadChapterDialog } from "@/components/biblioteca/DownloadChapterDialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { scrapingApi, chaptersApi } from "@/lib/api";
+import { scrapingApi, chaptersApi, conversionsApi } from "@/lib/api";
 import { useReadingProgress, useToggleRead } from "@/hooks/useReadingProgress";
 import type { SourceInspectResponse } from "@/types/scraping";
 
@@ -29,6 +29,18 @@ function MangaDetailPage() {
   const { sourceId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Aquece a listagem de conversões no mount da página — elimina o skeleton
+  // sentido na primeira visita à aba "Conversões".
+  useEffect(() => {
+    if (!sourceId) return;
+    void queryClient.prefetchQuery({
+      queryKey: ["conversions", { sourceId }],
+      queryFn: () => conversionsApi.list({ sourceId, limit: 100 }),
+      staleTime: 15_000,
+    });
+  }, [queryClient, sourceId]);
 
   // Local state for instant tab switching; initialize from URL search param
   const [activeTab, setActiveTab] = useState<string>(search.tab ?? "detalhes");

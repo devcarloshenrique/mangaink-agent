@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { conversionsApi } from "@/lib/api";
 import type { ConversionSummary, ConversionState } from "@/types/conversion";
 import { buildConversionLot, type ConversionLot } from "@/types/conversion-tab.types";
@@ -26,6 +26,21 @@ export function useSourceConversions(sourceId: string, seriesTitle?: string) {
   });
 
   const conversions = useMemo<ConversionSummary[]>(() => listData?.items ?? [], [listData]);
+
+  // Aquece o detalhe do primeiro lote em paralelo à sincronização do selectedId —
+  // evita o waterfall lista → efeito (setSelectedId) → GET de detalhe.
+  useEffect(() => {
+    const first = conversions[0];
+    if (!first) return;
+    const key: QueryKey = ["conversion", first.conversionId];
+    if (!queryClient.getQueryData(key)) {
+      void queryClient.prefetchQuery({
+        queryKey: key,
+        queryFn: () => conversionsApi.get(first.conversionId),
+        staleTime: 10_000,
+      });
+    }
+  }, [conversions, queryClient]);
 
   // Sincroniza a conversão selecionada se a lista mudar ou se nada estiver selecionado
   useEffect(() => {
