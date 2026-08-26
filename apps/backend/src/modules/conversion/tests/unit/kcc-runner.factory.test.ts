@@ -1,6 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversionEventsService } from '../../services/conversion-events.service'
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    existsSync: vi.fn((path: string) => {
+      if (
+        typeof path === 'string' &&
+        (path.includes('runtime') || path.includes('python.exe') || path.includes('extract_mobi.py'))
+      ) {
+        return true
+      }
+      return actual.existsSync(path)
+    }),
+  }
+})
+
 const mockEvents = {
   createEvent: vi.fn(),
   emit: vi.fn(),
