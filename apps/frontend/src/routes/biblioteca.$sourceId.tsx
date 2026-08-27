@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowLeft, Loader2, BookOpen } from "lucide-react";
+import { toast } from "sonner";
 import { MangaCover } from "@/components/biblioteca/MangaCover";
 import { ReadButton } from "@/components/biblioteca/ReadButton";
 import { FavoriteButton } from "@/components/biblioteca/FavoriteButton";
@@ -10,6 +11,7 @@ import { TabDetalhes } from "@/components/biblioteca/TabDetalhes";
 import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
 import { TabConversoes } from "@/components/biblioteca/TabConversoes";
 import { DownloadChapterDialog } from "@/components/biblioteca/DownloadChapterDialog";
+import { MangaDetailSkeleton } from "@/components/biblioteca/MangaDetailSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { scrapingApi, chaptersApi } from "@/lib/api";
@@ -29,6 +31,7 @@ function MangaDetailPage() {
   const { sourceId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Local state for instant tab switching; initialize from URL search param
   const [activeTab, setActiveTab] = useState<string>(search.tab ?? "detalhes");
@@ -84,6 +87,27 @@ function MangaDetailPage() {
       });
     } catch (err) {
       console.error("Erro ao iniciar download:", err);
+    }
+  };
+
+  const handleDownloadBackground = async () => {
+    if (!downloadTarget) return;
+    try {
+      await conversionsApi.create({
+        sourceId: downloadTarget.sourceId,
+        downloadOnly: true,
+        cover: { kind: "original" },
+        metadata: { title: seriesTitle || downloadTarget.sourceId, author: "" },
+        books: [
+          { title: seriesTitle || downloadTarget.sourceId, chapters: [downloadTarget.chapterId] },
+        ],
+        errorHandlingStrategy: "ignore",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["conversions"] });
+      void queryClient.invalidateQueries({ queryKey: ["source", downloadTarget.sourceId] });
+      toast.success(`Download do capítulo "${downloadTarget.title}" iniciado!`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao iniciar download");
     }
   };
 
@@ -164,102 +188,81 @@ function MangaDetailPage() {
           </Link>
         </div>
 
-        <div className="grid md:grid-cols-[320px_1fr] gap-8">
-          <div className="space-y-6 md:max-w-[320px] mx-auto md:mx-0 w-full">
-            <MangaCover sourceId={sourceId} title={seriesTitle} className="aspect-[2/3]" />
-            <ReadButton
-              sourceId={sourceId}
-              readChapterIds={readChapterIds}
-              chapters={chapters}
-              isLoading={isLoading}
-            />
-            <FavoriteButton isFavorite={isFavorite} onToggle={() => setIsFavorite(!isFavorite)} />
-          </div>
+        {sourceLoading ? (
+          <MangaDetailSkeleton />
+        ) : (
+          <div className="grid md:grid-cols-[320px_1fr] gap-8">
+            <div className="space-y-6 md:max-w-[320px] mx-auto md:mx-0 w-full">
+              <MangaCover sourceId={sourceId} title={seriesTitle} className="aspect-[2/3]" />
+              <ReadButton
+                sourceId={sourceId}
+                readChapterIds={readChapterIds}
+                chapters={chapters}
+                isLoading={isLoading}
+              />
+              <FavoriteButton isFavorite={isFavorite} onToggle={() => setIsFavorite(!isFavorite)} />
+            </div>
 
-          <div className="min-w-0">
-            <h1 className="font-display text-3xl md:text-4xl uppercase text-center mb-6">
-              {sourceLoading ? (
-                <span className="inline-flex items-center gap-2 opacity-50">
-                  <Loader2 className="h-7 w-7 animate-spin text-comic-blue" />
-                  Carregando obra…
-                </span>
-              ) : (
-                seriesTitle || "Obra"
-              )}
-            </h1>
+            <div className="min-w-0">
+              <h1 className="font-display text-3xl md:text-4xl uppercase text-center mb-6">
+                {seriesTitle || "Obra"}
+              </h1>
 
-            <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList className="border-[3px] border-ink rounded-xl shadow-comic bg-card p-0 w-full flex overflow-hidden h-auto">
-                <TabsTrigger
-                  value="detalhes"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
-                >
-                  Detalhes
-                </TabsTrigger>
-                <TabsTrigger
-                  value="capitulos"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
-                >
-                  Capítulos {sourceLoading ? "" : `(${chapterCount})`}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="conversoes"
-                  className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
-                >
-                  Conversões
-                </TabsTrigger>
-              </TabsList>
+              <Tabs value={activeTab} onValueChange={handleTabChange}>
+                <TabsList className="border-[3px] border-ink rounded-xl shadow-comic bg-card p-0 w-full flex overflow-hidden h-auto">
+                  <TabsTrigger
+                    value="detalhes"
+                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
+                  >
+                    Detalhes
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="capitulos"
+                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
+                  >
+                    Capítulos ({chapterCount})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="conversoes"
+                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
+                  >
+                    Conversões
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="detalhes" className="mt-4 animate-fade-in min-h-[420px]">
-                {sourceLoading ? (
-                  <ComicPanel bg="card" padding="md">
-                    <div className="space-y-4 py-8 text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-comic-blue" />
-                      <p className="font-display text-base opacity-70">
-                        Carregando detalhes da obra…
-                      </p>
-                    </div>
-                  </ComicPanel>
-                ) : (
+                <TabsContent value="detalhes" className="mt-4 animate-fade-in min-h-[420px]">
                   <TabDetalhes details={mangaDetails} />
-                )}
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="capitulos" className="mt-4 animate-fade-in min-h-[420px]">
-                {sourceLoading ? (
-                  <ComicPanel bg="card" padding="md">
-                    <div className="space-y-4 py-8 text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-comic-blue" />
-                      <p className="font-display text-base opacity-70">Carregando capítulos…</p>
-                    </div>
-                  </ComicPanel>
-                ) : (
+                <TabsContent value="capitulos" className="mt-4 animate-fade-in min-h-[420px]">
                   <TabCapitulos
                     chapters={chapters}
                     sourceId={sourceId}
+                    seriesTitle={seriesTitle}
                     readChapterIds={readChapterIds}
                     onToggleRead={handleToggleRead}
                     onDownloadRequest={handleDownloadRequest}
                   />
-                )}
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="conversoes" className="mt-4 animate-fade-in min-h-[420px]">
-                <TabConversoes sourceId={sourceId} seriesTitle={seriesTitle} />
-              </TabsContent>
-            </Tabs>
+                <TabsContent value="conversoes" className="mt-4 animate-fade-in min-h-[420px]">
+                  <TabConversoes sourceId={sourceId} seriesTitle={seriesTitle} />
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      <DownloadChapterDialog
-        open={downloadTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDownloadTarget(null);
-        }}
-        chapterTitle={downloadTarget?.title ?? ""}
-        onConfirm={handleDownloadConfirm}
-      />
+        <DownloadChapterDialog
+          open={downloadTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDownloadTarget(null);
+          }}
+          chapterTitle={downloadTarget?.title ?? ""}
+          onConfirm={handleDownloadConfirm}
+          onDownloadBackground={handleDownloadBackground}
+        />
+      </div>
     </div>
   );
 }

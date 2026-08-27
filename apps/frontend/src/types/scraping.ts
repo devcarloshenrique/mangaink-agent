@@ -16,6 +16,7 @@ export interface Chapter {
   volume: number | null;
   isDownloaded: boolean;
   isRead: boolean;
+  unavailableReason?: string | null;
 }
 
 export interface Cover {

@@ -1,7 +1,16 @@
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, CloudOff, ArrowDownUp, ArrowUpDown, Eye, EyeOff } from "lucide-react";
+import {
+  CheckCircle,
+  CloudOff,
+  ArrowDownUp,
+  ArrowUpDown,
+  Eye,
+  EyeOff,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { SpeechBubble } from "@/components/comic/SpeechBubble";
@@ -14,8 +23,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { chaptersApi } from "@/lib/api";
+import { chaptersApi, conversionsApi } from "@/lib/api";
 import { useBatchMarkRead } from "@/hooks/useReadingProgress";
+import { useSourceActiveDownloads } from "@/hooks/useSourceActiveDownloads";
 import type { Chapter } from "@/types/scraping";
 
 type ChapterFilter = "all" | "unread" | "downloaded";
@@ -23,6 +33,7 @@ type ChapterFilter = "all" | "unread" | "downloaded";
 interface TabCapitulosProps {
   chapters: Chapter[];
   sourceId: string;
+  seriesTitle?: string;
   readChapterIds: Set<string>;
   onToggleRead: (chapterId: string, isRead: boolean) => void;
   onDownloadRequest: (sourceId: string, chapterId: string, title: string) => void;
@@ -31,6 +42,7 @@ interface TabCapitulosProps {
 export const TabCapitulos = memo(function TabCapitulos({
   chapters,
   sourceId,
+  seriesTitle,
   readChapterIds,
   onToggleRead,
   onDownloadRequest,
@@ -46,6 +58,8 @@ export const TabCapitulos = memo(function TabCapitulos({
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
+  const { downloadingChapterIds, failedChapterMap } = useSourceActiveDownloads(sourceId);
+
   useEffect(() => {
     setSearchQuery("");
   }, [sourceId]);
@@ -56,6 +70,10 @@ export const TabCapitulos = memo(function TabCapitulos({
   );
 
   const downloadCount = useMemo(() => chapters.filter((ch) => ch.isDownloaded).length, [chapters]);
+
+  const selectedDownloadedIds = useMemo(() => {
+    return chapters.filter((ch) => selectedIds.has(ch.id) && ch.isDownloaded).map((ch) => ch.id);
+  }, [chapters, selectedIds]);
 
   const filtered = useMemo(() => {
     let list = [...chapters];
@@ -145,68 +163,84 @@ export const TabCapitulos = memo(function TabCapitulos({
   const batchDownload = useCallback(async () => {
     const ids = [...selectedIds];
     setIsBatchProcessing(true);
-    const toastId = toast.loading(`Baixando 0/${ids.length} capítulos...`);
-    let failed = 0;
 
-    for (let i = 0; i < ids.length; i++) {
-      toast.loading(`Baixando ${i + 1}/${ids.length} capítulos...`, { id: toastId });
-      try {
-        await chaptersApi.download(sourceId, ids[i]);
-      } catch {
-        failed++;
-      }
+    try {
+      // Cria uma conversão download-only — MESMO fluxo do "Adicionar obra":
+      // barra ao vivo no sino, tela de progresso e notificação agregada com
+      // os motivos de falha por capítulo.
+      await conversionsApi.create({
+        sourceId,
+        downloadOnly: true,
+        cover: { kind: "original" },
+        metadata: { title: seriesTitle || sourceId, author: "" },
+        books: [{ title: seriesTitle || sourceId, chapters: ids }],
+        errorHandlingStrategy: "ignore",
+      });
+      // Sino atualiza NA HORA (sem isso, com a lista vazia o polling do
+      // "Em andamento" está desligado e a linha só apareceria ao terminar).
+      queryClient.invalidateQueries({ queryKey: ["conversions"] });
+      toast.success("Download iniciado!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao iniciar o download");
     }
 
     setIsBatchProcessing(false);
     setSelectionMode(false);
     setSelectedIds(new Set());
 
-    if (failed === 0) {
-      toast.success(`${ids.length} capítulos baixados`, { id: toastId });
-    } else {
-      toast.error(`${failed} de ${ids.length} downloads falharam`, { id: toastId });
-    }
-
     queryClient.invalidateQueries({ queryKey: ["source", sourceId] });
-  }, [selectedIds, sourceId, queryClient]);
+  }, [selectedIds, sourceId, seriesTitle, queryClient]);
 
   const batchDeleteCache = useCallback(async () => {
-    const ids = [...selectedIds];
+    if (selectedDownloadedIds.length === 0) return;
+    const ids = [...selectedDownloadedIds];
     setIsBatchProcessing(true);
-    const toastId = toast.loading(`Apagando 0/${ids.length} capítulos...`);
-    let failed = 0;
-
-    for (let i = 0; i < ids.length; i++) {
-      toast.loading(`Apagando ${i + 1}/${ids.length} capítulos...`, { id: toastId });
-      try {
-        await chaptersApi.deleteCache(sourceId, ids[i]);
-      } catch {
-        failed++;
-      }
-    }
-
-    setIsBatchProcessing(false);
     setSelectionMode(false);
     setSelectedIds(new Set());
 
-    if (failed === 0) {
-      toast.success(`${ids.length} caches removidos`, { id: toastId });
-    } else {
-      toast.error(`${failed} de ${ids.length} falharam`, { id: toastId });
+    try {
+      await chaptersApi.deleteCacheBatch(sourceId, ids);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    } catch {
+      toast.error("Erro ao apagar capítulos");
+    } finally {
+      setIsBatchProcessing(false);
+      queryClient.invalidateQueries({ queryKey: ["source", sourceId] });
     }
-
-    queryClient.invalidateQueries({ queryKey: ["source", sourceId] });
-  }, [selectedIds, sourceId, queryClient]);
+  }, [selectedDownloadedIds, sourceId, queryClient]);
 
   const handleDeleteSingleCache = useCallback(
     async (chapterId: string) => {
       try {
         await chaptersApi.deleteCache(sourceId, chapterId);
+        queryClient.invalidateQueries({ queryKey: ["source", sourceId] });
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
         toast.error("Erro ao remover cache");
       }
     },
-    [sourceId],
+    [sourceId, queryClient],
+  );
+
+  const handleDownloadSingleBackground = useCallback(
+    async (chapterId: string, chapterTitle: string) => {
+      try {
+        await conversionsApi.create({
+          sourceId,
+          downloadOnly: true,
+          cover: { kind: "original" },
+          metadata: { title: seriesTitle || sourceId, author: "" },
+          books: [{ title: seriesTitle || sourceId, chapters: [chapterId] }],
+          errorHandlingStrategy: "ignore",
+        });
+        void queryClient.invalidateQueries({ queryKey: ["conversions"] });
+        void queryClient.invalidateQueries({ queryKey: ["source", sourceId] });
+        toast.success(`Download do capítulo "${chapterTitle}" iniciado!`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao iniciar download");
+      }
+    },
+    [sourceId, seriesTitle, queryClient],
   );
 
   if (chapters.length === 0) {
@@ -275,7 +309,7 @@ export const TabCapitulos = memo(function TabCapitulos({
         ))}
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Button
           variant="outline"
           size="sm"
@@ -286,13 +320,15 @@ export const TabCapitulos = memo(function TabCapitulos({
           {selectionMode ? "Cancelar" : "Selecionar"}
         </Button>
         {selectionMode && sorted.length > 0 && (
-          <Checkbox
-            checked={selectedIds.size === sorted.length}
-            onCheckedChange={toggleSelectAll}
-            aria-label="Selecionar todos os capítulos"
-          >
-            <span className="font-display text-xs ml-2">Todos</span>
-          </Checkbox>
+          <label className="inline-flex items-center gap-2 cursor-pointer py-1 px-1.5 rounded hover:bg-muted/60 transition-colors select-none">
+            <Checkbox
+              checked={selectedIds.size === sorted.length}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Selecionar todos os capítulos"
+              className="border-[2px] border-ink data-[state=checked]:bg-comic-red data-[state=checked]:text-primary-foreground"
+            />
+            <span className="font-display text-xs">Todos ({sorted.length})</span>
+          </label>
         )}
         {selectionMode && selectedIds.size > 0 && (
           <span className="font-display text-xs text-muted-foreground ml-auto">
@@ -310,6 +346,11 @@ export const TabCapitulos = memo(function TabCapitulos({
       <div>
         {sorted.map((chapter, i) => {
           const isRead = readChapterIds.has(chapter.id);
+          const isDownloading = !chapter.isDownloaded && downloadingChapterIds.has(chapter.id);
+          const failedReason = !chapter.isDownloaded
+            ? (failedChapterMap.get(chapter.id) ?? chapter.unavailableReason ?? undefined)
+            : undefined;
+
           return (
             <div
               key={chapter.id}
@@ -329,6 +370,8 @@ export const TabCapitulos = memo(function TabCapitulos({
                 onClick={() => {
                   if (selectionMode) {
                     toggleSelection(chapter.id);
+                  } else if (isDownloading) {
+                    // em andamento: não faz nada
                   } else {
                     handleClick(chapter);
                   }
@@ -342,13 +385,28 @@ export const TabCapitulos = memo(function TabCapitulos({
                   {highlightMatch(chapter.number, searchQuery)}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-sm truncate ${
-                      isRead ? "text-muted-foreground" : "font-semibold"
-                    }`}
-                  >
-                    {highlightMatch(chapter.title, searchQuery)}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p
+                      className={`text-sm truncate ${
+                        isRead ? "text-muted-foreground" : "font-semibold"
+                      }`}
+                    >
+                      {highlightMatch(chapter.title, searchQuery)}
+                    </p>
+                    {isDownloading && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-comic-blue animate-pulse">
+                        Baixando...
+                      </span>
+                    )}
+                    {failedReason && (
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-comic-red bg-comic-red/10 border border-comic-red/30 px-1.5 py-0.5 rounded"
+                        title={failedReason}
+                      >
+                        {failedReason}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {chapter.pages !== null ? `${chapter.pages} pgs` : "—"}
                   </p>
@@ -374,14 +432,20 @@ export const TabCapitulos = memo(function TabCapitulos({
                   className="shrink-0"
                   aria-label={`Ações de download para capítulo ${chapter.number}`}
                 >
-                  {chapter.isDownloaded ? (
+                  {isDownloading ? (
+                    <Loader2 className="w-5 h-5 text-comic-blue animate-spin" />
+                  ) : chapter.isDownloaded ? (
                     <CheckCircle className="w-5 h-5 text-green-500" />
+                  ) : failedReason ? (
+                    <AlertCircle className="w-5 h-5 text-comic-red" />
                   ) : (
                     <CloudOff className="w-5 h-5 text-muted-foreground" />
                   )}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  {chapter.isDownloaded ? (
+                  {isDownloading ? (
+                    <DropdownMenuItem disabled>Baixando capítulo...</DropdownMenuItem>
+                  ) : chapter.isDownloaded ? (
                     <>
                       <DropdownMenuItem onClick={() => handleClick(chapter)}>
                         Abrir
@@ -390,12 +454,32 @@ export const TabCapitulos = memo(function TabCapitulos({
                         Apagar do disco
                       </DropdownMenuItem>
                     </>
+                  ) : failedReason ? (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => handleDownloadSingleBackground(chapter.id, chapter.title)}
+                      >
+                        Tentar baixar no disco
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onDownloadRequest(sourceId, chapter.id, chapter.title)}
+                      >
+                        Baixar e ler agora
+                      </DropdownMenuItem>
+                    </>
                   ) : (
-                    <DropdownMenuItem
-                      onClick={() => onDownloadRequest(sourceId, chapter.id, chapter.title)}
-                    >
-                      Baixar
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => handleDownloadSingleBackground(chapter.id, chapter.title)}
+                      >
+                        Baixar no disco
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onDownloadRequest(sourceId, chapter.id, chapter.title)}
+                      >
+                        Baixar e ler agora
+                      </DropdownMenuItem>
+                    </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -432,15 +516,17 @@ export const TabCapitulos = memo(function TabCapitulos({
           >
             Baixar {selectedIds.size} capítulos
           </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={batchDeleteCache}
-            disabled={isBatchProcessing}
-            className="font-display text-xs bg-comic-yellow border-[2px] border-ink text-ink"
-          >
-            Apagar {selectedIds.size} do disco
-          </Button>
+          {selectedDownloadedIds.length > 0 && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={batchDeleteCache}
+              disabled={isBatchProcessing}
+              className="font-display text-xs bg-comic-yellow border-[2px] border-ink text-ink"
+            >
+              Apagar {selectedDownloadedIds.length} do disco
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

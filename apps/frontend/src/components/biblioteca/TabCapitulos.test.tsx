@@ -14,7 +14,28 @@ vi.mock("@/hooks/useReadingProgress", () => ({
   }),
 }));
 
+vi.mock("@/lib/api", () => ({
+  chaptersApi: {
+    deleteCache: vi.fn().mockResolvedValue({ deleted: true }),
+    deleteCacheBatch: vi.fn().mockResolvedValue({ deletedCount: 2, totalCount: 2, failedCount: 0 }),
+  },
+  conversionsApi: {
+    create: vi.fn().mockResolvedValue({ conversionId: "conv-1" }),
+    events: () => ({ close: vi.fn() }),
+  },
+}));
+
+const mockActiveDownloads = vi.hoisted(() => ({
+  downloadingChapterIds: new Set<string>(),
+  failedChapterMap: new Map<string, string>(),
+}));
+
+vi.mock("@/hooks/useSourceActiveDownloads", () => ({
+  useSourceActiveDownloads: () => mockActiveDownloads,
+}));
+
 import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
+import { chaptersApi } from "@/lib/api";
 import type { Chapter } from "@/types/scraping";
 
 const queryClient = new QueryClient({
@@ -154,5 +175,167 @@ describe("TabCapitulos", () => {
     expect(marks.length).toBeGreaterThan(0);
     expect(marks[0].textContent).toBe("Inicio");
     expect(screen.queryByText("O Fim")).toBeNull();
+  });
+
+  it("deve executar batchDeleteCache chamando deleteCacheBatch sem toast de loading", async () => {
+    const chapters = [
+      makeChapter({ id: "ch1", number: "1", title: "Cap 1", isDownloaded: true }),
+      makeChapter({ id: "ch2", number: "2", title: "Cap 2", isDownloaded: true }),
+    ];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    // Ativa modo seleção
+    const selectBtn = screen.getByRole("button", { name: "Selecionar capítulos" });
+    fireEvent.click(selectBtn);
+
+    // Seleciona todos
+    const selectAllCheckbox = screen.getByLabelText("Selecionar todos os capítulos");
+    fireEvent.click(selectAllCheckbox);
+
+    // Clica no botão de apagar
+    const deleteBtn = screen.getByRole("button", { name: /Apagar 2 do disco/i });
+    fireEvent.click(deleteBtn);
+
+    expect(chaptersApi.deleteCacheBatch).toHaveBeenCalledWith("src-test", ["ch1", "ch2"]);
+  });
+
+  it("deve filtrar apenas capítulos baixados ao selecionar tudo e apagar do disco", async () => {
+    const chapters = [
+      makeChapter({ id: "ch1", number: "1", title: "Cap 1", isDownloaded: true }),
+      makeChapter({ id: "ch2", number: "2", title: "Cap 2", isDownloaded: false }),
+      makeChapter({ id: "ch3", number: "3", title: "Cap 3", isDownloaded: true }),
+    ];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    // Ativa modo seleção
+    fireEvent.click(screen.getByRole("button", { name: "Selecionar capítulos" }));
+
+    // Seleciona todos (3 selecionados, mas só 2 baixados)
+    fireEvent.click(screen.getByLabelText("Selecionar todos os capítulos"));
+
+    // O botão deve indicar exatamente "Apagar 2 do disco"
+    const deleteBtn = screen.getByRole("button", { name: /Apagar 2 do disco/i });
+    expect(deleteBtn).toBeTruthy();
+
+    fireEvent.click(deleteBtn);
+
+    // Envia apenas ch1 e ch3 para o backend
+    expect(chaptersApi.deleteCacheBatch).toHaveBeenCalledWith("src-test", ["ch1", "ch3"]);
+  });
+
+  it("não deve exibir botão de apagar se nenhum dos selecionados estiver baixado", () => {
+    const chapters = [
+      makeChapter({ id: "ch1", number: "1", title: "Cap 1", isDownloaded: false }),
+      makeChapter({ id: "ch2", number: "2", title: "Cap 2", isDownloaded: false }),
+    ];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Selecionar capítulos" }));
+    fireEvent.click(screen.getByLabelText("Selecionar todos os capítulos"));
+
+    // Não deve renderizar botão de apagar do disco
+    expect(screen.queryByRole("button", { name: /Apagar .* do disco/i })).toBeNull();
+  });
+
+  it("deve exibir spinner e texto 'Baixando...' para capítulos em download", () => {
+    mockActiveDownloads.downloadingChapterIds = new Set(["ch1"]);
+    mockActiveDownloads.failedChapterMap = new Map();
+
+    const chapters = [
+      makeChapter({ id: "ch1", number: "1", title: "Cap 1", isDownloaded: false }),
+      makeChapter({ id: "ch2", number: "2", title: "Cap 2", isDownloaded: false }),
+    ];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.getByText("Baixando...")).toBeTruthy();
+  });
+
+  it("deve exibir aviso e badge para capítulos com unavailableReason vindo da API mesmo sem live map", () => {
+    mockActiveDownloads.downloadingChapterIds = new Set();
+    mockActiveDownloads.failedChapterMap = new Map();
+
+    const chapters = [
+      makeChapter({
+        id: "ch1",
+        number: "1",
+        title: "Cap 1",
+        isDownloaded: false,
+        unavailableReason: "Indisponível no site de origem",
+      }),
+      makeChapter({ id: "ch2", number: "2", title: "Cap 2", isDownloaded: false }),
+    ];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.getByText("Indisponível no site de origem")).toBeTruthy();
+  });
+
+  it("não deve exibir spinner de download se o capítulo já estiver baixado (isDownloaded: true)", () => {
+    mockActiveDownloads.downloadingChapterIds = new Set(["ch1"]);
+    mockActiveDownloads.failedChapterMap = new Map();
+
+    const chapters = [makeChapter({ id: "ch1", number: "1", title: "Cap 1", isDownloaded: true })];
+
+    render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.queryByText("Baixando...")).toBeNull();
   });
 });

@@ -4,6 +4,12 @@ import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
+// Portas configuráveis por env (worktrees/instâncias paralelas).
+// Padrões mantidos: backend 3333, frontend 5173.
+const backendPort = process.env.BACKEND_PORT ?? "3333";
+const frontendPort = Number(process.env.FRONTEND_PORT ?? 5173);
+const backendTarget = `http://localhost:${backendPort}`;
+
 export default defineConfig({
   plugins: [
     TanStackRouterVite({
@@ -15,12 +21,12 @@ export default defineConfig({
   ],
   server: {
     host: "0.0.0.0",
-    port: 5173,
+    port: frontendPort,
     proxy: {
-      // Rotas com prefixo /api → backend Fastify (porta 3333)
+      // Rotas com prefixo /api → backend Fastify (porta via BACKEND_PORT)
       // configure() desabilita bufferização para SSE (text/event-stream)
       "/api": {
-        target: "http://localhost:3333",
+        target: backendTarget,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("proxyRes", (proxyRes) => {
@@ -35,11 +41,11 @@ export default defineConfig({
       },
       // Rotas de auth/users (backend NÃO tem prefixo /api)
       "/auth": {
-        target: "http://localhost:3333",
+        target: backendTarget,
         changeOrigin: true,
       },
       "/users": {
-        target: "http://localhost:3333",
+        target: backendTarget,
         changeOrigin: true,
       },
     },

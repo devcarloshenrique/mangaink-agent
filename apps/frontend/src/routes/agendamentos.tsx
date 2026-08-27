@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,15 +76,12 @@ function AgendamentosPage() {
     <div className="flex-1 bg-background">
       <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
         <div>
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">
               <Calendar />
             </div>
             <h1 className="font-display text-4xl uppercase leading-none">Agendamentos</h1>
           </div>
-          <SpeechBubble variant="yellow" tail="left" className="max-w-md">
-            Assine obras e elas chegam no Kindle quando saírem.
-          </SpeechBubble>
         </div>
 
         <ComicPanel bg="card" padding="md">

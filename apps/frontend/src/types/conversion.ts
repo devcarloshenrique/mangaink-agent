@@ -120,6 +120,8 @@ export interface ConversionSummary {
   finishedAt?: string;
   cover?: CoverRef;
   output?: { deviceId: string; format: string };
+  /** Download de capítulos soltos (sem conversão KCC) — rótulo do sino. */
+  downloadOnly?: boolean;
 }
 
 /** Resultado paginado GET /api/conversions */

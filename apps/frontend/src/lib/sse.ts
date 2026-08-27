@@ -4,6 +4,11 @@
 interface SSEHandlers {
   onEvent: (event: string, data: unknown) => void;
   onError?: (error: Error) => void;
+  /**
+   * O stream TERMINOU por conta do servidor/rede (fim do body ou erro).
+   * NÃO é chamado quando o próprio cliente chama close().
+   */
+  onEnd?: () => void;
 }
 
 /**
@@ -16,6 +21,7 @@ export function createSSEStream(
   token?: string,
 ): { close: () => void } {
   const controller = new AbortController();
+  let locallyAborted = false;
 
   const headers: HeadersInit = {
     Accept: "text/event-stream",
@@ -85,12 +91,26 @@ export function createSSEStream(
           processFrame(frame);
         }
       }
+
+      // Servidor encerrou o stream — sinaliza para reconexão no chamador.
+      handlers.onEnd?.();
     })
     .catch((err: Error) => {
-      if (err.name !== "AbortError") {
-        handlers.onError?.(err);
+      if (err.name === "AbortError") {
+        if (!locallyAborted) {
+          // Abort externo ao controller (timeout do browser etc.) — trata como fim.
+          handlers.onEnd?.();
+        }
+        return;
       }
+      handlers.onError?.(err);
+      handlers.onEnd?.();
     });
 
-  return { close: () => controller.abort() };
+  return {
+    close: () => {
+      locallyAborted = true;
+      controller.abort();
+    },
+  };
 }

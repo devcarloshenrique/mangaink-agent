@@ -115,4 +115,69 @@ describe("createSSEStream", () => {
 
     expect(onError).toHaveBeenCalledWith(error);
   });
+
+  // ── onEnd: sinaliza fim do stream para reconexão no chamador ──────────
+
+  it("deve chamar onEnd quando o servidor encerra o body", async () => {
+    mockReadable = createMockReadableStream(["event: test\ndata: {}\n\n"]);
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, body: mockReadable } as unknown as Response);
+
+    const onEnd = vi.fn();
+    const stream = createSSEStream("/test", { onEvent: vi.fn(), onEnd });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    stream.close();
+  });
+
+  it("deve chamar onEnd (e não onError) quando o abort vem de fora", async () => {
+    let rejectFetch!: (reason: Error) => void;
+    global.fetch = vi.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+
+    const onEnd = vi.fn();
+    const onError = vi.fn();
+    const stream = createSSEStream("/test", { onEvent: vi.fn(), onError, onEnd });
+
+    await new Promise((r) => setTimeout(r, 50));
+    // Abort externo ao close() local — ex.: timeout do browser.
+    const abortError = Object.assign(new Error("The operation was aborted."), {
+      name: "AbortError",
+    });
+    rejectFetch(abortError);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    stream.close();
+  });
+
+  it("NÃO deve chamar onEnd quando o próprio cliente chama close()", async () => {
+    // Reader que nunca completa — o stream permaneceria aberto até o close().
+    const endlessBody = {
+      getReader: () => ({
+        read: vi.fn(() => new Promise<{ done: boolean; value?: Uint8Array }>(() => {})),
+        cancel: vi.fn().mockResolvedValue(undefined),
+      }),
+    };
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, body: endlessBody } as unknown as Response);
+
+    const onEnd = vi.fn();
+    const stream = createSSEStream("/test", { onEvent: vi.fn(), onEnd });
+
+    await new Promise((r) => setTimeout(r, 50));
+    stream.close();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(onEnd).not.toHaveBeenCalled();
+  });
 });

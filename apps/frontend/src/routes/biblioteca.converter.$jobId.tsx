@@ -28,6 +28,10 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pickRetryChapters } from "@/lib/retry-chapters";
+import { conversionsApi } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/biblioteca/converter/$jobId")({
   component: ConverterPage,
@@ -100,7 +104,13 @@ function logColor(type: LogEntry["type"]) {
 function ConverterPage() {
   const { jobId: conversionId } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // Retry na MESMA tela: quando um retry é disparado, a página passa a
+  // acompanhar o novo job in-place (a URL permanece — sem navegação).
+  const [retryJobId, setRetryJobId] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const activeConversionId = retryJobId ?? conversionId;
   const {
     state,
     stages,
@@ -108,11 +118,12 @@ function ConverterPage() {
     currentChapter,
     logs,
     corruptPages,
+    problemChapters,
     isLoading,
     error,
     cancel,
     downloadOnly,
-  } = useConversionProgress(conversionId);
+  } = useConversionProgress(activeConversionId);
 
   // ── Loading ─────────────────────────────────────────────────────────────
   if (isLoading && !state) {
@@ -162,6 +173,40 @@ function ConverterPage() {
     `Conversão ${conversionId.slice(0, 8)}`;
   const format = (state.config as { output?: { format?: string } })?.output?.format ?? "";
 
+  // ── Retry (download-only): refaz APENAS os capítulos com problema, na
+  // mesma tela — a página passa a acompanhar o novo job via retryJobId. ────
+  const handleRetryDownload = async () => {
+    if (!state || retrying) return;
+    const cfg = state.config as {
+      sourceId?: string;
+      metadata?: { title?: string; author?: string };
+      books?: { chapters?: string[] }[];
+    };
+    const chapters = pickRetryChapters(
+      problemChapters.map((p) => p.chapterId),
+      (cfg.books ?? []).map((b) => b.chapters ?? []),
+    );
+    if (!cfg.sourceId || chapters.length === 0) return;
+
+    setRetrying(true);
+    try {
+      const created = await conversionsApi.create({
+        sourceId: cfg.sourceId,
+        downloadOnly: true,
+        cover: { kind: "original" },
+        metadata: { title: cfg.metadata?.title ?? title, author: cfg.metadata?.author ?? "" },
+        books: [{ title: cfg.metadata?.title ?? title, chapters }],
+        errorHandlingStrategy: "ignore",
+      });
+      setRetryJobId(created.conversionId);
+      void queryClient.invalidateQueries({ queryKey: ["conversions"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao tentar novamente");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
     <div className="flex-1 bg-background">
       <div className="mx-auto max-w-3xl px-4 py-10">
@@ -187,11 +232,6 @@ function ConverterPage() {
               {currentChapter?.fromCache && (
                 <OnomatopoeiaBadge variant="blue" size="sm">
                   <Database className="h-3 w-3 mr-1" /> Cache
-                </OnomatopoeiaBadge>
-              )}
-              {isDone && (
-                <OnomatopoeiaBadge variant="blue" size="md">
-                  DONE!
                 </OnomatopoeiaBadge>
               )}
               {isFailed && (
@@ -294,6 +334,32 @@ function ConverterPage() {
           </ComicPanel>
         )}
 
+        {/* Problem chapters (ignorados/sem imagens/erros) */}
+        {problemChapters.length > 0 && (
+          <ComicPanel bg="card" padding="md" className="mb-4 border-comic-red">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-comic-red" />
+              <div className="flex-1 min-w-0">
+                <p className="font-display text-base text-comic-red">
+                  {problemChapters.length} capítulo{problemChapters.length > 1 ? "s" : ""} com
+                  problema{problemChapters.length > 1 ? "s" : ""}
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {problemChapters.map((p) => (
+                    <li
+                      key={p.chapterId}
+                      className="text-xs font-medium flex flex-col sm:flex-row sm:items-center sm:gap-2"
+                    >
+                      <span className="font-display">{formatChapterId(p.chapterId)}</span>
+                      <span className="opacity-70">{p.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </ComicPanel>
+        )}
+
         {/* Stages */}
         <div className="space-y-3 mb-8">
           {stages.map((stage, i) => (
@@ -353,14 +419,28 @@ function ConverterPage() {
               </Button>
             )}
 
-            {(isFailed || isCancelled) && (
-              <Button
-                onClick={() => navigate({ to: "/wizard" })}
-                className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display"
-              >
-                Tentar novamente
-              </Button>
-            )}
+            {(isFailed || isCancelled) &&
+              (downloadOnly ? (
+                <Button
+                  onClick={handleRetryDownload}
+                  disabled={retrying}
+                  className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display"
+                >
+                  {retrying ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-1.5" />
+                  )}
+                  Tentar novamente
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => navigate({ to: "/wizard" })}
+                  className="bg-comic-red text-primary-foreground hover:bg-comic-red border-[3px] border-ink shadow-comic font-display"
+                >
+                  Tentar novamente
+                </Button>
+              ))}
 
             {isProcessing && (
               <Button
