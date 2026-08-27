@@ -1,5 +1,6 @@
 export { ProviderResolver } from './provider-resolver'
 export { ImperioDaBritanniaStrategy } from './imperiodabritannia/imperiodabritannia.provider'
 export { MangasBrasukaStrategy } from './mangasbrasuka/mangasbrasuka.provider'
+export { MangaDexStrategy } from './mangadex/mangadex.provider'
 export type { IProviderStrategy } from '../interfaces/provider-strategy.interface'
 export type { ScrapingProvider } from './provider.interface'

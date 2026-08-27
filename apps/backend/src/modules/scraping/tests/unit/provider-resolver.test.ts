@@ -90,11 +90,12 @@ describe('ProviderResolver', () => {
   describe('listAll', () => {
     it('deve listar todos os providers disponíveis', () => {
       const providers = resolver.listAll()
-      expect(providers).toHaveLength(3)
+      expect(providers).toHaveLength(4)
       const slugs = providers.map((p) => p.slug)
       expect(slugs).toContain('mangalivre')
       expect(slugs).toContain('imperiodabritannia')
       expect(slugs).toContain('mangasbrasuka')
+      expect(slugs).toContain('mangadex')
     })
 
     it('deve retornar providers com informações completas', () => {
@@ -124,11 +125,12 @@ describe('ProviderResolver', () => {
         { slug: 'mangalivre', maxConcurrent: 6, minTime: 50 },
         { slug: 'imperiodabritannia', maxConcurrent: 6, minTime: 50 },
         { slug: 'mangasbrasuka', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangadex', maxConcurrent: 6, minTime: 50 },
       ])
 
       const after = resolver.listAll().map((p) => p.rateLimiter)
       expect(after).toEqual(before)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(3)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
     })
 
     it('reconstrói limiter quando a config muda', () => {
@@ -138,7 +140,7 @@ describe('ProviderResolver', () => {
 
       const after = resolver.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
       expect(after).not.toBe(before)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(5)
     })
 
     it('preserva limiters dos demais providers quando só um muda', () => {
@@ -152,7 +154,7 @@ describe('ProviderResolver', () => {
         .listAll()
         .find((p) => p.slug === 'imperiodabritannia')!.rateLimiter
       expect(afterBritannia).toBe(beforeBritannia)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(5)
     })
 
     it('mantém todos os providers após refresh', () => {
@@ -162,6 +164,7 @@ describe('ProviderResolver', () => {
         'mangalivre',
         'imperiodabritannia',
         'mangasbrasuka',
+        'mangadex',
       ])
     })
   })
@@ -180,6 +183,7 @@ describe('ProviderResolver', () => {
         'mangalivre',
         'imperiodabritannia',
         'mangasbrasuka',
+        'mangadex',
       ])
     })
 

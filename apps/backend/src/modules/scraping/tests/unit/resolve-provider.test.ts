@@ -12,18 +12,23 @@ vi.mock('../../../../shared/database/repositories', () => ({
 }))
 
 // Mock do ProviderResolver
-const mockResolve = vi.fn()
-const mockRefresh = vi.fn()
-const mockLoadFromProviders = vi.fn()
+const { mockResolve, mockRefresh, mockLoadFromProviders } = vi.hoisted(() => ({
+  mockResolve: vi.fn(),
+  mockRefresh: vi.fn(),
+  mockLoadFromProviders: vi.fn(),
+}))
+
 const mockSlug = 'test-provider'
 
-vi.mock('../../providers/provider-resolver', () => ({
-  ProviderResolver: vi.fn().mockImplementation(() => ({
-    resolve: mockResolve,
-    refresh: mockRefresh,
-    loadFromProviders: mockLoadFromProviders,
-  })),
-}))
+vi.mock('../../providers/provider-resolver', () => {
+  return {
+    ProviderResolver: class {
+      resolve = mockResolve
+      refresh = mockRefresh
+      loadFromProviders = mockLoadFromProviders
+    },
+  }
+})
 
 describe('resolveProvider', () => {
   beforeEach(() => {

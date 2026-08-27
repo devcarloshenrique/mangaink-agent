@@ -2,6 +2,7 @@ import type { IProviderStrategy } from '../interfaces/provider-strategy.interfac
 import { MangaLivreStrategy } from './mangalivre/mangalivre.provider'
 import { ImperioDaBritanniaStrategy } from './imperiodabritannia/imperiodabritannia.provider'
 import { MangasBrasukaStrategy } from './mangasbrasuka/mangasbrasuka.provider'
+import { MangaDexStrategy } from './mangadex/mangadex.provider'
 import { ProviderNotFoundError, InvalidUrlError } from '../errors/scraping.errors'
 import { RateLimitRegistry, type ProviderRateLimitConfig } from '../rate-limit/rate-limit-registry'
 import { createRateLimiter } from '../rate-limit/rate-limiter'
@@ -14,6 +15,7 @@ const PROVIDER_FACTORIES: ReadonlyArray<{ slug: string; create: StrategyFactory 
   { slug: 'mangalivre', create: (limiter) => new MangaLivreStrategy(limiter) },
   { slug: 'imperiodabritannia', create: (limiter) => new ImperioDaBritanniaStrategy(limiter) },
   { slug: 'mangasbrasuka', create: (limiter) => new MangasBrasukaStrategy(limiter) },
+  { slug: 'mangadex', create: (limiter) => new MangaDexStrategy(limiter) },
 ]
 
 /**

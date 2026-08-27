@@ -75,4 +75,19 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     rateLimitMaxConcurrent: 3,
     rateLimitMinTime: 200,
   },
+  {
+    slug: 'mangadex',
+    name: 'MangaDex',
+    engine: 'api',
+    domains: ['mangadex.org', 'api.mangadex.org', 'uploads.mangadex.org'],
+    tags: ['mangá', 'português', 'api', 'internacional', 'scans'],
+    status: 'active',
+    description:
+      'Plataforma global de leitura de mangás com suporte multilíngue (incluindo PT-BR) e API REST aberta.',
+    urlExample: 'https://mangadex.org/title/183b5c1e-5bfd-4f7f-9b21-3ac88c584987/chi-chikyuu-no-undou-ni-tsuite',
+    homepage: 'https://mangadex.org',
+    searchUrl: 'https://mangadex.org/search?q=',
+    rateLimitMaxConcurrent: 5,
+    rateLimitMinTime: 200,
+  },
 ]
