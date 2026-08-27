@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { SpeechBubble } from "@/components/comic/SpeechBubble";
 import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
 import { highlightMatch } from "@/components/biblioteca/SearchBar";
 import { Button } from "@/components/ui/button";
@@ -63,13 +62,6 @@ function getSeriesStatusBadge(group: SeriesGroup) {
     return (
       <OnomatopoeiaBadge variant="blue" size="sm">
         ATIVO
-      </OnomatopoeiaBadge>
-    );
-  }
-  if (group.status === "mixed") {
-    return (
-      <OnomatopoeiaBadge variant="yellow" size="sm">
-        MISTO
       </OnomatopoeiaBadge>
     );
   }
@@ -225,20 +217,6 @@ function BibliotecaPage() {
             Concluídas ({allConversions.filter((c) => c.status === "completed").length})
           </button>
         </div>
-
-        <SpeechBubble variant="yellow" tail="left" className="mb-6 max-w-md">
-          {isLoading
-            ? "Carregando..."
-            : activeTab === "converting"
-              ? convertingCount === 0
-                ? "Nenhuma conversão em andamento no momento."
-                : `${convertingCount} conversão(ões) em andamento.`
-              : filtered.length === 0
-                ? searchQuery
-                  ? `Nenhum resultado para "${searchQuery}".`
-                  : "Sua estante está vazia. Que tal converter seu primeiro mangá?"
-                : `${totalCount} obras na sua estante.`}
-        </SpeechBubble>
 
         {isLoading && (
           <div className="text-center py-8">

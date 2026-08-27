@@ -56,11 +56,15 @@ export class GetSourceUseCase {
 
     // Computa isDownloaded e isRead para cada capítulo
     const chapters: Chapter[] = await Promise.all(
-      metadata.chapters.map(async (ch) => ({
-        ...ch,
-        isDownloaded: await isChapterDownloaded(sourceId, ch.id),
-        isRead: readSet.has(ch.id),
-      })),
+      metadata.chapters.map(async (ch) => {
+        const isDownloaded = await isChapterDownloaded(sourceId, ch.id)
+        return {
+          ...ch,
+          isDownloaded,
+          isRead: readSet.has(ch.id),
+          unavailableReason: isDownloaded ? null : (ch.unavailableReason ?? null),
+        }
+      }),
     )
 
     // Remove o campo interno `cache` da resposta

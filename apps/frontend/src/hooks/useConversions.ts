@@ -19,7 +19,19 @@ export function useConversionsList(params: UseConversionsParams = {}) {
 
 export function useActiveConversions() {
   const activeStatuses: ConversionStatus[] = ["queued", "processing"];
-  return useConversionsList({ status: activeStatuses, limit: 50 });
+  return useQuery({
+    queryKey: ["conversions", { status: activeStatuses, limit: 50 }],
+    queryFn: () => conversionsApi.list({ status: activeStatuses, limit: 50 }),
+    // Barras ao vivo (sino do header / aba convertendo): poll rápido enquanto
+    // há itens ativos; heartbeat lento quando vazio (rede de segurança para
+    // transições que não invalidam explicitamente — ex.: conversão criada
+    // por outro dispositivo/aba).
+    refetchInterval: (query) => {
+      const count = query.state.data?.items?.length ?? 0;
+      return count > 0 ? 5_000 : 30_000;
+    },
+    staleTime: 5_000,
+  });
 }
 
 export interface SeriesGroup {

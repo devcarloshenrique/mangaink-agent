@@ -5,7 +5,11 @@ import { createChapterDownload } from './controllers/create-chapter-download.con
 import { getChapterDownload } from './controllers/get-chapter-download.controller'
 import { createChapterDownloadEventsController } from './controllers/chapter-download-events.controller'
 import { serveChapterImage } from './controllers/serve-chapter-image.controller'
-import { deleteChapterCache } from './controllers/delete-chapter-cache.controller'
+import { createDeleteChapterCacheController } from './controllers/delete-chapter-cache.controller'
+import {
+  createBatchDeleteChapterCacheController,
+  batchDeleteChapterCacheBodySchema,
+} from './controllers/batch-delete-chapter-cache.controller'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 
 interface ChapterRoutesOptions {
@@ -33,6 +37,7 @@ const downloadStatusResponseSchema = z.object({
   totalImages: z.number().nullable(),
   downloadedImages: z.number(),
   jobId: z.string().nullable(),
+  error: z.string().nullable().optional(),
 })
 
 export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async (app, opts) => {
@@ -46,7 +51,11 @@ export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async 
       schema: {
         tags: ['Chapters'],
         summary: 'Baixa as imagens de um capítulo',
-        description: 'Enfileira job BullMQ para download assíncrono das imagens do capítulo.',
+        description:
+          'Enfileira job BullMQ para download assíncrono das imagens do capítulo. ' +
+          'Aceita body JSON opcional { batchId } para agrupar o capítulo num lote do ' +
+          'usuário (notificação agregada ao fim, em vez de uma por capítulo). ' +
+          'Sem body schema declarado para aceitar chamadas sem payload.',
         params: chapterParamsSchema,
         response: {
           200: downloadResponseSchema,
@@ -114,6 +123,9 @@ export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async 
     serveChapterImage,
   )
 
+  const deleteChapterCacheHandler = createDeleteChapterCacheController(opts.runtime)
+  const batchDeleteChapterCacheHandler = createBatchDeleteChapterCacheController(opts.runtime)
+
   app.delete(
     '/api/sources/:sourceId/chapters/:chapterId/cache',
     {
@@ -133,6 +145,31 @@ export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async 
         },
       },
     },
-    deleteChapterCache,
+    deleteChapterCacheHandler,
+  )
+
+  app.post(
+    '/api/sources/:sourceId/chapters/batch-delete-cache',
+    {
+      onRequest: [verifyJwt],
+      schema: {
+        tags: ['Chapters'],
+        summary: 'Remove cache de imagens de múltiplos capítulos em lote',
+        description:
+          'Remove do disco as imagens cacheadas dos capítulos informados e notifica via central de notificações.',
+        params: z.object({ sourceId: z.string() }),
+        body: batchDeleteChapterCacheBodySchema,
+        response: {
+          200: z.object({
+            deletedCount: z.number(),
+            totalCount: z.number(),
+            alreadyCleanCount: z.number().optional(),
+            failedCount: z.number(),
+          }),
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    batchDeleteChapterCacheHandler,
   )
 }

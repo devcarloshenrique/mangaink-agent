@@ -47,8 +47,14 @@ vi.mock('../../../../shared/config/env', () => ({
   },
 }))
 
+const mockUpdateUnavailableFn = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
 vi.mock('../../../../shared/database/repositories', () => ({
-  getSourceRepository: () => ({ load: mockLoadFn }),
+  getSourceRepository: () => ({
+    load: mockLoadFn,
+    updateChapterUnavailableReason: mockUpdateUnavailableFn,
+  }),
+  getNotificationRepository: vi.fn(() => ({})),
 }))
 
 vi.mock('../../utils/resolve-provider', () => ({
@@ -201,7 +207,13 @@ describe('processChapterDownload', () => {
     ).rejects.toThrow('Nenhuma imagem encontrada')
 
     expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'downloading')
-    expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'failed')
+    expect(mockSetJobStatusFn).toHaveBeenCalledWith(
+      'src-test',
+      'chap-test',
+      'job-1',
+      'failed',
+      'Nenhuma imagem encontrada para o capítulo chap-test',
+    )
 
     expect(mockEventsInstance.emit).toHaveBeenCalledWith(
       'src-test',
@@ -218,7 +230,13 @@ describe('processChapterDownload', () => {
     ).rejects.toThrow('Provider não encontrado')
 
     expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'downloading')
-    expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'failed')
+    expect(mockSetJobStatusFn).toHaveBeenCalledWith(
+      'src-test',
+      'chap-test',
+      'job-1',
+      'failed',
+      'Provider não encontrado para source src-test',
+    )
 
     expect(mockEventsInstance.emit).toHaveBeenCalledWith(
       'src-test',
@@ -235,7 +253,13 @@ describe('processChapterDownload', () => {
     ).rejects.toThrow('Falha ao baixar todas as 2 imagens')
 
     expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'downloading')
-    expect(mockSetJobStatusFn).toHaveBeenCalledWith('src-test', 'chap-test', 'job-1', 'failed')
+    expect(mockSetJobStatusFn).toHaveBeenCalledWith(
+      'src-test',
+      'chap-test',
+      'job-1',
+      'failed',
+      'Falha ao baixar todas as 2 imagens',
+    )
 
     expect(mockEventsInstance.emit).toHaveBeenCalledWith(
       'src-test',
@@ -244,5 +268,73 @@ describe('processChapterDownload', () => {
     )
 
     expect(mockWriteFile).not.toHaveBeenCalled()
+  })
+
+  it('envia sucesso ao AGREGADOR quando há userId no payload', async () => {
+    const push = vi.fn()
+    const aggregator = { push } as never
+
+    await processChapterDownload({
+      data: { sourceId: 'src-test', chapterId: 'chap-test', userId: 'user-1' },
+      id: 'job-1',
+    }, undefined, aggregator)
+
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sourceId: 'src-test',
+      sourceTitle: 'Test Manga',
+      chapterId: 'chap-test',
+      chapterLabel: 'Capítulo 1',
+      ok: true,
+    })
+  })
+
+  it('não envia ao agregador sem userId no payload (retrocompatibilidade)', async () => {
+    const push = vi.fn()
+    const aggregator = { push } as never
+
+    await processChapterDownload(
+      { data: { sourceId: 'src-test', chapterId: 'chap-test' }, id: 'job-1' },
+      undefined,
+      aggregator,
+    )
+
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('suprime o evento quando o job pertence a um batchId (lote agrega por conta própria)', async () => {
+    const push = vi.fn()
+    const aggregator = { push } as never
+
+    await processChapterDownload({
+      data: { sourceId: 'src-test', chapterId: 'chap-test', userId: 'user-1', batchId: 'batch-1' },
+      id: 'job-1',
+    }, undefined, aggregator)
+
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('envia falha ao agregador quando o download falha', async () => {
+    provider.downloadImage.mockRejectedValue(new Error('Network error'))
+    const push = vi.fn()
+    const aggregator = { push } as never
+
+    await expect(
+      processChapterDownload({
+        data: { sourceId: 'src-test', chapterId: 'chap-test', userId: 'user-1' },
+        id: 'job-1',
+      }, undefined, aggregator),
+    ).rejects.toThrow('Falha ao baixar todas as 2 imagens')
+
+    expect(push).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sourceId: 'src-test',
+      sourceTitle: 'Test Manga',
+      chapterId: 'chap-test',
+      chapterLabel: 'Capítulo 1',
+      ok: false,
+      reason: 'Falha ao baixar todas as 2 imagens',
+    })
   })
 })

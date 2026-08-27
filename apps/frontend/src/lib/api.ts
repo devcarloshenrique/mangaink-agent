@@ -36,6 +36,11 @@ import type {
   BatchMarkReadInput,
   BatchMarkReadResponse,
 } from "@/types/reading";
+import type {
+  NotificationDTO,
+  ListNotificationsResponse,
+  MarkAllReadResponse,
+} from "@mangaink/shared";
 import { createSSEStream } from "@/lib/sse";
 
 // ─── Gerenciamento de token ───────────────────────────────────────────────────
@@ -299,6 +304,8 @@ export const conversionsApi = {
     handlers: {
       onEvent: (event: string, data: unknown) => void;
       onError?: (error: Error) => void;
+      /** Stream terminou no servidor/rede — usado para reconexão. */
+      onEnd?: () => void;
     },
   ): { close: () => void } {
     const url = `/api/conversions/${conversionId}/events`;
@@ -351,12 +358,18 @@ export const presetsApi = {
 // ─── Chapters API ─────────────────────────────────────────────────────────────
 
 export const chaptersApi = {
-  /** POST /api/sources/:sourceId/chapters/:chapterId/download */
-  async download(sourceId: string, chapterId: string): Promise<ChapterDownloadResponse> {
+  /** POST /api/sources/:sourceId/chapters/:chapterId/download
+   *  batchId agrupa o capítulo num lote do usuário (notificação agregada). */
+  async download(
+    sourceId: string,
+    chapterId: string,
+    batchId?: string,
+  ): Promise<ChapterDownloadResponse> {
     return request<ChapterDownloadResponse>(
       `/api/sources/${sourceId}/chapters/${chapterId}/download`,
       {
         method: "POST",
+        ...(batchId ? { body: JSON.stringify({ batchId }) } : {}),
       },
     );
   },
@@ -385,6 +398,17 @@ export const chaptersApi = {
   ): Promise<{ deleted: boolean; reason?: string }> {
     return request(`/api/sources/${sourceId}/chapters/${chapterId}/cache`, {
       method: "DELETE",
+    });
+  },
+
+  /** POST /api/sources/:sourceId/chapters/batch-delete-cache */
+  async deleteCacheBatch(
+    sourceId: string,
+    chapterIds: string[],
+  ): Promise<{ deletedCount: number; totalCount: number; failedCount: number }> {
+    return request(`/api/sources/${sourceId}/chapters/batch-delete-cache`, {
+      method: "POST",
+      body: JSON.stringify({ chapterIds }),
     });
   },
 };
@@ -417,5 +441,54 @@ export const readingApi = {
       method: "PUT",
       body: JSON.stringify(body),
     });
+  },
+};
+
+// ─── Notifications API ────────────────────────────────────────────────────────
+
+export const notificationsApi = {
+  /** GET /api/notifications — lista recente + unreadCount (requer auth) */
+  async list(limit = 50): Promise<ListNotificationsResponse> {
+    return request<ListNotificationsResponse>(`/api/notifications?limit=${limit}`);
+  },
+
+  /** PATCH /api/notifications/:id/read — marca uma como lida */
+  async markRead(id: string): Promise<NotificationDTO> {
+    return request<NotificationDTO>(`/api/notifications/${id}/read`, { method: "PATCH" });
+  },
+
+  /** PATCH /api/notifications/read-all — marca todas como lidas */
+  async markAllRead(): Promise<MarkAllReadResponse> {
+    return request<MarkAllReadResponse>("/api/notifications/read-all", { method: "PATCH" });
+  },
+
+  /** DELETE /api/notifications — limpa TODO o histórico do usuário */
+  async clearHistory(): Promise<{ deleted: number }> {
+    return request<{ deleted: number }>("/api/notifications", { method: "DELETE" });
+  },
+
+  /**
+   * SSE /api/notifications/events — feed em tempo real do usuário.
+   * Requer auth (token injetado via fetch streaming).
+   * Retorna { close } para fechar o stream.
+   */
+  events(handlers: {
+    onNotification?: (notification: NotificationDTO) => void;
+    onError?: (error: Error) => void;
+    /** Stream terminou no servidor/rede — usado para reconexão. */
+    onEnd?: () => void;
+  }): { close: () => void } {
+    const token = tokenStore.get() ?? undefined;
+    return createSSEStream(
+      "/api/notifications/events",
+      {
+        onEvent(event, data) {
+          if (event === "notification") handlers.onNotification?.(data as NotificationDTO);
+        },
+        onError: handlers.onError,
+        onEnd: handlers.onEnd,
+      },
+      token,
+    );
   },
 };

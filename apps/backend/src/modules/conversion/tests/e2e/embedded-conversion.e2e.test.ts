@@ -221,6 +221,8 @@ class InMemorySourceRepo {
 
   async updatePlaceholderIndices(): Promise<void> {}
 
+  async updateChapterUnavailableReason(): Promise<void> {}
+
   reset(): void {
     this.store.clear()
   }

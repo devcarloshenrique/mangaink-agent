@@ -13,8 +13,19 @@ export interface CreateChapterDownloadResult {
   status: ChapterDownloadStatus
 }
 
+export interface CreateChapterDownloadInput {
+  sourceId: string
+  chapterId: string
+  userId?: string
+  /** Agrupa o capítulo num lote do usuário (notificação agregada no fim). */
+  batchId?: string
+}
+
 export class CreateChapterDownloadUseCase {
-  async execute(sourceId: string, chapterId: string): Promise<CreateChapterDownloadResult> {
+  async execute(
+    input: CreateChapterDownloadInput,
+  ): Promise<CreateChapterDownloadResult> {
+    const { sourceId, chapterId, userId, batchId } = input
     const source = await getSourceRepository().load(sourceId)
     if (!source) {
       throw new SourceNotFoundError(sourceId)
@@ -59,7 +70,18 @@ export class CreateChapterDownloadUseCase {
 
     // 3. Sem job ativo, sem cache — enfileira novo job
     const queue = getChapterDownloadQueue()
-    const job = await queue.add('download', { sourceId, chapterId })
+    const job = await queue.add(
+      'download',
+      { sourceId, chapterId, userId, batchId },
+      {
+        // SEM auto-retry: falhas são determinísticas (site/provider) e o
+        // usuário re-tenta manualmente. Auto-retry duplicava eventos no
+        // agregador de notificações e re-executava jobs falhos.
+        attempts: 1,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 50 },
+      },
+    )
     const jobId = job.id ?? ''
 
     // Registra no Redis Hash para idempotência de requisições subsequentes

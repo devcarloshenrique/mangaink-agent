@@ -21,6 +21,7 @@ import { conversionRoutes } from '../modules/conversion/conversion.routes'
 import { mobiPreviewRoutes } from '../modules/conversion/mobi-preview.routes'
 import { chapterRoutes } from '../modules/scraping/chapter.routes'
 import { readingRoutes } from '../modules/reading/reading.routes'
+import { notificationRoutes } from '../modules/notification/notification.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
@@ -103,6 +104,7 @@ export async function createServer() {
         { name: 'Chapters', description: 'Download e cache de imagens de capÃ­tulos' },
         { name: 'Conversion', description: 'ConversÃ£o de obras para formatos e-reader' },
         { name: 'Reading', description: 'Tracking de progresso de leitura' },
+        { name: 'Notifications', description: 'Notificações de atividades em background' },
       ],
       components: {
         securitySchemes: {
@@ -246,6 +248,7 @@ export async function createServer() {
   await app.register(mobiPreviewRoutes, { runtime })
   await app.register(chapterRoutes, { runtime })
   await app.register(readingRoutes)
+  await app.register(notificationRoutes, { runtime })
 
   // Inicia os workers de background (scraping, conversÃ£o, download-only,
   // preview MOBI e download de capÃ­tulos). Em modo embedded, todos rodam sobre

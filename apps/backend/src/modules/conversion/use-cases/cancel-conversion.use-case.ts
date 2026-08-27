@@ -1,5 +1,7 @@
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
-import { getConversionJobRepository } from '../../../shared/database/repositories'
+import { getConversionJobRepository, getNotificationRepository } from '../../../shared/database/repositories'
+import { createNotificationService, type NotificationService } from '../../notification/services/notification.service'
+import type { RuntimeAdapters } from '../../../shared/infra/factory'
 import type { ConversionRepository } from '../repositories/conversion.repository'
 import type { ConversionQueueService } from '../services/conversion-queue.service'
 import type { DownloadOnlyQueueService } from '../services/download-only-queue.service'
@@ -21,6 +23,7 @@ export class CancelConversionUseCase {
     private readonly events: ConversionEventsService,
     private readonly downloadOnlyQueue?: DownloadOnlyQueueService,
     private readonly statusStore: JobLiveStatusStore = new JobLiveStatusStore(),
+    private readonly notifications?: NotificationService,
   ) {}
 
   async execute(
@@ -104,6 +107,24 @@ export class CancelConversionUseCase {
         status: 'cancelled',
       }),
     )
+
+    // Emite notificação de cancelamento
+    try {
+      const notifyService = this.notifications ?? createNotificationService(getNotificationRepository())
+      const title = found.config.metadata?.title || 'Obra'
+      const isDownloadOnly = found.config.downloadOnly === true
+      await notifyService.notify(userId, {
+        type: 'conversion_cancelled',
+        title: `"${title}" — ${isDownloadOnly ? 'download cancelado' : 'conversão cancelada'}`,
+        message: isDownloadOnly ? 'Download cancelado pelo usuário' : 'Conversão cancelada pelo usuário',
+        metadata: {
+          conversionId,
+          sourceId: found.config.sourceId,
+        },
+      })
+    } catch {
+      // best-effort
+    }
 
     return { conversionId, status: 'cancelled' }
   }

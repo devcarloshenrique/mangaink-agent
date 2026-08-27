@@ -224,15 +224,18 @@ export class ImageDownloaderService {
       currentStep: `Downloading chapter ${chapterId} (${downloaded}/${imageUrls.length}, ${errors + corruptPages.length} errors)`,
     })
 
-    if (downloaded === 0 && imageUrls.length > 0) {
+    if ((downloaded === 0 && imageUrls.length > 0) || (corruptPages.length > 0 && downloaded === 0)) {
       const isAllCorrupt = corruptPages.length === imageUrls.length
       const reason = isAllCorrupt ? 'all_corrupt' : 'no_images_available'
       await this.repository.appendLog(
         jobId,
         isAllCorrupt
           ? `AVISO: capítulo ${chapterId} pulado — todas as ${corruptPages.length} páginas estão corrompidas (${corruptPages.map(c => `p${c.pageIndex}`).join(', ')})`
-          : `AVISO: capítulo ${chapterId} pulado — nenhuma imagem disponível (${errors} erros 404). O capítulo pode estar temporariamente indisponível no site de origem.`,
+          : `AVISO: capítulo ${chapterId} pulado — nenhuma imagem disponível (${errors} erros). O capítulo pode estar temporariamente indisponível no site de origem.`,
       )
+      await this.sourceRepo
+        .updateChapterUnavailableReason(sourceId, chapterId, isAllCorrupt ? 'Páginas corrompidas' : 'Indisponível no site de origem')
+        .catch(() => {})
       await this.events.emit(
         jobId,
         this.events.createEvent('download.chapter.skipped', {
@@ -251,6 +254,10 @@ export class ImageDownloaderService {
         skipped: true,
         corruptPages,
       }
+    }
+
+    if (downloaded > 0) {
+      await this.sourceRepo.updateChapterUnavailableReason(sourceId, chapterId, null).catch(() => {})
     }
 
     await this.events.emit(jobId, this.events.createEvent('download.chapter.finished', {

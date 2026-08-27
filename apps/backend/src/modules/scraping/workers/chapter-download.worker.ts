@@ -2,12 +2,22 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { env } from '../../../shared/config/env'
 import { mkdirp } from '../../../shared/utils/filesystem'
-import { getSourceRepository } from '../../../shared/database/repositories'
+import {
+  getSourceRepository,
+  getNotificationRepository,
+} from '../../../shared/database/repositories'
 import { resolveProvider } from '../utils/resolve-provider'
 import { ChapterImageService } from '../services/chapter-image.service'
 import { RedisPubSubAdapter, RedisJournalAdapter } from '../../../shared/infra/redis'
 import { ChapterDownloadEventsService } from '../services/chapter-download-events.service'
 import { setJobStatus, setChapterDownloadStatusStore } from '../services/chapter-download-status-store'
+import {
+  createNotificationService,
+} from '../../notification/services/notification.service'
+import {
+  ChapterDownloadNotificationAggregator,
+  type ChapterDownloadEvent,
+} from '../services/chapter-download-notification-aggregator'
 import type { RuntimeAdapters } from '../../../shared/infra/factory'
 import {
   startQueueWorker,
@@ -32,10 +42,31 @@ function getDefaultEvents(): ChapterDownloadEventsService {
 export async function processChapterDownload(
   job: { data: ChapterDownloadData; id?: string },
   events?: ChapterDownloadEventsService,
+  aggregator?: ChapterDownloadNotificationAggregator,
 ): Promise<void> {
   const eventsService = events ?? getDefaultEvents()
-  const { sourceId, chapterId } = job.data
+  const { sourceId, chapterId, userId, batchId } = job.data
   const jobId = job.id ?? ''
+
+  /**
+   * Envia o término do capítulo para o AGREGADOR (best-effort — nunca derruba
+   * o job): sucessos e falhas de capítulos individuais viram UMA notificação
+   * por obra ~10s após o último evento, em vez de pipocar uma por capítulo.
+   * Com `batchId`, o evento é SUPRIMIDO: quem emite é a agregada do lote
+   * (conversão download-only), que inclui os motivos de falha por capítulo.
+   */
+  const notifyOwner = (event: Omit<ChapterDownloadEvent, 'userId' | 'sourceId' | 'sourceTitle'>) => {
+    if (!aggregator || !userId || batchId) return
+    try {
+      aggregator.push({ userId, sourceId, sourceTitle, ...event })
+    } catch {
+      // silencioso
+    }
+  }
+
+  // Título/número do capítulo para as notificações (capturados após load).
+  let sourceTitle = sourceId
+  let chapterLabel = chapterId
 
   if (jobId) {
     await setJobStatus(sourceId, chapterId, jobId, 'downloading')
@@ -46,11 +77,13 @@ export async function processChapterDownload(
     if (!source) {
       throw new Error(`Source ${sourceId} não encontrada`)
     }
+    sourceTitle = source.metadata?.title || sourceId
 
     const chapter = source.chapters.find((c) => c.id === chapterId)
     if (!chapter?.url) {
       throw new Error(`Capítulo ${chapterId} não encontrado ou sem URL`)
     }
+    chapterLabel = `Capítulo ${chapter.number}`
 
     const provider = await resolveProvider(sourceId)
     if (!provider) {
@@ -99,13 +132,23 @@ export async function processChapterDownload(
       await setJobStatus(sourceId, chapterId, jobId, 'completed')
     }
 
+    await getSourceRepository().updateChapterUnavailableReason(sourceId, chapterId, null).catch(() => {})
+
     await eventsService.emit(sourceId, chapterId, eventsService.createEvent('completed', { totalImages: imageUrls.length, downloaded, errors }))
+
+    notifyOwner({
+      chapterId,
+      chapterLabel,
+      ok: true,
+    })
   } catch (err) {
-    if (jobId) {
-      await setJobStatus(sourceId, chapterId, jobId, 'failed')
-    }
     const message = err instanceof Error ? err.message : 'Erro desconhecido'
+    if (jobId) {
+      await setJobStatus(sourceId, chapterId, jobId, 'failed', message.slice(0, 300))
+    }
+    await getSourceRepository().updateChapterUnavailableReason(sourceId, chapterId, 'Indisponível no site de origem').catch(() => {})
     await eventsService.emit(sourceId, chapterId, eventsService.createEvent('failed', { error: message }))
+    notifyOwner({ chapterId, chapterLabel, ok: false, reason: message })
     throw err
   }
 }
@@ -133,13 +176,19 @@ export function startChapterDownloadWorker(deps: { runtime: RuntimeAdapters }): 
 
   setChapterDownloadStatusStore(runtime.status)
   const events = new ChapterDownloadEventsService(runtime.pubsub, runtime.journal)
+  const notifications = createNotificationService(getNotificationRepository(), runtime)
+  const aggregator = new ChapterDownloadNotificationAggregator(notifications)
 
   return startQueueWorker({
     runtime,
     queueName: 'chapter-download',
     concurrency: 1,
     processor: async (job: QueueWorkerJob) => {
-      await processChapterDownload({ data: job.data as ChapterDownloadData, id: job.id }, events)
+      await processChapterDownload(
+        { data: job.data as ChapterDownloadData, id: job.id },
+        events,
+        aggregator,
+      )
     },
   })
 }

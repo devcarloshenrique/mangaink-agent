@@ -41,6 +41,7 @@ const chapterSchema = z.object({
   volume: z.number().nullable(),
   isDownloaded: z.boolean(),
   isRead: z.boolean(),
+  unavailableReason: z.string().nullable().optional(),
 })
 
 const coverSchema = z.object({

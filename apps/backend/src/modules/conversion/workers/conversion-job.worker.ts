@@ -9,7 +9,7 @@ import { createKccRunner } from '../services/kcc-runner.factory'
 import type { IKccRunner } from '../services/kcc-runner.service'
 import { ImageDownloaderService } from '../services/image-downloader.service'
 import { PlaceholderService } from '../services/placeholder.service'
-import { getSourceRepository, getConversionRepository, getConversionJobRepository } from '../../../shared/database/repositories'
+import { getSourceRepository, getConversionRepository, getConversionJobRepository, getNotificationRepository } from '../../../shared/database/repositories'
 import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
 import type { RuntimeAdapters } from '../../../shared/infra/factory'
@@ -19,6 +19,14 @@ import {
   type QueueWorkerJob,
 } from '../../../shared/infra/queue-worker'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
+import {
+  createNotificationService,
+  type NotificationService,
+} from '../../notification/services/notification.service'
+import {
+  createOwnerNotifier,
+  type OwnerNotifier,
+} from '../../notification/services/owner-notifier'
 
 const QUEUE_NAME = 'conversion-job'
 
@@ -31,6 +39,8 @@ export interface ConversionJobWorkerDeps {
   jobLiveStatusStore: JobLiveStatusStore
   downloader: ImageDownloaderService
   kccRunner: IKccRunner
+  /** Opcional para não quebrar testes existentes — quando ausente, sem notificações. */
+  notifications?: NotificationService
 }
 
 /**
@@ -42,10 +52,17 @@ export async function processConversionJob(
   deps: ConversionJobWorkerDeps,
 ): Promise<{ jobId: string; status: string; outputFile?: string; message?: string }> {
   const { conversionId, jobId, sourceId, chapters, cover, output, metadata, options, storagePath } = data
-  const { jobRepository: repository, conversions, sourceRepository: sourceRepo, events, jobLiveStatusStore, downloader, kccRunner } = deps
+  const { jobRepository: repository, conversions, sourceRepository: sourceRepo, events, jobLiveStatusStore, downloader, kccRunner, notifications } = deps
 
   /** Recomputa o status.json da Conversion após cada fase do Job. */
   const sync = () => conversions.syncStatus(conversionId).catch(() => {})
+
+  /**
+   * Emite notificação de fim/falha ao dono da conversão (best-effort —
+   * nunca derruba o job). O userId vem do config persistido e conversões
+   * canceladas são suprimidas (ver owner-notifier).
+   */
+  const notifyOwner: OwnerNotifier = createOwnerNotifier(conversions, notifications)
 
   const setLiveStatus = (status: JobStatus, currentStep: string) => {
     return jobLiveStatusStore.set(jobId, {
@@ -204,8 +221,7 @@ export async function processConversionJob(
   if (successfulChapters.length === 0) {
     const corruptDetail = totalCorrupt > 0 ? `, ${totalCorrupt} página(s) corrompida(s)` : ''
     throw new Error(
-      `Nenhum capítulo pôde ser baixado. ` +
-      `${skippedChapters.length} capítulo(s) estão indisponíveis no site de origem (erros 404)${corruptDetail}.`,
+      `Nenhum capítulo pôde ser baixado (${skippedChapters.length}\u00A0indisponível(is) no site de origem${corruptDetail}).`,
     )
   }
 
@@ -337,6 +353,18 @@ export async function processConversionJob(
     outputSize: finalOutputSize,
   }))
 
+  await notifyOwner(conversionId, jobId, () => ({
+    type: 'volume_ready',
+    title: `"${metadata.title}" pronto`,
+    message: `Conversão concluída — ${(finalOutputSize / 1024 / 1024).toFixed(1)} MB (${output.format})`,
+    metadata: {
+      bookTitle: metadata.title,
+      format: output.format,
+      outputFile: finalOutputFile,
+      outputSize: finalOutputSize,
+    },
+  }))
+
   return { jobId, status: 'completed', outputFile: finalOutputFile }
 }
 
@@ -368,6 +396,7 @@ export function startConversionJobWorker(deps: {
     jobLiveStatusStore,
     downloader: new ImageDownloaderService(events, jobRepository, sourceRepository),
     kccRunner: kccRunnerFactory(events),
+    notifications: createNotificationService(getNotificationRepository(), runtime),
   }
 
   return startQueueWorker({
@@ -400,6 +429,21 @@ export function startConversionJobWorker(deps: {
           conversionId,
           error: error.message.slice(0, 500),
         })).catch(() => {})
+
+        // Notificação de falha ao dono (best-effort; suprimida se cancelada).
+        await createOwnerNotifier(convRepo, workerDeps.notifications)(
+          conversionId,
+          jobId,
+          () => {
+            const bookTitle = (job.data as ConversionJobData | undefined)?.metadata?.title
+            return {
+              type: 'conversion_failed' as const,
+              title: bookTitle ? `"${bookTitle}" falhou` : 'Conversão falhou',
+              message: error.message.slice(0, 300),
+              metadata: { bookTitle },
+            }
+          },
+        )
       }
     },
   })

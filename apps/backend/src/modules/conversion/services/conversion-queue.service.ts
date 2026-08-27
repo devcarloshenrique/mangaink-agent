@@ -11,8 +11,10 @@ export class ConversionQueueService {
   async enqueue(data: ConversionJobData): Promise<QueueJob<ConversionJobData>> {
     return this.queue.add(`conversion:${data.jobId}`, data, {
       jobId: data.jobId,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
+      // SEM auto-retry — mesmo motivo do download-only: falhas são
+      // determinísticas e o retry é manual; auto-retry ressuscitava a
+      // conversão falha para `processing` e multiplicava notificações.
+      attempts: 1,
       removeOnComplete: { count: 50 },
       removeOnFail: { count: 25 },
     })

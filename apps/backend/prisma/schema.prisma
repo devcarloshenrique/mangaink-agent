@@ -30,6 +30,7 @@ model User {
   conversions    Conversion[]
   userPresets    UserPreset[]
   chapterProgress UserChapterProgress[]
+  notifications  Notification[]
 
   @@map("users")
 }
@@ -70,6 +71,7 @@ model Chapter {
   pages                 Int?
   volume                Int?
   placeholderPageIndices Json?   @map("placeholder_page_indices") @db.JsonB
+  unavailableReason     String?  @map("unavailable_reason") @db.VarChar(255)
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   source                Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
@@ -107,6 +109,7 @@ model Conversion {
   books                Json      @db.JsonB
   options              Json      @db.JsonB
   errorHandlingStrategy String?  @map("error_handling_strategy") @db.VarChar(20)
+  downloadOnly         Boolean   @default(false) @map("download_only")
   status               String    @db.VarChar(20)
   progress             Int       @default(0)
   totalJobs            Int       @default(0) @map("total_jobs")
@@ -195,6 +198,25 @@ model UserChapterProgress {
   @@unique([userId, sourceId, chapterId])
   @@index([userId, sourceId])
   @@map("user_chapter_progress")
+}
+
+// Notificações de atividades em background (fim/falha de conversões e downloads).
+// Progresso ao vivo NÃO persiste aqui — é consumido via GET /api/conversions?status=...
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    @db.VarChar(40) // volume_ready | conversion_failed | download_completed | download_failed | conversion_cancelled
+  title     String    @db.VarChar(200)
+  message   String    @db.VarChar(500)
+  metadata  Json?     @db.JsonB // { conversionId, bookTitle, format, outputFile, outputSize, successfulChapters, totalImages, failedChapters: [{chapterId, reason}] }
+  readAt    DateTime? @map("read_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@map("notifications")
 }
 
 model Provider {

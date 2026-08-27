@@ -29,14 +29,21 @@ function key(sourceId: string, chapterId: string): string {
 /**
  * Armazena o status de um job de download no StatusStore (Hash).
  * Usado pelo worker (start/completed/failed) e pelo POST /download (idempotência).
+ * `error` é preenchido pelo worker quando status = 'failed' — alimenta a
+ * notificação agregada de lote (motivo por capítulo).
  */
 export async function setJobStatus(
   sourceId: string,
   chapterId: string,
   jobId: string,
   status: string,
+  error?: string,
 ): Promise<void> {
-  await getStore().set(key(sourceId, chapterId), { jobId, status }, TTL)
+  await getStore().set(
+    key(sourceId, chapterId),
+    { jobId, status, ...(error ? { error } : {}) },
+    TTL,
+  )
 }
 
 /**
@@ -46,8 +53,12 @@ export async function setJobStatus(
 export async function getJobStatus(
   sourceId: string,
   chapterId: string,
-): Promise<{ jobId: string; status: string } | null> {
+): Promise<{ jobId: string; status: string; error?: string } | null> {
   const data = await getStore().get(key(sourceId, chapterId))
   if (!data || Object.keys(data).length === 0) return null
-  return { jobId: data.jobId, status: data.status }
+  return {
+    jobId: data.jobId,
+    status: data.status,
+    ...(data.error ? { error: String(data.error) } : {}),
+  }
 }

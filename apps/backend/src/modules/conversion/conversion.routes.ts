@@ -19,7 +19,8 @@ import { RedisPubSubAdapter, RedisJournalAdapter } from '../../shared/infra/redi
 import type { IQueueService } from '../../shared/infra'
 import type { ConversionJobData } from './types/conversion.types'
 import { JobLiveStatusStore } from '../../shared/redis/job-status-store'
-import { getConversionRepository, getConversionJobRepository, getSourceRepository } from '../../shared/database/repositories'
+import { getConversionRepository, getConversionJobRepository, getSourceRepository, getNotificationRepository } from '../../shared/database/repositories'
+import { createNotificationService } from '../notification/services/notification.service'
 import { conversionLogsHandler } from './controllers/conversion-logs.controller'
 import { GetConversionLogsUseCase } from './use-cases/get-conversion-logs.use-case'
 import { downloadJobHandler } from './controllers/download-job.controller'
@@ -81,6 +82,7 @@ function buildConversionDeps(opts?: { runtime?: RuntimeAdapters }) {
     events,
     downloadOnlyQueue,
     runtime ? new JobLiveStatusStore(runtime.status) : undefined,
+    createNotificationService(getNotificationRepository(), runtime),
   )
   const listConversionsUseCase = new ListConversionsUseCase(conversions)
   const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, journal)

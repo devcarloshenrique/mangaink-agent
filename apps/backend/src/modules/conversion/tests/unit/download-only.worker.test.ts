@@ -15,10 +15,12 @@ const mocked = vi.hoisted(() => {
   }
   const convRepo = {
     syncStatus: vi.fn(async () => {}),
+    findById: vi.fn(),
   }
   const sourceRepo = {
     load: vi.fn(),
     updatePlaceholderIndices: vi.fn(),
+    updateChapterUnavailableReason: vi.fn().mockResolvedValue(undefined),
   }
   const events = {
     emitted: [] as Array<{ channel: string; event: SSEEvent }>,
@@ -60,6 +62,7 @@ const mocked = vi.hoisted(() => {
     jobRepo.appendLog.mockClear()
     jobRepo.update.mockClear()
     convRepo.syncStatus.mockClear()
+    convRepo.findById.mockClear()
     sourceRepo.load.mockClear()
     sourceRepo.updatePlaceholderIndices.mockClear()
     events.emitted = []
@@ -352,5 +355,99 @@ describe('processDownloadOnlyJob', () => {
       (call: string[]) => call[0] === 'https://img.example.com/cover.jpg',
     )
     expect(coverCalls).toHaveLength(1)
+  })
+})
+
+describe('processDownloadOnlyJob — notificações do dono (owner-notifier)', () => {
+  function makeNotify() {
+    return vi.fn(async () => ({}))
+  }
+
+  function makeNotificationDeps(notify = makeNotify()) {
+    const deps = makeDeps()
+    return {
+      deps: { ...deps, notifications: { notify } },
+      notify,
+    }
+  }
+
+  function seedConversion(status = 'processing') {
+    mocked.convRepo.findById.mockResolvedValue({
+      config: { userId: 'user-1' },
+      status,
+    })
+  }
+
+  it('emite download_completed ao concluir, com metadados do lote', async () => {
+    const { deps, notify } = makeNotificationDeps()
+    seedConversion()
+
+    await processDownloadOnlyJob(makeJobData(), deps)
+
+    expect(notify).toHaveBeenCalledTimes(1)
+    expect(notify).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      type: 'download_completed',
+      title: 'Download concluído',
+      message: '2/2 capítulo(s) baixado(s)',
+      metadata: expect.objectContaining({
+        conversionId: 'conv_test_001',
+        jobId: 'job_test_001',
+        successfulChapters: 2,
+        totalImages: 4,
+      }),
+    }))
+    // metadata NÃO deve conter failedChapters quando tudo deu certo
+    expect(notify.mock.calls[0][1].metadata.failedChapters).toBeUndefined()
+  })
+
+  it('inclui failedChapters com motivo por capítulo e mensagem com contagem de falhas quando há skips', async () => {
+    const { deps, notify } = makeNotificationDeps()
+    seedConversion()
+    mocked.downloader.downloadChapter
+      .mockResolvedValueOnce({
+        downloadedImages: 2,
+        totalImages: 2,
+        errors: 0,
+        corruptPages: [],
+        fromCache: false,
+        skipped: false,
+      })
+      .mockResolvedValueOnce({
+        downloadedImages: 0,
+        totalImages: 0,
+        errors: 0,
+        corruptPages: [],
+        fromCache: false,
+        skipped: true,
+      })
+
+    await processDownloadOnlyJob(makeJobData(), deps)
+
+    expect(notify).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      type: 'download_completed',
+      title: 'Download concluído com 1 falha(s)',
+      message: '1/2 capítulo(s) baixado(s) • 1 falha(s)',
+      metadata: expect.objectContaining({
+        successfulChapters: 1,
+        failedChapters: [expect.objectContaining({ chapterId: 'chap_0002' })],
+      }),
+    }))
+  })
+
+  it('SUPRIME notificação quando a conversão foi cancelada pelo usuário', async () => {
+    const { deps, notify } = makeNotificationDeps()
+    seedConversion('cancelled')
+
+    await processDownloadOnlyJob(makeJobData(), deps)
+
+    // O job completa normalmente; apenas a notificação não sai.
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('não notifica sem NotificationService nas deps (retrocompatibilidade)', async () => {
+    seedConversion()
+    await processDownloadOnlyJob(makeJobData(), makeDeps())
+    // Sem crash e sem chamadas — nada a asserir além de não ter lançado.
+    expect(mocked.jobRepo.update).toHaveBeenCalled()
   })
 })

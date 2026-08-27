@@ -42,6 +42,15 @@ export class InMemorySourceCacheRepository implements SourceCacheRepository {
     this.placeholderStore.set(key, indices)
   }
 
+  async updateChapterUnavailableReason(sourceId: string, chapterId: string, reason: string | null): Promise<void> {
+    const file = this.store.get(sourceId)
+    if (!file) return
+    const ch = file.chapters.find((c) => c.id === chapterId)
+    if (ch) {
+      ch.unavailableReason = reason
+    }
+  }
+
   reset(): void {
     this.store.clear()
     this.placeholderStore.clear()

@@ -3,6 +3,8 @@ export interface ChapterDownloadStatus {
   totalImages: number | null;
   downloadedImages: number;
   jobId: string | null;
+  /** Motivo da falha — presente quando status = "failed". */
+  error?: string | null;
 }
 
 export interface ChapterDownloadResponse {

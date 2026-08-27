@@ -3,9 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ComicIntensityProvider } from "@/hooks/useComicIntensity";
+import { NotificationProvider } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
 import { ComicHeader } from "@/components/comic/Header";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,11 +60,13 @@ function AppShell() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Toaster richColors position="top-right" />
-      {!isFullscreenReader && <ComicHeader />}
-      <main className="flex-1 flex flex-col min-w-0">
-        <Outlet />
-      </main>
+      <Toaster richColors position="bottom-left" />
+      <NotificationProvider>
+        {!isFullscreenReader && <ComicHeader />}
+        <main className="flex-1 flex flex-col min-w-0">
+          <Outlet />
+        </main>
+      </NotificationProvider>
     </div>
   );
 }

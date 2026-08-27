@@ -20,9 +20,9 @@ describe("DownloadChapterDialog", () => {
       />,
     );
 
-    expect(screen.getByText("Baixar Capitulo")).toBeTruthy();
+    expect(screen.getByText(/Baixar Capítulo/i)).toBeTruthy();
     expect(screen.getByText(/Capítulo 42/)).toBeTruthy();
-    expect(screen.getByText(/nao esta em cache. Deseja baixar para ler?/)).toBeTruthy();
+    expect(screen.getByText(/não está em cache no disco/i)).toBeTruthy();
   });
 
   it("deve chamar onConfirm e fechar ao clicar em Baixar e Ler", () => {
@@ -69,5 +69,25 @@ describe("DownloadChapterDialog", () => {
 
     // SpeechBubble renders the text inside
     expect(screen.getByText(/Cap X/)).toBeTruthy();
+  });
+
+  it("deve permitir baixar em segundo plano quando onDownloadBackground for fornecido", () => {
+    const onDownloadBackground = vi.fn();
+    render(
+      <DownloadChapterDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        chapterTitle="Cap 10"
+        onConfirm={onConfirm}
+        onDownloadBackground={onDownloadBackground}
+      />,
+    );
+
+    const bgBtn = screen.getByText("Baixar no disco");
+    expect(bgBtn).toBeTruthy();
+    fireEvent.click(bgBtn);
+
+    expect(onDownloadBackground).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

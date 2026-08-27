@@ -40,7 +40,6 @@ function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     try {
       await login(values);
-      toast.success("Login realizado com sucesso!");
       const target = search.redirect && !search.redirect.includes("/login") ? search.redirect : "/";
       navigate({ to: target as "/" });
     } catch (err) {

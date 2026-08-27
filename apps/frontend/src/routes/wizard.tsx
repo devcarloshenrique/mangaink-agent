@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { ComicPanel } from "@/components/comic/ComicPanel";
@@ -174,6 +175,7 @@ function computeVolumes(
 
 function WizardPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const search = Route.useSearch();
   const scraping = useScraping();
@@ -485,7 +487,8 @@ function WizardPage() {
         options: data.fieldOptions,
         errorHandlingStrategy: data.errorHandlingStrategy,
       });
-      toast.success(`Conversão iniciada!`);
+      // Sino atualiza NA HORA — observadores montados não refetch por navegação.
+      queryClient.invalidateQueries({ queryKey: ["conversions"] });
       navigate({ to: "/biblioteca/converter/$jobId", params: { jobId: conversionId } });
     } catch (e) {
       toast.error((e as Error).message ?? "Erro ao iniciar conversão.");

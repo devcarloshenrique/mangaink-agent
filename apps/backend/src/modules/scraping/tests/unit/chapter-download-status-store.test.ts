@@ -41,6 +41,32 @@ describe('chapter-download-status-store com IStatusStore injetado', () => {
     )
   })
 
+  it('setJobStatus: inclui error quando informado (motivo da falha)', async () => {
+    await setJobStatus('src-1', 'ch-1', 'job-1', 'failed', 'Nenhuma imagem encontrada')
+
+    expect(mockStore.set).toHaveBeenCalledWith(
+      'chapter-download-active:src-1:ch-1',
+      { jobId: 'job-1', status: 'failed', error: 'Nenhuma imagem encontrada' },
+      86400,
+    )
+  })
+
+  it('getJobStatus: devolve error quando presente no registro', async () => {
+    mockStore.get.mockResolvedValue({
+      jobId: 'job-1',
+      status: 'failed',
+      error: 'Capítulo indisponível',
+    })
+
+    const result = await getJobStatus('src-1', 'ch-1')
+
+    expect(result).toEqual({
+      jobId: 'job-1',
+      status: 'failed',
+      error: 'Capítulo indisponível',
+    })
+  })
+
   it('getJobStatus: devolve { jobId, status } parseado', async () => {
     mockStore.get.mockResolvedValue({ jobId: 'job-1', status: 'completed' })
 
