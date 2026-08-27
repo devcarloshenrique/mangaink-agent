@@ -28,4 +28,7 @@ export interface SourceCacheRepository {
 
   /** Atualiza índices de páginas placeholder de um capítulo. */
   updatePlaceholderIndices(sourceId: string, chapterId: string, indices: number[]): Promise<void>
+
+  /** Atualiza motivo de indisponibilidade de um capítulo (ou limpa passando null). */
+  updateChapterUnavailableReason(sourceId: string, chapterId: string, reason: string | null): Promise<void>
 }

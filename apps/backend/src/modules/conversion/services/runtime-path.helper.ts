@@ -28,5 +28,5 @@ export function resolveEmbeddedRuntimePath(explicitPath?: string): string {
     }
   }
 
-  return ''
+  return candidates[0]
 }

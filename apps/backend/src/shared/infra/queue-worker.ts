@@ -11,6 +11,22 @@ export interface QueueWorkerJob {
   id: string
   data: any
   attemptsMade: number
+  /** Total de tentativas configuradas para o job (BullMQ `opts.attempts`). */
+  attempts?: number
+}
+
+/**
+ * `true` quando a tentativa que falhou é a ÚLTIMA — ou seja, o job esgotou
+ * as tentativas e falhou de vez. Filas com `attempts: 1` (padrão atual das
+ * filas de conversão/download) são sempre finais.
+ *
+ * O evento `failed` do BullMQ dispara A CADA tentativa: sem este guard,
+ * handlers como "marcar job como failed + notificar dono" executavam N vezes
+ * por job, ressuscitando status da conversão e multiplicando notificações.
+ */
+export function isFinalAttempt(attemptsMade: number, totalAttempts?: number): boolean {
+  const total = totalAttempts ?? 1
+  return attemptsMade >= total
 }
 
 export interface StartQueueWorkerOptions {
@@ -52,7 +68,12 @@ export function startQueueWorker(opts: StartQueueWorkerOptions): QueueWorkerHand
   if (queue instanceof InMemoryQueueService) {
     if (onFailed) {
       queue.onFailed = (job, error) => {
-        const normalized: QueueWorkerJob = { id: job.id, data: job.data, attemptsMade: job.attemptsMade }
+        const normalized: QueueWorkerJob = {
+          id: job.id,
+          data: job.data,
+          attemptsMade: job.attemptsMade,
+          attempts: 1,
+        }
         void Promise.resolve(onFailed(normalized, toError(error)))
       }
     }
@@ -78,10 +99,16 @@ export function startQueueWorker(opts: StartQueueWorkerOptions): QueueWorkerHand
 
   if (onFailed) {
     worker.on('failed', (job, error) => {
+      const attemptsMade = job?.attemptsMade ?? 0
+      const totalAttempts = (job as { opts?: { attempts?: number } } | null)?.opts?.attempts
+      // Dispara APENAS na tentativa final — tentativas intermediárias de
+      // auto-retry não devem marcar failed/notificar (ver isFinalAttempt).
+      if (!isFinalAttempt(attemptsMade, totalAttempts)) return
       const normalized: QueueWorkerJob = {
         id: String(job?.id ?? ''),
         data: job?.data,
-        attemptsMade: job?.attemptsMade ?? 0,
+        attemptsMade,
+        attempts: totalAttempts,
       }
       void Promise.resolve(onFailed(normalized, toError(error)))
     })

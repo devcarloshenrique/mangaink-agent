@@ -116,6 +116,8 @@ export interface ConversionSummary {
   finishedAt?: string
   cover?: CoverRef
   output?: ConversionOutput
+  /** Download de capítulos soltos (sem conversão KCC) — rótulo do sino. */
+  downloadOnly?: boolean
 }
 
 /** Filtros opcionais para listagem de Conversions por usuário. */

@@ -4,6 +4,14 @@
 export interface ChapterDownloadData {
   sourceId: string
   chapterId: string
+  /** Dono do download — repassado pelo endpoint autenticado para notificações. */
+  userId?: string
+  /**
+   * Agrupa capítulos de um mesmo lote do usuário. Presente ⇒ o worker NÃO
+   * emite notificação individual — a agregada é criada via
+   * POST /api/notifications/batch-download quando o lote termina.
+   */
+  batchId?: string
 }
 
 /**

@@ -40,6 +40,7 @@ export class PrismaConversionRepository implements ConversionRepository {
         books: state.config.books as unknown as Prisma.InputJsonValue,
         options: state.config.options as Prisma.InputJsonValue,
         errorHandlingStrategy: state.config.errorHandlingStrategy,
+        downloadOnly: state.config.downloadOnly ?? false,
         status: state.status,
         progress: state.progress,
         totalJobs: state.totalJobs,
@@ -104,6 +105,7 @@ export class PrismaConversionRepository implements ConversionRepository {
           updatedAt: true,
           finishedAt: true,
           output: true,
+          downloadOnly: true,
         },
       }),
       getPrisma().conversion.count({ where }),
@@ -123,6 +125,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       finishedAt: row.finishedAt?.toISOString(),
+      downloadOnly: row.downloadOnly || undefined,
     }))
 
     return { items, total, page, limit }
@@ -323,6 +326,7 @@ export class PrismaConversionRepository implements ConversionRepository {
     books: Prisma.JsonValue
     options: Prisma.JsonValue
     errorHandlingStrategy: string | null
+    downloadOnly: boolean
     jobs: Array<{
       jobId: string
       bookIndex: number
@@ -344,6 +348,7 @@ export class PrismaConversionRepository implements ConversionRepository {
       options: row.options as unknown as Record<string, string | number | boolean | undefined>,
       errorHandlingStrategy: (row.errorHandlingStrategy ?? undefined) as ErrorHandlingStrategy | undefined,
       userId: row.userId,
+      downloadOnly: row.downloadOnly || undefined,
     }
 
     const jobs: ConversionJobSummary[] = row.jobs.map((j) => ({

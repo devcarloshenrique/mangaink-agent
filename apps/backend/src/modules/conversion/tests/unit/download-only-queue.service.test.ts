@@ -41,7 +41,7 @@ describe('DownloadOnlyQueueService', () => {
     queueService = new DownloadOnlyQueueService(mockQueue as unknown as IQueueService<ConversionJobData>)
   })
 
-  it('delega enqueue para queue.add com jobId, attempts, backoff e retenção', async () => {
+  it('delega enqueue para queue.add com jobId, attempts:1 (sem auto-retry) e retenção', async () => {
     const data = makeData()
     const result = await queueService.enqueue(data)
 
@@ -50,8 +50,7 @@ describe('DownloadOnlyQueueService', () => {
       data,
       {
         jobId: 'job_001',
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
+        attempts: 1,
         removeOnComplete: { count: 50 },
         removeOnFail: { count: 25 },
       },

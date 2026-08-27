@@ -118,6 +118,29 @@ describe('PrismaConversionRepository', () => {
     })
   })
 
+  describe('downloadOnly roundtrip', () => {
+    it('preserva downloadOnly=true no config ao persistir e ler', async () => {
+      const convId = nextId('conv-dlonly-true')
+      const config = { ...makeConfig(USER_ID), downloadOnly: true }
+      await repo.create(makeConversionState(config, convId))
+
+      const found = await repo.findById(convId)
+      expect(found).not.toBeNull()
+      // Frontend usa `config.downloadOnly === true` para derivar estágios e
+      // fórmula de progresso — o flag PRECISA sobreviver ao banco.
+      expect(found!.config.downloadOnly).toBe(true)
+    })
+
+    it('conversão normal (sem flag) volta sem downloadOnly', async () => {
+      const convId = nextId('conv-dlonly-false')
+      await repo.create(makeConversionState(makeConfig(USER_ID), convId))
+
+      const found = await repo.findById(convId)
+      expect(found).not.toBeNull()
+      expect(found!.config.downloadOnly).toBeUndefined()
+    })
+  })
+
   describe('update', () => {
     it('deve atualizar campos de status sem alterar config', async () => {
       const convId = nextId('conv-update')
@@ -337,6 +360,22 @@ describe('PrismaConversionRepository', () => {
       const idxNew = result.items.findIndex((i) => i.conversionId === newId)
 
       expect(idxNew).toBeLessThan(idxOld)
+    })
+
+    it('expõe downloadOnly no item para alimentar o rótulo do sino', async () => {
+      const sourceId = nextId('src-list-dlonly')
+      const convId = nextId('conv-list-dlonly')
+      await repo.create(
+        makeConversionState(
+          { ...makeConfig(USER_ID), sourceId, downloadOnly: true },
+          convId,
+        ),
+      )
+
+      const result = await repo.listByUser(USER_ID, { sourceId }, { page: 1, limit: 10 })
+      const item = result.items.find((i) => i.conversionId === convId)!
+
+      expect(item.downloadOnly).toBe(true)
     })
   })
 })

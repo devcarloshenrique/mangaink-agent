@@ -11,6 +11,7 @@ import {
   getSourceRepository,
   getConversionRepository,
   getConversionJobRepository,
+  getNotificationRepository,
 } from '../../../shared/database/repositories'
 import { resolveProvider } from '../../scraping/utils/resolve-provider'
 import { JobLiveStatusStore } from '../../../shared/redis/job-status-store'
@@ -22,6 +23,15 @@ import {
 } from '../../../shared/infra/queue-worker'
 import type { ConversionJobData, ErrorHandlingStrategy, JobStatus } from '../types/conversion.types'
 import type { IProviderStrategy } from '../../scraping/interfaces/provider-strategy.interface'
+import {
+  createNotificationService,
+  type NotificationService,
+} from '../../notification/services/notification.service'
+import {
+  createOwnerNotifier,
+  type OwnerNotifier,
+} from '../../notification/services/owner-notifier'
+import type { FailedChapter } from '../../notification/types/notification.types'
 
 // ── Dependencies (injeção para testabilidade) ──────────────────────────
 
@@ -34,6 +44,8 @@ export interface DownloadOnlyWorkerDeps {
   resolveProvider: (sourceId: string) => Promise<IProviderStrategy | null>
   downloader: ImageDownloaderService
   placeholderService: PlaceholderService
+  /** Opcional para não quebrar testes existentes — quando ausente, sem notificações. */
+  notifications?: NotificationService
 }
 
 export async function processDownloadOnlyJob(
@@ -44,6 +56,22 @@ export async function processDownloadOnlyJob(
   const { jobRepository, conversionRepository, sourceRepository, events, jobLiveStatusStore } = deps
 
   const sync = () => conversionRepository.syncStatus(conversionId).catch(() => {})
+
+  /**
+   * Emite notificação de fim/falha ao dono da conversão (best-effort —
+   * nunca derruba o job). O userId vem do config persistido e conversões
+   * canceladas são suprimidas (ver owner-notifier).
+   */
+  const notifyOwner: OwnerNotifier = createOwnerNotifier(
+    conversionRepository,
+    deps.notifications,
+  )
+
+  /** Detalhe dos capítulos não baixados — alimenta o bloco expansível da UI. */
+  const failedChapterDetails: FailedChapter[] = []
+  const trackFailedChapter = (chapterId: string, reason: string) => {
+    failedChapterDetails.push({ chapterId, reason })
+  }
 
   const setLiveStatus = (status: JobStatus, currentStep: string) => {
     return jobLiveStatusStore
@@ -98,6 +126,17 @@ export async function processDownloadOnlyJob(
         `Capítulo ${chapterId} ignorado — nenhuma imagem disponível no site de origem`,
       )
       skippedChapters.push(chapterId)
+      trackFailedChapter(chapterId, 'Sem imagens disponíveis no site de origem')
+      await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, 'Indisponível no site de origem').catch(() => {})
+      await events.emit(
+        jobId,
+        events.createEvent('download.chapter.skipped', {
+          chapterId,
+          totalImages: 0,
+          errors: 1,
+          reason: 'no_images_available',
+        }),
+      )
       continue
     }
 
@@ -121,6 +160,8 @@ export async function processDownloadOnlyJob(
           `Capítulo ${chapterId} ignorado — ${result.corruptPages.length} páginas corrompidas. Estratégia: skip_chapter`,
         )
         skippedChapters.push(chapterId)
+        trackFailedChapter(chapterId, `${result.corruptPages.length} página(s) corrompida(s)`)
+        await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, 'Páginas corrompidas').catch(() => {})
         await jobLiveStatusStore
           .set(jobId, { downloadedImages: totalDownloaded, totalImages: cumulativeTotalImages, updatedAt: new Date().toISOString() })
           .catch(() => {})
@@ -136,6 +177,7 @@ export async function processDownloadOnlyJob(
             `Capítulo ${chapterId}: ${result.corruptPages.length} placeholder(s) em cache. Nenhuma ação necessária.`,
           )
           successfulChapters.push(chapterId)
+          await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, null).catch(() => {})
         } else {
           let placeholderCount = 0
           for (const cp of result.corruptPages) {
@@ -164,17 +206,21 @@ export async function processDownloadOnlyJob(
 
           totalDownloaded += placeholderCount
           successfulChapters.push(chapterId)
+          await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, null).catch(() => {})
         }
       }
     } else if (result.skipped) {
       skippedChapters.push(chapterId)
+      trackFailedChapter(chapterId, 'Indisponível no site de origem')
+      await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, 'Indisponível no site de origem').catch(() => {})
     } else {
       successfulChapters.push(chapterId)
+      await sourceRepository.updateChapterUnavailableReason(sourceId, chapterId, null).catch(() => {})
     }
   }
 
   if (successfulChapters.length === 0) {
-    throw new Error(`Nenhum capítulo pôde ser baixado. ${skippedChapters.length} capítulo(s) indisponíveis.`)
+    throw new Error(`Nenhum capítulo pôde ser baixado (${skippedChapters.length}\u00A0indisponível(is) no site de origem).`)
   }
 
   if (skippedChapters.length > 0) {
@@ -248,6 +294,25 @@ export async function processDownloadOnlyJob(
     }),
   )
 
+  // Notificação de conclusão com contagem X/Y e falhas (se houver).
+  const failedCount = failedChapterDetails.length
+  const totalCount = chapters.length
+  const successCount = successfulChapters.length
+  await notifyOwner(conversionId, jobId, () => ({
+    type: 'download_completed',
+    title: failedCount > 0
+      ? `Download concluído com ${failedCount} falha(s)`
+      : 'Download concluído',
+    message: failedCount > 0
+      ? `${successCount}/${totalCount} capítulo(s) baixado(s) • ${failedCount} falha(s)`
+      : `${successCount}/${totalCount} capítulo(s) baixado(s)`,
+    metadata: {
+      successfulChapters: successCount,
+      totalImages: totalDownloaded,
+      ...(failedCount > 0 ? { failedChapters: failedChapterDetails } : {}),
+    },
+  }))
+
   return { jobId, status: 'completed', successfulChapters, totalImages: totalDownloaded }
 }
 
@@ -274,6 +339,7 @@ export function startDownloadOnlyWorker(deps: { runtime: RuntimeAdapters }): Que
     resolveProvider,
     downloader: new ImageDownloaderService(events, jobRepository, sourceRepository),
     placeholderService: new PlaceholderService(),
+    notifications: createNotificationService(getNotificationRepository(), runtime),
   }
 
   return startQueueWorker({
@@ -301,6 +367,17 @@ export function startDownloadOnlyWorker(deps: { runtime: RuntimeAdapters }): Que
         await events
           .emit(jobId, events.createEvent('job.failed', { jobId, conversionId, error: error.message.slice(0, 500) }))
           .catch(() => {})
+
+        // Notificação de falha ao dono (best-effort; suprimida se cancelada).
+        await createOwnerNotifier(convRepo, workerDeps.notifications)(
+          conversionId,
+          jobId,
+          () => ({
+            type: 'download_failed' as const,
+            title: 'Download falhou',
+            message: error.message.slice(0, 300),
+          }),
+        )
       }
     },
   })

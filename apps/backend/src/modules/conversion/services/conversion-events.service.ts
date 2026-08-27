@@ -69,6 +69,7 @@ export class ConversionEventsService {
     const liveBuffer: Array<{ jobId: string; event: SSEEvent }> = []
 
     const writeSseEvent = (event: SSEEvent, jobId: string) => {
+      if (reply.raw.writableEnded || reply.raw.destroyed) return
       try {
         reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify({ ...event.data, jobId })}\n\n`)
         ;(reply.raw as any).flush?.()
@@ -96,7 +97,10 @@ export class ConversionEventsService {
       }
     }
 
-    await this.pubsub.subscribeMany(
+    // IMPORTANTE: guarda o handle ESCOPADO desta conexão. O `unsubscribeMany`
+    // do adapter é blanket — apaga TODOS os listeners dos canais, matando as
+    // outras conexões SSE (ex.: sino do header) inscritas nos mesmos jobs.
+    const subscription = await this.pubsub.subscribeMany(
       jobIds.map((j) => `${ConversionEventsService.CHANNEL_PREFIX}${j}`),
       onMessage,
     )
@@ -135,9 +139,9 @@ export class ConversionEventsService {
     const keepAlive = this.startKeepAlive(reply)
     reply.raw.on('close', async () => {
       clearInterval(keepAlive)
-      await this.pubsub.unsubscribeMany(
-        jobIds.map((j) => `${ConversionEventsService.CHANNEL_PREFIX}${j}`),
-      ).catch(() => {})
+      // Unsubscribe apenas dos listeners DESTA conexão — as demais conexões
+      // inscritas nos mesmos canais continuam recebendo eventos.
+      await subscription?.unsubscribe().catch(() => {})
       resolveStream?.()
     })
 
@@ -155,6 +159,7 @@ export class ConversionEventsService {
 
   private writeEvent(reply: FastifyReply): (message: unknown) => void {
     return (message: unknown) => {
+      if (reply.raw.writableEnded || reply.raw.destroyed) return
       try {
         const event = (typeof message === 'string' ? JSON.parse(message) : message) as SSEEvent
         reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`)
@@ -167,6 +172,7 @@ export class ConversionEventsService {
 
   private startKeepAlive(reply: FastifyReply): NodeJS.Timeout {
     return setInterval(() => {
+      if (reply.raw.writableEnded || reply.raw.destroyed) return
       try {
         reply.raw.write(': keepalive\n\n')
         ;(reply.raw as any).flush?.()

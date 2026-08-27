@@ -8,6 +8,15 @@ vi.mock('../../../../shared/database/repositories', () => ({
   })),
   getConversionJobRepository: vi.fn(),
   getSourceRepository: vi.fn(),
+  getNotificationRepository: vi.fn(() => ({
+    create: vi.fn(),
+    listByUserId: vi.fn(async () => []),
+    countUnreadByUserId: vi.fn(async () => 0),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearByUserId: vi.fn(),
+    pruneKeepLatest: vi.fn(),
+  })),
   getProviderRepository: vi.fn(() => ({
     findAll: vi.fn(async () => []),
     findBySlug: vi.fn(async () => null),

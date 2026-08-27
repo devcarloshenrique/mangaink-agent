@@ -42,6 +42,7 @@ export class PrismaSourceRepository implements SourceCacheRepository {
         volume: ch.volume,
         isDownloaded: false,
         isRead: false,
+        unavailableReason: ch.unavailableReason ?? null,
       }))
       .sort((a, b) => parseFloat(a.number) - parseFloat(b.number))
 
@@ -257,6 +258,17 @@ export class PrismaSourceRepository implements SourceCacheRepository {
     await getPrisma().chapter.updateMany({
       where: { sourceId, chapterId },
       data: { placeholderPageIndices: indices as Prisma.InputJsonValue },
+    })
+  }
+
+  async updateChapterUnavailableReason(
+    sourceId: string,
+    chapterId: string,
+    reason: string | null,
+  ): Promise<void> {
+    await getPrisma().chapter.updateMany({
+      where: { sourceId, chapterId },
+      data: { unavailableReason: reason },
     })
   }
 }
