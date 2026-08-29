@@ -498,7 +498,7 @@ function WizardPage() {
 
   return (
     <div className="flex-1 bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-8 md:py-12">
+      <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
         <div className="text-center mb-8 pt-2">
           <h1 className="font-display text-4xl md:text-5xl uppercase tracking-tight">
             Mangá pro Kindle

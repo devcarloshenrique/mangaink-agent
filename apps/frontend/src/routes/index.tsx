@@ -1,13 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { SpotlightCard } from "@/components/dashboard/SpotlightCard";
+import { LibraryCarousel } from "@/components/dashboard/LibraryCarousel";
+import { NewChapters } from "@/components/dashboard/NewChapters";
+import { OngoingConversions } from "@/components/dashboard/OngoingConversions";
 import { ComicPanel } from "@/components/comic/ComicPanel";
-import { SpeechBubble } from "@/components/comic/SpeechBubble";
-import { OnomatopoeiaBadge } from "@/components/comic/OnomatopoeiaBadge";
-import { useAuth } from "@/hooks/useAuth";
-import { LastReadCard } from "@/components/dashboard/LastReadCard";
-import { StatsRow } from "@/components/dashboard/StatsRow";
-import { NextScheduleBanner } from "@/components/dashboard/NextScheduleBanner";
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { Calendar, Library, Sparkles, Wand2 } from "lucide-react";
+import { EmptyHero } from "@/components/dashboard/empty/EmptyHero";
+import { ComicEmptyState } from "@/components/dashboard/empty/ComicEmptyState";
+import { GuidedTour, type TourStep } from "@/components/onboarding/GuidedTour";
+import { useConversionsList, groupConversionsBySource } from "@/hooks/useConversions";
 import { authGuard } from "./-authGuard";
 
 export const Route = createFileRoute("/")({
@@ -15,126 +16,137 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-const TILES = [
+const ONBOARDING_STEPS: TourStep[] = [
   {
-    to: "/wizard" as const,
-    icon: Wand2,
-    title: "Converter",
-    text: "Cole uma URL e mande pro Kindle em 5 passos.",
-    bg: "bg-comic-red text-primary-foreground",
-    badge: "GO!",
-    badgeVariant: "yellow" as const,
+    element: "[data-tour='hero']",
+    title: "Este é o seu painel",
+    description:
+      "Tudo o que importa fica aqui: o que você está lendo, suas conversões e novidades das assinaturas.",
   },
   {
-    to: "/biblioteca" as const,
-    icon: Library,
-    title: "Biblioteca",
-    text: "Tudo o que você já converteu, organizado por obra.",
-    bg: "bg-comic-yellow",
-    badge: "POW!",
-    badgeVariant: "red" as const,
+    element: "[data-tour='cta-converter']",
+    title: "Comece por aqui",
+    description:
+      "O wizard converte qualquer mangá de um site homologado pro seu Kindle em 5 passos simples.",
   },
   {
-    to: "/agendamentos" as const,
-    icon: Calendar,
-    title: "Agendamentos",
-    text: "Assine obras e receba capítulos novos automaticamente.",
-    bg: "bg-comic-blue text-accent-foreground",
-    badge: "TIC!",
-    badgeVariant: "yellow" as const,
+    element: "[data-tour='biblioteca']",
+    title: "Sua biblioteca",
+    description:
+      "Cada obra convertida vira um card aqui, com capa, descrição e acesso rápido aos arquivos.",
   },
   {
-    to: "/fontes" as const,
-    icon: Sparkles,
-    title: "Fontes",
-    text: "Veja os sites homologados pra baixar mangás.",
-    bg: "bg-card",
-    badge: "INFO",
-    badgeVariant: "blue" as const,
+    element: "[data-tour='novos-capitulos']",
+    title: "Novos capítulos",
+    description:
+      "Assine suas obras favoritas e os capítulos novos aparecem nesta lista assim que saem.",
+  },
+  {
+    element: "[data-tour='conversoes']",
+    title: "Conversões em andamento",
+    description:
+      "Quando você iniciar uma conversão, o progresso aparece aqui em tempo real — baixando, convertendo e enviando.",
   },
 ];
 
 function Dashboard() {
-  const { user } = useAuth();
+  const { data: convData, isLoading } = useConversionsList({ limit: 100 });
+  const groups = useMemo(() => groupConversionsBySource(convData?.items ?? []), [convData?.items]);
 
+  if (isLoading) {
+    return (
+      <div className="flex-1 bg-background">
+        <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
+          <div className="h-[340px] animate-pulse rounded-xl border-[3px] border-ink bg-card shadow-comic" />
+          <div className="h-60 animate-pulse rounded-xl border-[3px] border-ink bg-card shadow-comic" />
+        </main>
+      </div>
+    );
+  }
+
+  // Se a biblioteca estiver vazia, exibe visão de onboarding + Guided Tour com persistência
+  if (groups.length === 0) {
+    return (
+      <div className="flex-1 bg-background">
+        <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
+          {/* Hero de boas-vindas */}
+          <EmptyHero />
+
+          {/* Biblioteca vazia */}
+          <section data-tour="biblioteca" aria-label="Sua biblioteca">
+            <h2 className="mb-3 font-display text-2xl uppercase leading-none">Sua biblioteca</h2>
+            <ComicPanel bg="card" padding="md">
+              <ComicEmptyState
+                emoji="📚"
+                title="Nada por aqui ainda"
+                text="Converta seu primeiro mangá e ele aparece aqui, organizado por obra."
+                ctaTo="/wizard"
+                ctaLabel="Converter agora"
+              />
+            </ComicPanel>
+          </section>
+
+          {/* Novos capítulos + conversões vazias */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div data-tour="novos-capitulos" className="min-w-0">
+              <ComicPanel bg="card" padding="md" className="flex h-full flex-col">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="font-display text-xl uppercase leading-none">Novos capítulos</h3>
+                  <span className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+                    das suas assinaturas
+                  </span>
+                </div>
+                <ComicEmptyState
+                  className="flex-1"
+                  emoji="📅"
+                  title="Nenhuma assinatura ainda"
+                  text="Explore as fontes homologadas e assine obras pra receber capítulos novos automaticamente."
+                  ctaTo="/fontes"
+                  ctaLabel="Explorar fontes"
+                />
+              </ComicPanel>
+            </div>
+
+            <div data-tour="conversoes" className="min-w-0">
+              <ComicPanel bg="card" padding="md" className="flex h-full flex-col">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="font-display text-xl uppercase leading-none">Conversões</h3>
+                </div>
+                <ComicEmptyState
+                  className="flex-1"
+                  emoji="⚡"
+                  title="Nada convertendo agora"
+                  text="Quando você iniciar uma conversão, o progresso ao vivo aparece aqui."
+                  ctaTo="/wizard"
+                  ctaLabel="Iniciar conversão"
+                />
+              </ComicPanel>
+            </div>
+          </div>
+        </main>
+
+        {/* Guided tour automático na primeira visita */}
+        <GuidedTour steps={ONBOARDING_STEPS} storageKey="mangaink.onboarding.dashboard.seen" />
+      </div>
+    );
+  }
+
+  // Visão completa com dados reais no Banner e Biblioteca + Mocks em Novos Capítulos e Conversões
   return (
     <div className="flex-1 bg-background">
-      <section className="border-b-[3px] border-ink bg-comic-yellow relative overflow-hidden">
-        <div className="absolute inset-0 bg-halftone opacity-25 pointer-events-none" />
-        <div className="relative mx-auto max-w-6xl px-4 py-10 md:py-14">
-          <SpeechBubble variant="white" tail="bottom" className="max-w-md mb-4">
-            Olá, <strong>{user?.username ?? "leitor"}</strong>! O que vamos converter hoje?
-          </SpeechBubble>
-          <h1 className="font-display text-4xl md:text-6xl uppercase leading-[0.95]">
-            Painel
-            <span className="inline-block ml-3 bg-comic-red text-primary-foreground px-3 -rotate-2 border-[3px] border-ink shadow-comic">
-              Mangaink
-            </span>
-          </h1>
-        </div>
-      </section>
+      <main className="mx-auto max-w-6xl space-y-10 px-4 py-6 pb-12">
+        {/* Continuar lendo — Top 5 obras mais recentes */}
+        <SpotlightCard items={groups} />
 
-      {/* Tiles de navegação */}
-      <section className="mx-auto max-w-6xl px-4 pt-8">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {TILES.map((t, i) => {
-            const Icon = t.icon;
-            return (
-              <Link key={t.to} to={t.to} className="group relative block focus:outline-none">
-                <ComicPanel
-                  bg="card"
-                  padding="md"
-                  tilt={i % 2 === 0 ? "left" : "right"}
-                  className={`${t.bg} h-full transition-transform group-hover:-translate-y-1`}
-                >
-                  <Icon className="h-9 w-9 mb-3" strokeWidth={2.5} />
-                  <h3 className="font-display text-2xl">{t.title}</h3>
-                  <p className="text-sm font-medium mt-1 opacity-90">{t.text}</p>
-                </ComicPanel>
-                <div className="absolute -top-3 -right-2">
-                  <OnomatopoeiaBadge variant={t.badgeVariant} size="sm">
-                    {t.badge}
-                  </OnomatopoeiaBadge>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+        {/* Biblioteca — todas as obras da coleção na estante */}
+        <LibraryCarousel items={groups} />
 
-      {/* Última leitura + próximo agendamento */}
-      <section className="mx-auto max-w-6xl px-4 pt-10">
-        <h2 className="font-display text-3xl mb-1 uppercase">Continuar lendo</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">
-          Retome de onde parou e veja o próximo agendamento.
-        </p>
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <LastReadCard />
-          </div>
-          <div className="flex">
-            <NextScheduleBanner />
-          </div>
-        </div>
-      </section>
+        {/* Novos capítulos das assinaturas em prateleira horizontal */}
+        <NewChapters />
 
-      {/* Stats animados */}
-      <section className="mx-auto max-w-6xl px-4 pt-8">
-        <h2 className="font-display text-3xl mb-1 uppercase">Estatísticas</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">
-          Visão geral da sua biblioteca e conversões.
-        </p>
-        <StatsRow />
-      </section>
-
-      {/* Atividade recente */}
-      <section className="mx-auto max-w-6xl px-4 py-10">
-        <h2 className="font-display text-3xl mb-1 uppercase">Atividade recente</h2>
-        <p className="text-sm font-medium opacity-70 mb-4">
-          Últimas conversões, envios e agendamentos.
-        </p>
-        <ActivityFeed />
-      </section>
+        {/* Conversões em andamento em esteira horizontal de cards */}
+        <OngoingConversions />
+      </main>
     </div>
   );
 }

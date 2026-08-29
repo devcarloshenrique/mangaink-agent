@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Maximize2 } from "lucide-react";
+import { BookOpen, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { conversionsApi } from "@/lib/api";
@@ -63,29 +63,39 @@ export function MangaCover({
 
       {enableFullscreen && (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogContent
-            className="max-w-[92vw] max-h-[92vh] p-0 bg-transparent border-0 shadow-none sm:rounded-none flex flex-col items-center justify-center focus:outline-none select-none [&>button]:bg-comic-ink [&>button]:text-comic-cream [&>button]:border-2 [&>button]:border-comic-yellow [&>button]:rounded-full [&>button]:h-8 [&>button]:w-8 [&>button]:shadow-comic-sm [&>button]:opacity-100 [&>button]:top-2 [&>button]:right-2 hover:[&>button]:bg-comic-red"
-            onInteractOutside={() => setIsOpen(false)}
-          >
+          <DialogContent className="max-w-fit w-auto p-0 bg-transparent border-0 shadow-none sm:rounded-none overflow-visible [&>button]:hidden focus:outline-none select-none">
             <DialogTitle className="sr-only">
               {title ? `Capa de ${title}` : "Capa da obra em tela cheia"}
             </DialogTitle>
 
-            {/* Imagem em tela cheia completamente desobstruída */}
-            <div className="relative border-[4px] border-ink rounded-2xl shadow-comic-lg bg-card overflow-hidden max-h-[88vh] max-w-[90vw] flex items-center justify-center">
-              <img
-                src={url}
-                alt={title ?? "Capa do mangá"}
-                className="max-h-[86vh] max-w-[88vw] w-auto h-auto object-contain select-none"
-                style={{ imageRendering: "auto" }}
-              />
-            </div>
+            {/* Container da imagem */}
+            <div className="relative flex flex-col items-center">
+              {/* Botão de Fechar pop-art ancorado no canto superior direito do frame da imagem */}
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                aria-label="Fechar visualização da capa"
+                className="absolute -top-3 -right-3 z-30 flex h-8 w-8 items-center justify-center rounded-full border-[2.5px] border-ink bg-comic-red text-white shadow-comic-sm transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+              >
+                <X className="h-4 w-4" strokeWidth={3} />
+              </button>
 
-            {title && (
-              <p className="mt-3 font-display text-base text-white bg-comic-ink/90 px-4 py-1 rounded-full border-2 border-comic-yellow/80 shadow-comic-sm text-center max-w-[85vw] truncate">
-                {title}
-              </p>
-            )}
+              {/* Frame da capa estilizado estilo comic */}
+              <div className="relative border-[4px] border-ink rounded-2xl shadow-comic-lg bg-card overflow-hidden max-h-[82vh] max-w-[85vw] flex items-center justify-center">
+                <img
+                  src={url}
+                  alt={title ?? "Capa do mangá"}
+                  className="max-h-[80vh] max-w-[83vw] w-auto h-auto object-contain select-none block"
+                  style={{ imageRendering: "auto" }}
+                />
+              </div>
+
+              {title && (
+                <p className="mt-5 font-display text-base tracking-wide text-comic-ink bg-comic-yellow px-5 py-1.5 rounded-full border-[2.5px] border-ink shadow-comic text-center max-w-[85vw] truncate">
+                  {title}
+                </p>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       )}
