@@ -75,7 +75,7 @@ function AgendamentosPage() {
 
   return (
     <div className="flex-1 bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
+      <div className="mx-auto max-w-6xl px-4 py-10 space-y-8">
         <div>
           <div className="flex items-center gap-3 mb-3">
             <div className="h-12 w-12 rounded-lg border-[3px] border-ink bg-comic-yellow flex items-center justify-center shadow-comic-sm">

@@ -58,10 +58,10 @@ function AppShell() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-dvh flex flex-col overflow-hidden bg-background">
       <Toaster richColors position="top-right" />
       {!isFullscreenReader && <ComicHeader />}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 overflow-y-scroll overflow-x-hidden flex flex-col min-w-0 [scrollbar-gutter:stable]">
         <Outlet />
       </main>
     </div>
