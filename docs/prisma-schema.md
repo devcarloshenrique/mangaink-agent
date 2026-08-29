@@ -37,7 +37,8 @@ Quem usa a aplicação. Login por email/username com senha hash.
 
 Cópia local dos metadados da obra raspada do site de origem (`sourceId`
 determinístico via SHA-256 da URL). As imagens baixadas vivem no filesystem,
-não no banco.
+não no banco. Em `chapters`, a coluna `unavailable_reason` (VARCHAR(255) nullable)
+registra quando um capítulo não pôde ser obtido da fonte (ex: sem imagens ou páginas corrompidas).
 
 ### `conversions` / `conversion_jobs`
 
