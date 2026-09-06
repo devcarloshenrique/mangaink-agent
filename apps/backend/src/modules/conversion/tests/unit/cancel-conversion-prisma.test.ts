@@ -36,15 +36,9 @@ vi.mock('../../../../shared/config/env', () => ({
     JWT_SECRET: 'test-secret',
     DATABASE_URL: 'postgresql://test',
     REDIS_URL: 'redis://test',
-    REPO_BACKEND: 'prisma',
     JOB_STATUS_TTL_SEC: 21600,
     KCC_DOCKER_IMAGE: 'mangaink-kcc:10.3.0',
   },
-}))
-
-vi.mock('../../../../shared/config/repo-mode', () => ({
-  isPrismaBackend: () => true,
-  REPO_BACKEND: 'prisma',
 }))
 
 vi.mock('../../../../shared/database/repositories', () => ({

@@ -317,7 +317,7 @@ describe('GET /api/conversions — 501 em modo filesystem (E2E)', () => {
     const body = res.json()
     expect(body.error).toMatchObject({
       code: 'LISTING_REQUIRES_PRISMA',
-      message: 'Listing requires REPO_BACKEND=prisma',
+      message: 'Listing requires Prisma backend',
     })
   })
 })

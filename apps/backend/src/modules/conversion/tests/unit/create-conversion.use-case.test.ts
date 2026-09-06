@@ -5,6 +5,7 @@ import { MockJobRepository } from '../helpers/mock-job.repository'
 import { MockConversionQueueService } from '../helpers/mock-conversion-queue.service'
 import { MockDownloadOnlyQueueService } from '../helpers/mock-download-only-queue.service'
 import { MockConversionEventsService } from '../helpers/mock-conversion-events.service'
+import { InMemoryLibraryRepository } from '../../../library/tests/helpers/in-memory-library.repository'
 import { makeConversionConfig, makeSourceMetadata } from '../helpers/fixtures'
 import type { SourceMetadataFile } from '../../../scraping/types/metadata.types'
 import {
@@ -12,6 +13,7 @@ import {
   SourceNotFoundError,
   DuplicateChapterError,
   ChapterNotFoundError,
+  InvalidConversionStateError,
 } from '../../errors/conversion.errors'
 
 const shared = vi.hoisted(() => {
@@ -35,6 +37,7 @@ vi.mock('../../../../shared/database/repositories', async () => {
   const actual = await vi.importActual<typeof import('../../../../shared/database/repositories')>('../../../../shared/database/repositories')
   return {
     ...actual,
+    getLibraryRepository: vi.fn(() => libraryRepo),
     getSourceRepository: vi.fn(() => ({
       load: async (sourceId: string) => shared.sourceStore.get(sourceId) ?? null,
       exists: async (sourceId: string) => shared.sourceStore.has(sourceId),
@@ -47,7 +50,10 @@ vi.mock('../../../../shared/database/repositories', async () => {
   }
 })
 
-function makeSourceMetadataFile(chapterIds: string[]): SourceMetadataFile {
+function makeSourceMetadataFile(
+  chapterIds: string[],
+  covers: Array<{ id: string; type: string; imageUrl: string }> = [],
+): SourceMetadataFile {
   return {
     sourceId: 'src-hunter-x-hunter-cb3c9071',
     status: 'ready',
@@ -55,8 +61,8 @@ function makeSourceMetadataFile(chapterIds: string[]): SourceMetadataFile {
     source: { url: 'https://test.com/manga/hxh/', language: 'pt-br' },
     metadata: { title: 'Hunter x Hunter', author: 'Yoshihiro Togashi', description: null, status: 'ongoing', genres: [] },
     chapters: chapterIds.map((id, i) => ({ id, number: String(i + 1), title: `Chapter ${i + 1}`, url: `https://test.com/${id}`, pages: 20, volume: 1, isDownloaded: false })),
-    covers: [],
-    statistics: { chapters: chapterIds.length, covers: 0 },
+    covers: covers.map((c) => ({ ...c, label: c.id })),
+    statistics: { chapters: chapterIds.length, covers: covers.length },
     cache: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastAccessAt: new Date().toISOString(), cacheTtlHours: 24, retentionDays: 30 },
   }
 }
@@ -66,6 +72,7 @@ let jobs: MockJobRepository
 let queue: MockConversionQueueService
 let downloadOnlyQueue: MockDownloadOnlyQueueService
 let events: MockConversionEventsService
+let libraryRepo: InMemoryLibraryRepository
 let useCase: CreateConversionUseCase
 
 beforeEach(() => {
@@ -75,10 +82,21 @@ beforeEach(() => {
   queue = new MockConversionQueueService()
   downloadOnlyQueue = new MockDownloadOnlyQueueService()
   events = new MockConversionEventsService()
+  libraryRepo = new InMemoryLibraryRepository()
   useCase = new CreateConversionUseCase(conversions, jobs, queue, events, downloadOnlyQueue)
 })
 
 describe('CreateConversionUseCase (Planner)', () => {
+  it('deve adicionar a obra a user_library ao criar conversao', async () => {
+    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
+    const config = makeConversionConfig({ userId: 'user-teste-123' })
+    await useCase.execute(config)
+
+    expect(libraryRepo.records).toHaveLength(1)
+    expect(libraryRepo.records[0].userId).toBe('user-teste-123')
+    expect(libraryRepo.records[0].sourceId).toBe('src-hunter-x-hunter-cb3c9071')
+  })
+
   it('deve criar uma Conversion com 1 Book e gerar 1 Job', async () => {
     shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001', 'chap_0002']))
 
@@ -169,9 +187,13 @@ describe('CreateConversionUseCase (Planner)', () => {
   })
 
   it('deve usar capa própria do Book quando definida', async () => {
-    shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile([
-      'chap_0001', 'chap_0002', 'chap_0003',
-    ]))
+    shared.setSource(
+      'src-hunter-x-hunter-cb3c9071',
+      makeSourceMetadataFile(
+        ['chap_0001', 'chap_0002', 'chap_0003'],
+        [{ id: 'cover_custom', type: 'volume', imageUrl: 'https://example.com/c.jpg' }],
+      ),
+    )
     const config = makeConversionConfig({
       cover: { kind: 'original' },
       books: [
@@ -356,5 +378,75 @@ describe('CreateConversionUseCase (Planner)', () => {
     await useCase.execute(config)
     const createdEvents = events.emitted.filter((e) => e.event.type === 'conversion.created')
     expect(createdEvents[0].event.data.downloadOnly).toBeUndefined()
+  })
+
+  // ── Validações de capas (gallery e upload) ──────────────────────────
+
+  describe('Validações de capas no Planner', () => {
+    it('deve rejeitar capa global gallery se coverId não existir na obra', async () => {
+      shared.setSource(
+        'src-hunter-x-hunter-cb3c9071',
+        makeSourceMetadataFile(['chap_0001'], [{ id: 'cover_01', type: 'original', imageUrl: 'https://example.com/c.jpg' }]),
+      )
+
+      const config = makeConversionConfig({
+        cover: { kind: 'gallery', coverId: 'cover_inexistente' },
+        books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+      })
+
+      await expect(useCase.execute(config)).rejects.toThrow(InvalidConversionStateError)
+      await expect(useCase.execute(config)).rejects.toThrow(/Capa da galeria com ID "cover_inexistente" não foi encontrada na obra/i)
+    })
+
+    it('deve rejeitar capa de book gallery se coverId não existir na obra', async () => {
+      shared.setSource(
+        'src-hunter-x-hunter-cb3c9071',
+        makeSourceMetadataFile(['chap_0001'], [{ id: 'cover_01', type: 'original', imageUrl: 'https://example.com/c.jpg' }]),
+      )
+
+      const config = makeConversionConfig({
+        cover: { kind: 'original' },
+        books: [
+          {
+            title: 'Vol 01',
+            chapters: ['chap_0001'],
+            cover: { kind: 'gallery', coverId: 'cover_inexistente_no_book' },
+          },
+        ],
+      })
+
+      await expect(useCase.execute(config)).rejects.toThrow(InvalidConversionStateError)
+      await expect(useCase.execute(config)).rejects.toThrow(/Capa da galeria com ID "cover_inexistente_no_book" não foi encontrada na obra/i)
+    })
+
+    it('deve rejeitar capa global upload se uploadId não existir em uploads/covers', async () => {
+      shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001']))
+
+      const config = makeConversionConfig({
+        cover: { kind: 'upload', uploadId: 'missing-upload-uuid', name: 'my-cover.jpg' },
+        books: [{ title: 'Vol 01', chapters: ['chap_0001'] }],
+      })
+
+      await expect(useCase.execute(config)).rejects.toThrow(InvalidConversionStateError)
+      await expect(useCase.execute(config)).rejects.toThrow(/Capa personalizada com ID "missing-upload-uuid" não encontrada/i)
+    })
+
+    it('deve rejeitar capa de book upload se uploadId não existir em uploads/covers', async () => {
+      shared.setSource('src-hunter-x-hunter-cb3c9071', makeSourceMetadataFile(['chap_0001']))
+
+      const config = makeConversionConfig({
+        cover: { kind: 'original' },
+        books: [
+          {
+            title: 'Vol 01',
+            chapters: ['chap_0001'],
+            cover: { kind: 'upload', uploadId: 'missing-book-upload-uuid', name: 'my-cover.jpg' },
+          },
+        ],
+      })
+
+      await expect(useCase.execute(config)).rejects.toThrow(InvalidConversionStateError)
+      await expect(useCase.execute(config)).rejects.toThrow(/Capa personalizada com ID "missing-book-upload-uuid" não encontrada/i)
+    })
   })
 })

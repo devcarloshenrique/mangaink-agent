@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { BookOpen, Maximize2, X } from "lucide-react";
+import { BookOpen, Images, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { conversionsApi } from "@/lib/api";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { usePreferredCover } from "@/hooks/usePreferredCover";
+import type { CoverRef } from "@/types/conversion";
 
 interface MangaCoverProps {
   sourceId: string;
   title?: string;
   className?: string;
   enableFullscreen?: boolean;
+  onChangeCover?: () => void;
 }
 
 export function MangaCover({
@@ -17,11 +20,14 @@ export function MangaCover({
   title,
   className,
   enableFullscreen = true,
+  onChangeCover,
 }: MangaCoverProps) {
   const [error, setError] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const { preferredCover } = usePreferredCover(sourceId);
 
-  const url = conversionsApi.coverUrl(sourceId, { kind: "original" });
+  const coverRef: CoverRef = preferredCover ?? { kind: "original" };
+  const url = conversionsApi.coverUrl(sourceId, coverRef);
 
   if (!url || error) {
     return (
@@ -52,11 +58,23 @@ export function MangaCover({
           loading="lazy"
           onError={() => setError(true)}
         />
-        {enableFullscreen && (
-          <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-comic-ink/85 text-comic-cream border-2 border-comic-yellow shadow-comic-sm">
-              <Maximize2 className="h-3.5 w-3.5" />
-            </span>
+
+        {/* Botão de Trocar Capa no Hover */}
+        {onChangeCover && (
+          <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChangeCover();
+              }}
+              title="Trocar capa da obra"
+              aria-label="Trocar capa da obra"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-comic-yellow text-comic-ink border-2 border-ink shadow-comic-sm transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+            >
+              <Images className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>

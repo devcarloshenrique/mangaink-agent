@@ -18,6 +18,7 @@ import type {
 import type {
   ConversionOptions,
   ConversionState,
+  CoverRef,
   CreateConversionBody,
   CreateConversionResponse,
   ConversionListResult,
@@ -40,8 +41,12 @@ import type {
   NotificationDTO,
   ListNotificationsResponse,
   MarkAllReadResponse,
+  LibraryItemDTO,
+  ListLibraryResponse,
+  UserLibraryDTO,
+  RemoveFromLibraryResponse,
 } from "@mangaink/shared";
-import { createSSEStream } from "@/lib/sse";
+import { createSSEStream, type SSEEndInfo } from "@/lib/sse";
 
 // ─── Gerenciamento de token ───────────────────────────────────────────────────
 // VULN-10 / MEC-86: o token NÃO é mais persistido em localStorage. A sessão é
@@ -251,12 +256,62 @@ export const conversionsApi = {
     return request<ConversionState>(`/api/conversions/${conversionId}`);
   },
 
-  /** GET /api/conversions/source/:sourceId/covers/:coverId — serve cover image bytes */
-  coverUrl(sourceId: string, cover: { kind: string; coverId?: string }): string | null {
+  /** POST /api/conversions/covers/upload — upload de capa personalizada em base64 */
+  async uploadCover(
+    file: File,
+    sourceId?: string,
+    label?: string,
+  ): Promise<{ uploadId: string; name: string; url: string; sourceId?: string; coverId?: string }> {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("Falha ao ler o arquivo como base64."));
+        }
+      };
+      reader.onerror = () => reject(new Error("Erro ao ler o arquivo."));
+      reader.readAsDataURL(file);
+    });
+
+    return request<{
+      uploadId: string;
+      name: string;
+      url: string;
+      sourceId?: string;
+      coverId?: string;
+    }>("/api/conversions/covers/upload", {
+      method: "POST",
+      body: JSON.stringify({
+        sourceId,
+        label,
+        fileName: file.name,
+        contentType: file.type,
+        base64Data,
+      }),
+    });
+  },
+
+  /** DELETE /api/conversions/covers/:coverId — exclui capa personalizada */
+  async deleteCover(coverId: string): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`/api/conversions/covers/${coverId}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** GET /api/conversions/source/:sourceId/covers/:coverId ou uploaded cover — serve cover image bytes */
+  coverUrl(
+    sourceId: string,
+    cover: CoverRef | { kind: string; coverId?: string; uploadId?: string },
+  ): string | null {
+    if (cover.kind === "upload" && "uploadId" in cover && cover.uploadId) {
+      return `/api/conversions/covers/uploaded/${cover.uploadId}`;
+    }
     if (cover.kind === "original") {
       return `/api/conversions/source/${sourceId}/covers/original`;
     }
-    if (cover.kind === "gallery" && cover.coverId) {
+    if (cover.kind === "gallery" && "coverId" in cover && cover.coverId) {
       return `/api/conversions/source/${sourceId}/covers/${cover.coverId}`;
     }
     return null;
@@ -305,7 +360,7 @@ export const conversionsApi = {
       onEvent: (event: string, data: unknown) => void;
       onError?: (error: Error) => void;
       /** Stream terminou no servidor/rede — usado para reconexão. */
-      onEnd?: () => void;
+      onEnd?: (info?: SSEEndInfo) => void;
     },
   ): { close: () => void } {
     const url = `/api/conversions/${conversionId}/events`;
@@ -476,7 +531,7 @@ export const notificationsApi = {
     onNotification?: (notification: NotificationDTO) => void;
     onError?: (error: Error) => void;
     /** Stream terminou no servidor/rede — usado para reconexão. */
-    onEnd?: () => void;
+    onEnd?: (info?: SSEEndInfo) => void;
   }): { close: () => void } {
     const token = tokenStore.get() ?? undefined;
     return createSSEStream(
@@ -490,5 +545,49 @@ export const notificationsApi = {
       },
       token,
     );
+  },
+};
+
+// ─── Library API ──────────────────────────────────────────────────────────────
+
+export type LibraryItem = LibraryItemDTO;
+export type LibraryListResponse = ListLibraryResponse;
+export type UserLibrary = UserLibraryDTO;
+
+export const libraryApi = {
+  /** GET /api/library — lista obras da biblioteca do usuário */
+  async list(params?: { isFavorite?: boolean; query?: string }): Promise<LibraryListResponse> {
+    const search = new URLSearchParams();
+    if (params?.isFavorite !== undefined) {
+      search.set("isFavorite", String(params.isFavorite));
+    }
+    if (params?.query) {
+      search.set("query", params.query);
+    }
+    const qs = search.toString();
+    return request<LibraryListResponse>(`/api/library${qs ? `?${qs}` : ""}`);
+  },
+
+  /** POST /api/library — adiciona obra à biblioteca */
+  async add(sourceId: string): Promise<UserLibraryDTO> {
+    return request<UserLibraryDTO>("/api/library", {
+      method: "POST",
+      body: JSON.stringify({ sourceId }),
+    });
+  },
+
+  /** DELETE /api/library/:sourceId — remove obra da biblioteca */
+  async remove(sourceId: string): Promise<RemoveFromLibraryResponse> {
+    return request<RemoveFromLibraryResponse>(`/api/library/${sourceId}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** PATCH /api/library/:sourceId/favorite — favorita / desfavorita obra */
+  async toggleFavorite(sourceId: string, isFavorite?: boolean): Promise<UserLibraryDTO> {
+    return request<UserLibraryDTO>(`/api/library/${sourceId}/favorite`, {
+      method: "PATCH",
+      ...(isFavorite !== undefined ? { body: JSON.stringify({ isFavorite }) } : {}),
+    });
   },
 };

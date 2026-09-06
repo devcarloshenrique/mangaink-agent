@@ -31,6 +31,8 @@ model User {
   userPresets    UserPreset[]
   chapterProgress UserChapterProgress[]
   notifications  Notification[]
+  library        UserLibrary[]
+  covers         Cover[]
 
   @@map("users")
 }
@@ -55,6 +57,7 @@ model Source {
   chapters         Chapter[]
   covers           Cover[]
   readingProgress  UserChapterProgress[]
+  userLibraries    UserLibrary[]
 
   @@index([providerSlug])
   @@index([ttlExpiresAt])
@@ -89,12 +92,17 @@ model Cover {
   type      String   @db.VarChar(20)
   label     String   @db.VarChar(255)
   imageUrl  String   @map("image_url") @db.VarChar(2048)
+  // Dono do upload (VULN: delete sem ownership permitia qualquer JWT apagar
+  // capa alheia). Nullable para linhas legadas — delete as trata como globais.
+  userId    String?  @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   source    Source   @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sourceId, coverId])
   @@index([sourceId])
+  @@index([userId])
   @@map("covers")
 }
 
@@ -198,6 +206,23 @@ model UserChapterProgress {
   @@unique([userId, sourceId, chapterId])
   @@index([userId, sourceId])
   @@map("user_chapter_progress")
+}
+
+model UserLibrary {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sourceId  String   @map("source_id") @db.VarChar(255)
+  isFavorite Boolean  @default(false) @map("is_favorite")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source Source @relation(fields: [sourceId], references: [sourceId], onDelete: Cascade)
+
+  @@unique([userId, sourceId])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([userId, isFavorite])
+  @@map("user_library")
 }
 
 // Notificações de atividades em background (fim/falha de conversões e downloads).

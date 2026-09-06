@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('dotenv', () => ({
+  config: () => ({}),
+}))
 vi.mock('dotenv/config', () => ({}))
 
 type Env = typeof import('../env').env

@@ -31,6 +31,21 @@ import { downloadJobParamsSchema } from './dtos/download-job.dto'
 import { serveCoverHandler } from './controllers/serve-cover.controller'
 import { ServeCoverUseCase } from './use-cases/serve-cover.use-case'
 import { coverParamsSchema } from './dtos/cover-params.dto'
+import { uploadCoverHandler } from './controllers/upload-cover.controller'
+import { getUploadedCoverHandler } from './controllers/get-uploaded-cover.controller'
+import { deleteCoverHandler } from './controllers/delete-cover.controller'
+import { UploadCoverUseCase } from './use-cases/upload-cover.use-case'
+import { GetUploadedCoverUseCase } from './use-cases/get-uploaded-cover.use-case'
+import { DeleteCoverUseCase } from './use-cases/delete-cover.use-case'
+import {
+  uploadCoverBodySchema,
+  uploadCoverResponseSchema,
+  uploadedCoverParamsSchema,
+} from './dtos/upload-cover.dto'
+import {
+  deleteCoverParamsSchema,
+  deleteCoverResponseSchema,
+} from './dtos/delete-cover.dto'
 import {
   createConversionBodySchema,
   createConversionResponseSchema,
@@ -88,6 +103,9 @@ function buildConversionDeps(opts?: { runtime?: RuntimeAdapters }) {
   const getConversionLogsUseCase = new GetConversionLogsUseCase(getConversionUseCase, journal)
   const downloadJobUseCase = new DownloadJobUseCase(conversions, jobRepository)
   const serveCoverUseCase = new ServeCoverUseCase(getSourceRepository())
+  const uploadCoverUseCase = new UploadCoverUseCase()
+  const getUploadedCoverUseCase = new GetUploadedCoverUseCase()
+  const deleteCoverUseCase = new DeleteCoverUseCase()
   const deleteConversionUseCase = new DeleteConversionUseCase(
     conversions,
     new ConversionStorageService(),
@@ -101,6 +119,9 @@ function buildConversionDeps(opts?: { runtime?: RuntimeAdapters }) {
     getConversionLogsUseCase,
     downloadJobUseCase,
     serveCoverUseCase,
+    uploadCoverUseCase,
+    getUploadedCoverUseCase,
+    deleteCoverUseCase,
     deleteConversionUseCase,
     events,
   }
@@ -192,6 +213,9 @@ export const conversionRoutes: FastifyPluginAsyncZod<ConversionRoutesOptions> = 
     getConversionLogsUseCase,
     downloadJobUseCase,
     serveCoverUseCase,
+    uploadCoverUseCase,
+    getUploadedCoverUseCase,
+    deleteCoverUseCase,
     deleteConversionUseCase,
     events,
   } = buildConversionDeps(opts)
@@ -335,9 +359,8 @@ export const conversionRoutes: FastifyPluginAsyncZod<ConversionRoutesOptions> = 
         description:
           'Retorna conversões paginadas pertencentes ao usuário autenticado, ordenadas por ' +
           'criação descendente, com filtros opcionais por status e sourceId. ' +
-          'Cada item é um resumo leve (sem books/options/chapters) — use ' +
           'GET /api/conversions/:id para detalhe. ' +
-          'Requer backend Prisma (REPO_BACKEND=prisma); em modo filesystem retorna 501.',
+          'Requer backend Prisma; em modo filesystem retorna 501.',
         security: [{ bearerAuth: [] }],
         querystring: listConversionsQuerySchema,
         response: {
@@ -368,6 +391,7 @@ export const conversionRoutes: FastifyPluginAsyncZod<ConversionRoutesOptions> = 
           202: createConversionResponseSchema,
           400: z.object({ error: z.string() }),
           404: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
         },
       },
     },
@@ -500,6 +524,67 @@ export const conversionRoutes: FastifyPluginAsyncZod<ConversionRoutesOptions> = 
       },
     },
     serveCoverHandler(serveCoverUseCase),
+  )
+
+  // POST /api/conversions/covers/upload — protegido (verifyJwt)
+  app.post(
+    '/api/conversions/covers/upload',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Upload de capa personalizada',
+        description: 'Recebe imagem de capa em base64 (JPEG, PNG, WEBP até 15MB) e persiste em uploads/covers/.',
+        security: [{ bearerAuth: [] }],
+        response: {
+          201: uploadCoverResponseSchema,
+          400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+          415: z.object({ error: z.string() }),
+        },
+      },
+    },
+    uploadCoverHandler(uploadCoverUseCase),
+  )
+
+  // DELETE /api/conversions/covers/:coverId — protegido (verifyJwt)
+  app.delete(
+    '/api/conversions/covers/:coverId',
+    {
+      preHandler: verifyJwt,
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Exclui capa personalizada',
+        description: 'Exclui a capa personalizada do disco e do banco de dados (se persistida). Apenas capas do tipo upload podem ser excluídas.',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: deleteCoverResponseSchema,
+          400: z.object({ error: z.string() }),
+          401: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+          409: z.object({ error: z.string() }),
+        },
+      },
+    },
+    deleteCoverHandler(deleteCoverUseCase),
+  )
+
+  // GET /api/conversions/covers/uploaded/:uploadId — publico
+  app.get(
+    '/api/conversions/covers/uploaded/:uploadId',
+    {
+      schema: {
+        tags: ['Conversion'],
+        summary: 'Imagem de capa personalizada enviada por upload',
+        description: 'Retorna a imagem enviada por upload a partir do uploadId.',
+        params: uploadedCoverParamsSchema,
+        response: {
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    getUploadedCoverHandler(getUploadedCoverUseCase),
   )
 
   // GET /api/conversions/:conversionId/logs'

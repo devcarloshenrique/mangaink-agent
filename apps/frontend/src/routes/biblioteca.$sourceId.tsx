@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { ArrowLeft, Loader2, BookOpen } from "lucide-react";
+import { ArrowLeft, Loader2, BookOpen, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { MangaCover } from "@/components/biblioteca/MangaCover";
 import { ReadButton } from "@/components/biblioteca/ReadButton";
@@ -10,16 +10,18 @@ import { FavoriteButton } from "@/components/biblioteca/FavoriteButton";
 import { TabDetalhes } from "@/components/biblioteca/TabDetalhes";
 import { TabCapitulos } from "@/components/biblioteca/TabCapitulos";
 import { TabConversoes } from "@/components/biblioteca/TabConversoes";
+import { TabGaleria } from "@/components/biblioteca/TabGaleria";
 import { DownloadChapterDialog } from "@/components/biblioteca/DownloadChapterDialog";
 import { MangaDetailSkeleton } from "@/components/biblioteca/MangaDetailSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ComicPanel } from "@/components/comic/ComicPanel";
 import { scrapingApi, chaptersApi, conversionsApi } from "@/lib/api";
 import { useReadingProgress, useToggleRead } from "@/hooks/useReadingProgress";
+import { useLibrary, useToggleFavorite } from "@/hooks/useLibrary";
 import type { SourceInspectResponse } from "@/types/scraping";
 
 const mangaDetailSearchSchema = z.object({
-  tab: z.enum(["detalhes", "capitulos", "conversoes"]).optional().default("detalhes"),
+  tab: z.enum(["detalhes", "capitulos", "conversoes", "galeria"]).optional().default("detalhes"),
 });
 
 export const Route = createFileRoute("/biblioteca/$sourceId")({
@@ -49,13 +51,28 @@ function MangaDetailPage() {
   const rafRef = useRef<number>(0);
 
   // Sync state if URL search param changes externally (e.g. Back button from Reader)
+  const prevSearchTabRef = useRef(search.tab);
   useEffect(() => {
-    if (search.tab && search.tab !== activeTab) {
+    if (search.tab && search.tab !== prevSearchTabRef.current) {
+      prevSearchTabRef.current = search.tab;
       setActiveTab(search.tab);
     }
-  }, [search.tab, activeTab]);
+  }, [search.tab]);
 
-  const [isFavorite, setIsFavorite] = useState(false);
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  const { data: libraryData } = useLibrary();
+  const toggleFavoriteMutation = useToggleFavorite();
+
+  const libraryItem = useMemo(
+    () => libraryData?.items?.find((item) => item.sourceId === sourceId),
+    [libraryData, sourceId],
+  );
+  const isFavorite = libraryItem?.isFavorite ?? false;
 
   const {
     data: source,
@@ -204,14 +221,24 @@ function MangaDetailPage() {
         ) : (
           <div className="grid md:grid-cols-[320px_1fr] gap-8">
             <div className="space-y-6 md:max-w-[320px] mx-auto md:mx-0 w-full">
-              <MangaCover sourceId={sourceId} title={seriesTitle} className="aspect-[2/3]" />
+              <MangaCover
+                sourceId={sourceId}
+                title={seriesTitle}
+                className="aspect-[2/3]"
+                onChangeCover={() => handleTabChange("galeria")}
+              />
               <ReadButton
                 sourceId={sourceId}
                 readChapterIds={readChapterIds}
                 chapters={chapters}
                 isLoading={isLoading}
               />
-              <FavoriteButton isFavorite={isFavorite} onToggle={() => setIsFavorite(!isFavorite)} />
+              <FavoriteButton
+                isFavorite={isFavorite}
+                onToggle={() =>
+                  toggleFavoriteMutation.mutate({ sourceId, isFavorite: !isFavorite })
+                }
+              />
             </div>
 
             <div className="min-w-0">
@@ -235,9 +262,15 @@ function MangaDetailPage() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="conversoes"
-                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
+                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all border-r-2 border-ink data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
                   >
                     Conversões
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="galeria"
+                    className="flex-1 font-display text-lg uppercase tracking-wider py-4 px-6 first:rounded-l-md last:rounded-r-md rounded-none transition-all data-[state=active]:bg-comic-red data-[state=active]:text-primary-foreground data-[state=inactive]:bg-muted hover:data-[state=inactive]:bg-muted/80 cursor-pointer"
+                  >
+                    Galeria
                   </TabsTrigger>
                 </TabsList>
 
@@ -258,6 +291,17 @@ function MangaDetailPage() {
 
                 <TabsContent value="conversoes" className="mt-4 animate-fade-in min-h-[420px]">
                   <TabConversoes sourceId={sourceId} seriesTitle={seriesTitle} />
+                </TabsContent>
+
+                <TabsContent value="galeria" className="mt-4 animate-fade-in min-h-[420px]">
+                  <TabGaleria
+                    sourceId={sourceId}
+                    seriesTitle={seriesTitle}
+                    covers={source?.covers ?? []}
+                    onCoverUploaded={() =>
+                      queryClient.invalidateQueries({ queryKey: ["source", sourceId] })
+                    }
+                  />
                 </TabsContent>
               </Tabs>
             </div>

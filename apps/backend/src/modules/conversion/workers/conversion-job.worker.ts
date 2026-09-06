@@ -4,6 +4,7 @@ import { env } from '../../../shared/config/env'
 import { logger } from '../../../shared/logging/logger'
 import { redactUrl, sanitizeErrorMessage } from '../../../shared/logging/sanitize'
 import { mkdirp, pathExists } from '../../../shared/utils/filesystem'
+import { assertValidImage, detectImageContentType } from '../../../shared/utils/image-validation'
 import { ConversionEventsService } from '../services/conversion-events.service'
 import { createKccRunner } from '../services/kcc-runner.factory'
 import type { IKccRunner } from '../services/kcc-runner.service'
@@ -27,6 +28,7 @@ import {
   createOwnerNotifier,
   type OwnerNotifier,
 } from '../../notification/services/owner-notifier'
+import { WorkerFailedError } from '../errors/conversion.errors'
 
 const QUEUE_NAME = 'conversion-job'
 
@@ -105,7 +107,7 @@ export async function processConversionJob(
 
   const provider = await resolveProvider(sourceId)
   if (!provider) {
-    throw new Error(`Não foi possível resolver o provider para sourceId: ${sourceId}`)
+    throw new WorkerFailedError(jobId, `Não foi possível resolver o provider para sourceId: ${sourceId}`)
   }
 
   for (const chapterId of chapters) {
@@ -136,7 +138,7 @@ export async function processConversionJob(
         await repository.appendLog(jobId,
           `ABORTAR: ${result.corruptPages.length} páginas corrompidas no capítulo ${chapterId} ` +
           `(${result.corruptPages.map(c => `p${c.pageIndex}`).join(', ')}). Estratégia: abort`)
-        throw new Error(
+        throw new WorkerFailedError(jobId,
           `Páginas corrompidas encontradas no capítulo ${chapterId}. ` +
           `Estratégia de erro: abort. Páginas: ${result.corruptPages.map(c => c.pageIndex).join(', ')}`)
       }
@@ -217,11 +219,10 @@ export async function processConversionJob(
         successfulChapters.push(chapterId)
       }
     }
-
   if (successfulChapters.length === 0) {
     const corruptDetail = totalCorrupt > 0 ? `, ${totalCorrupt} página(s) corrompida(s)` : ''
-    throw new Error(
-      `Nenhum capítulo pôde ser baixado (${skippedChapters.length}\u00A0indisponível(is) no site de origem${corruptDetail}).`,
+    throw new WorkerFailedError(jobId,
+      `Nenhum capítulo pôde ser baixado (${skippedChapters.length} indisponível(is) no site de origem${corruptDetail}).`,
     )
   }
 
@@ -563,9 +564,10 @@ async function getChapterImageUrls(
 /**
  * Aplica a capa ao diretório temp/input/ do KCC.
  *
- * Regras de prioridade (KCC):
- * 1. Nomeação Explícita: Salva como `cover.jpg` ou `cover.png` na raiz
- * 2. Fallback: Ordem alfabética (cover.* vem antes de chap_*)
+ * Suporta:
+ * 1. `kind === 'upload'`: busca em `uploads/covers`, valida magic bytes e copia para `inputDir/cover.ext`.
+ * 2. `kind === 'gallery'`: busca no cache ou baixa via `provider.downloadImage()`, valida e copia para `inputDir/cover.ext`.
+ * 3. `kind === 'original'`: busca capa original ou primeira capa, cache/download e copia para `inputDir/cover.ext`.
  */
 async function applyCover(
   repository: { appendLog: (jobId: string, message: string) => Promise<void> },
@@ -576,55 +578,170 @@ async function applyCover(
   provider: import('../../scraping/interfaces/provider-strategy.interface').IProviderStrategy | null,
 ): Promise<void> {
   try {
-    if (cover.kind !== 'original') {
-      await repository.appendLog(jobId, `Cover kind "${cover.kind}" não suportado — pulando`)
-      return
-    }
-
-    const source = await getSourceRepository().load(sourceId)
-
-    if (!source?.covers || source.covers.length === 0) {
-      await repository.appendLog(jobId, 'Nenhuma capa encontrada')
-      return
-    }
-
-    const coverEntry = source.covers.find((c) => c.type === 'original') ?? source.covers[0]
-    if (!coverEntry?.imageUrl) {
-      await repository.appendLog(jobId, 'Cover entry sem imageUrl')
-      return
-    }
-
-    const coversCacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
-    const urlExt = extname(new URL(coverEntry.imageUrl).pathname).toLowerCase() || '.jpg'
-    const cachedCoverPath = join(coversCacheDir, `${coverEntry.id}${urlExt}`)
-
-    let coverData: Buffer
-
-    if (await pathExists(cachedCoverPath)) {
-      coverData = await readFile(cachedCoverPath)
-      await repository.appendLog(jobId, `Capa do cache: ${cachedCoverPath}`)
-    } else if (provider) {
-      const { buffer } = await provider.downloadImage(coverEntry.imageUrl)
-      coverData = buffer
-
-      if (coverData.length === 0) {
-        await repository.appendLog(jobId, `Capa vazia baixada de ${coverEntry.imageUrl}`)
+    if (cover.kind === 'upload') {
+      if (!cover.uploadId) {
+        await repository.appendLog(jobId, 'Capa de upload sem uploadId especificado — pulando')
         return
       }
 
-      await mkdirp(coversCacheDir)
-      await writeFile(cachedCoverPath, coverData)
-      await repository.appendLog(jobId, `Capa baixada e cacheada: ${cachedCoverPath}`)
-    } else {
-      await repository.appendLog(jobId, 'Provider não disponível para download de capa — pulando')
+      const uploadsDir = join(env.STORAGE_PATH, 'uploads', 'covers')
+      let matchedFile: string | null = null
+
+      if (await pathExists(uploadsDir)) {
+        try {
+          const files = await readdir(uploadsDir)
+          matchedFile =
+            files.find(
+              (f) =>
+                f === cover.uploadId ||
+                f.startsWith(`${cover.uploadId}.`) ||
+                f.startsWith(cover.uploadId!),
+            ) ?? null
+        } catch {
+          matchedFile = null
+        }
+      }
+
+      if (!matchedFile) {
+        await repository.appendLog(
+          jobId,
+          `AVISO: Capa personalizada com ID "${cover.uploadId}" não encontrada em uploads/covers`,
+        )
+        return
+      }
+
+      const sourceFilePath = join(uploadsDir, matchedFile)
+      const coverBuffer = await readFile(sourceFilePath)
+      assertValidImage(coverBuffer)
+
+      const contentType = detectImageContentType(coverBuffer)
+      const coverExt = contentType === 'image/png' ? '.png' : '.jpg'
+      const finalCoverName = `cover${coverExt}`
+      await writeFile(join(inputDir, finalCoverName), coverBuffer)
+
+      await repository.appendLog(
+        jobId,
+        `Capa personalizada aplicada: ${cover.name || cover.uploadId}`,
+      )
       return
     }
 
-    const coverExt = ['.png'].includes(urlExt) ? '.png' : '.jpg'
-    const finalCoverName = `cover${coverExt}`
-    await writeFile(join(inputDir, finalCoverName), coverData)
-    await repository.appendLog(jobId, `Capa aplicada como ${finalCoverName} em temp/input/`)
+    if (cover.kind === 'gallery') {
+      if (!cover.coverId) {
+        await repository.appendLog(jobId, 'Capa da galeria sem coverId especificado — pulando')
+        return
+      }
 
+      const source = await getSourceRepository().load(sourceId)
+      if (!source?.covers || source.covers.length === 0) {
+        await repository.appendLog(jobId, 'Nenhuma capa encontrada na obra')
+        return
+      }
+
+      const coverEntry = source.covers.find((c) => c.id === cover.coverId)
+      if (!coverEntry || !coverEntry.imageUrl) {
+        await repository.appendLog(
+          jobId,
+          `Capa da galeria com ID "${cover.coverId}" não encontrada na obra`,
+        )
+        return
+      }
+
+      const coversCacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
+      let urlExt = '.jpg'
+      try {
+        urlExt = extname(new URL(coverEntry.imageUrl).pathname).toLowerCase() || '.jpg'
+      } catch {
+        urlExt = '.jpg'
+      }
+      const cachedCoverPath = join(coversCacheDir, `${coverEntry.id}${urlExt}`)
+
+      let coverData: Buffer
+
+      if (await pathExists(cachedCoverPath)) {
+        coverData = await readFile(cachedCoverPath)
+        assertValidImage(coverData)
+        await repository.appendLog(jobId, `Capa do cache: ${cachedCoverPath}`)
+      } else if (provider) {
+        const { buffer } = await provider.downloadImage(coverEntry.imageUrl)
+        assertValidImage(buffer)
+        coverData = buffer
+
+        await mkdirp(coversCacheDir)
+        await writeFile(cachedCoverPath, coverData)
+        await repository.appendLog(jobId, `Capa baixada e cacheada: ${cachedCoverPath}`)
+      } else {
+        await repository.appendLog(jobId, 'Provider não disponível para download de capa — pulando')
+        return
+      }
+
+      const contentType = detectImageContentType(coverData)
+      const coverExt = contentType === 'image/png' || ['.png'].includes(urlExt) ? '.png' : '.jpg'
+      const finalCoverName = `cover${coverExt}`
+      await writeFile(join(inputDir, finalCoverName), coverData)
+      await repository.appendLog(
+        jobId,
+        `Capa da galeria (${cover.coverId}) aplicada como ${finalCoverName} em temp/input/`,
+      )
+      return
+    }
+
+    if (cover.kind === 'original') {
+      const source = await getSourceRepository().load(sourceId)
+
+      if (!source?.covers || source.covers.length === 0) {
+        await repository.appendLog(jobId, 'Nenhuma capa encontrada')
+        return
+      }
+
+      const coverEntry = source.covers.find((c) => c.type === 'original') ?? source.covers[0]
+      if (!coverEntry?.imageUrl) {
+        await repository.appendLog(jobId, 'Cover entry sem imageUrl')
+        return
+      }
+
+      const coversCacheDir = join(env.STORAGE_PATH, 'sources', sourceId, 'covers')
+      let urlExt = '.jpg'
+      try {
+        urlExt = extname(new URL(coverEntry.imageUrl).pathname).toLowerCase() || '.jpg'
+      } catch {
+        urlExt = '.jpg'
+      }
+      const cachedCoverPath = join(coversCacheDir, `${coverEntry.id}${urlExt}`)
+
+      let coverData: Buffer
+
+      if (await pathExists(cachedCoverPath)) {
+        coverData = await readFile(cachedCoverPath)
+        assertValidImage(coverData)
+        await repository.appendLog(jobId, `Capa do cache: ${cachedCoverPath}`)
+      } else if (provider) {
+        const { buffer } = await provider.downloadImage(coverEntry.imageUrl)
+        assertValidImage(buffer)
+        coverData = buffer
+
+        if (coverData.length === 0) {
+          await repository.appendLog(jobId, `Capa vazia baixada de ${coverEntry.imageUrl}`)
+          return
+        }
+
+        await mkdirp(coversCacheDir)
+        await writeFile(cachedCoverPath, coverData)
+        await repository.appendLog(jobId, `Capa baixada e cacheada: ${cachedCoverPath}`)
+      } else {
+        await repository.appendLog(jobId, 'Provider não disponível para download de capa — pulando')
+        return
+      }
+
+      const contentType = detectImageContentType(coverData)
+      const coverExt = contentType === 'image/png' || ['.png'].includes(urlExt) ? '.png' : '.jpg'
+      const finalCoverName = `cover${coverExt}`
+      await writeFile(join(inputDir, finalCoverName), coverData)
+      await repository.appendLog(jobId, `Capa aplicada como ${finalCoverName} em temp/input/`)
+      return
+    }
+
+    await repository.appendLog(jobId, `Cover kind "${cover.kind}" não suportado — pulando`)
   } catch (error) {
     await repository.appendLog(jobId, `Erro ao aplicar capa (continuando sem): ${error instanceof Error ? error.message : 'unknown'}`)
   }

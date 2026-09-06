@@ -17,6 +17,7 @@ import {
 import { useNotifications } from "@/hooks/useNotifications";
 import { useActiveConversions } from "@/hooks/useConversions";
 import {
+  selectOverallProgress,
   useLiveConversionProgress,
   type LiveConversionProgress,
 } from "@/hooks/useLiveConversionProgress";
@@ -224,7 +225,7 @@ function ActiveConversionRow({
   };
 
   const isDownloadOnly = live?.downloadOnly ?? conversion.downloadOnly ?? false;
-  const overall = Math.max(0, Math.min(100, live?.overall ?? conversion.progress));
+  const overall = selectOverallProgress(live?.overall, conversion.progress);
 
   const rowClasses = cn(
     "flex flex-col items-start gap-1 px-4 py-2.5 cursor-pointer group",

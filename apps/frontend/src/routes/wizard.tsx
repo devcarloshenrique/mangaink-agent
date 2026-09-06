@@ -84,7 +84,7 @@ const STEPS = [
 
 type Delivery = "download" | "kindle";
 type VolumeMode = "fixed" | "custom";
-type CoverMode = "single" | "per-volume" | "per-chapter";
+type CoverMode = "single" | "per-volume";
 
 interface WizardData {
   // Step 1 — Origem
@@ -124,6 +124,10 @@ function buildBooks(data: WizardData): Book[] {
       {
         title: data.meta.title || data.inspectData!.metadata.title,
         chapters: chapters.map((c) => c.id),
+        cover:
+          data.coverMode === "single"
+            ? (data.coverAssignments["all"] ?? { kind: "original" })
+            : (data.coverAssignments["vol-1"] ?? { kind: "original" }),
       },
     ];
   }
@@ -131,10 +135,19 @@ function buildBooks(data: WizardData): Book[] {
   // Agrupar por volumes
   const volumes = computeVolumes(chapters, data.volumeMode, data.volumeSize, data.volumeSizes);
   const baseTitle = data.meta.title || data.inspectData!.metadata.title;
-  return volumes.map((vChapters, i) => ({
-    title: `${baseTitle} - Vol. ${i + 1}`,
-    chapters: vChapters.map((c) => c.id),
-  }));
+  return volumes.map((vChapters, i) => {
+    const volKey = `vol-${i + 1}`;
+    const cover =
+      data.coverMode === "per-volume"
+        ? (data.coverAssignments[volKey] ?? { kind: "original" })
+        : (data.coverAssignments["all"] ?? { kind: "original" });
+
+    return {
+      title: `${baseTitle} - Vol. ${i + 1}`,
+      chapters: vChapters.map((c) => c.id),
+      cover,
+    };
+  });
 }
 
 export function computeEqualVolumeSizes(total: number, volumeCount: number): number[] {
@@ -478,9 +491,14 @@ function WizardPage() {
     setFinishing(true);
     try {
       const books = buildBooks(data);
+      const mainCover =
+        data.coverMode === "single"
+          ? (data.coverAssignments["all"] ?? { kind: "original" })
+          : (data.coverAssignments["vol-1"] ?? { kind: "original" });
+
       const { conversionId } = await conversionsApi.create({
         sourceId: data.sourceId,
-        cover: { kind: "original" },
+        cover: mainCover,
         output: { deviceId: data.device || "kpw_11", format: data.format },
         metadata: data.meta,
         books,
@@ -489,6 +507,7 @@ function WizardPage() {
       });
       // Sino atualiza NA HORA — observadores montados não refetch por navegação.
       queryClient.invalidateQueries({ queryKey: ["conversions"] });
+      queryClient.invalidateQueries({ queryKey: ["library"] });
       navigate({ to: "/biblioteca/converter/$jobId", params: { jobId: conversionId } });
     } catch (e) {
       toast.error((e as Error).message ?? "Erro ao iniciar conversão.");
@@ -551,12 +570,30 @@ function WizardPage() {
             <StepCovers
               series={data.inspectData}
               selectedChapters={data.selectedChapters}
+              grouping={data.grouping}
+              volumeMode={data.volumeMode}
+              volumeSize={data.volumeSize}
+              volumeSizes={data.volumeSizes}
               mode={data.coverMode}
               assignments={data.coverAssignments}
               onMode={(m) => update("coverMode", m)}
               onAssign={(key, ref) =>
                 update("coverAssignments", { ...data.coverAssignments, [key]: ref })
               }
+              onAddCover={(newCover) => {
+                setData((prev) => {
+                  if (!prev.inspectData) return prev;
+                  const alreadyExists = prev.inspectData.covers.some((c) => c.id === newCover.id);
+                  if (alreadyExists) return prev;
+                  return {
+                    ...prev,
+                    inspectData: {
+                      ...prev.inspectData,
+                      covers: [...prev.inspectData.covers, newCover],
+                    },
+                  };
+                });
+              }}
             />
           )}
           {step === 3 && <StepConvert data={data} update={update} />}
@@ -1214,63 +1251,130 @@ function StepChapters({
 function StepCovers({
   series,
   selectedChapters,
+  grouping,
+  volumeMode,
+  volumeSize,
+  volumeSizes,
   mode,
   assignments,
   onMode,
   onAssign,
+  onAddCover,
 }: {
   series: SourceInspectResponse;
   selectedChapters: Set<string>;
+  grouping: "single" | "separate";
+  volumeMode: VolumeMode;
+  volumeSize: number;
+  volumeSizes: number[];
   mode: CoverMode;
   assignments: Record<string, CoverRef>;
   onMode: (m: CoverMode) => void;
   onAssign: (key: string, ref: CoverRef) => void;
+  onAddCover?: (cover: SourceInspectResponse["covers"][number]) => void;
 }) {
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const usedChapters = series.chapters.filter((c) => selectedChapters.has(c.id));
-  // volumes: usar índices fixos (1..N) baseado nos capítulos disponíveis agrupados
-  const volSize = 8;
-  const volumes = Array.from({ length: Math.ceil(usedChapters.length / volSize) }, (_, i) => i + 1);
 
-  const targets =
-    mode === "single"
-      ? [{ key: "all", label: "Todos os capítulos" }]
-      : mode === "per-volume"
-        ? volumes.map((v) => ({
-            key: `vol-${v}`,
-            label: `Volume ${v} (${usedChapters.filter((_, i) => Math.floor(i / volSize) + 1 === v).length} caps)`,
-          }))
-        : usedChapters.map((c) => ({ key: c.id, label: `Cap. ${c.number} • ${c.title}` }));
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input value to allow re-selecting the same file if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Formato de imagem inválido. Use JPG, PNG ou WEBP.");
+      return;
+    }
+
+    const maxSize = 15 * 1024 * 1024; // 15MB
+    if (file.size > maxSize) {
+      toast.error("A imagem deve ter no máximo 15MB.");
+      return;
+    }
+
+    if (!pickerFor) return;
+
+    try {
+      setUploading(true);
+      const result = await conversionsApi.uploadCover(file, series.sourceId, file.name);
+      const uploadedCoverItem: SourceInspectResponse["covers"][number] = {
+        id: result.uploadId,
+        type: "upload",
+        label: result.name || file.name,
+        imageUrl: result.url,
+      };
+
+      onAddCover?.(uploadedCoverItem);
+
+      onAssign(pickerFor, {
+        kind: "upload",
+        uploadId: result.uploadId,
+        name: result.name || file.name,
+      });
+      setPickerFor(null);
+      toast.success("Capa personalizada enviada com sucesso!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao enviar imagem.";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const volumes = useMemo(() => {
+    if (grouping === "single") {
+      return [usedChapters];
+    }
+    return computeVolumes(usedChapters, volumeMode, volumeSize, volumeSizes);
+  }, [grouping, usedChapters, volumeMode, volumeSize, volumeSizes]);
+
+  const targets = useMemo(() => {
+    if (mode === "single") {
+      return [{ key: "all", label: "Todos os volumes" }];
+    }
+    return volumes.map((vChapters, i) => ({
+      key: `vol-${i + 1}`,
+      label: `Volume ${i + 1} (${vChapters.length} cap${vChapters.length > 1 ? "s" : ""})`,
+    }));
+  }, [mode, volumes]);
+
+  const officialCovers = useMemo(() => {
+    return series.covers.filter((c) => c.type !== "upload");
+  }, [series.covers]);
+
+  const customCovers = useMemo(() => {
+    return series.covers.filter((c) => c.type === "upload");
+  }, [series.covers]);
 
   return (
     <div className="space-y-6">
       <SectionHeader
         icon={<ImageIcon />}
         title="Capas"
-        subtitle="Mesma capa pra tudo, uma por volume ou uma por capítulo."
+        subtitle="Mesma capa para todos os volumes ou uma capa por volume."
       />
 
-      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
         <ChoiceCard
           active={mode === "single"}
           onClick={() => onMode("single")}
           icon={<Layers />}
           title="Uma só capa"
-          text="Aplica a capa original em todos."
+          text="Aplica a mesma capa em todos os volumes."
         />
         <ChoiceCard
           active={mode === "per-volume"}
           onClick={() => onMode("per-volume")}
           icon={<BookOpen />}
           title="Por volume"
-          text="Uma capa por volume."
-        />
-        <ChoiceCard
-          active={mode === "per-chapter"}
-          onClick={() => onMode("per-chapter")}
-          icon={<FileStack />}
-          title="Por capítulo"
-          text="Capa diferente em cada um."
+          text="Uma capa personalizada para cada volume."
         />
       </div>
 
@@ -1307,67 +1411,139 @@ function StepCovers({
       )}
 
       <Dialog open={!!pickerFor} onOpenChange={(o) => !o && setPickerFor(null)}>
-        <DialogContent className="border-[3px] border-ink shadow-comic-lg max-w-2xl">
+        <DialogContent className="border-[3px] border-ink shadow-comic-lg max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogTitle className="font-display text-2xl">Escolher capa</DialogTitle>
-          <div className="space-y-4">
-            <Button
-              onClick={() => {
-                onAssign(pickerFor!, { kind: "original" });
-                setPickerFor(null);
-              }}
-              variant="outline"
-              className="w-full border-[3px] border-ink shadow-comic-sm font-display justify-start"
-            >
-              Usar capa original
-            </Button>
-            <div>
-              <p className="font-display text-sm mb-2">Da galeria</p>
-              <div className="grid gap-2 grid-cols-3 sm:grid-cols-4">
-                {series.covers.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      onAssign(pickerFor!, { kind: "gallery", coverId: c.id });
-                      setPickerFor(null);
-                    }}
-                    className="border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm hover:-translate-y-0.5 transition-transform"
-                  >
-                    <div className="aspect-[2/3] relative">
-                      <img
-                        src={
-                          conversionsApi.coverUrl(series.sourceId, {
-                            kind: "gallery",
-                            coverId: c.id,
-                          }) ?? ""
-                        }
-                        alt={c.label}
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                      <span className="absolute bottom-1 left-1 font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink">
-                        {c.label}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label className="block border-[3px] border-dashed border-ink rounded-lg p-4 text-center cursor-pointer hover:bg-muted">
-              <Upload className="mx-auto h-6 w-6 mb-1" />
-              <span className="font-display">Subir minha imagem</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    onAssign(pickerFor!, { kind: "upload", uploadId: f.name, name: f.name });
-                    setPickerFor(null);
-                  }
+          <div className="space-y-6">
+            {/* Seção 1: Capa Original */}
+            <div className="space-y-2">
+              <p className="font-display text-base">Capa Original</p>
+              <Button
+                onClick={() => {
+                  onAssign(pickerFor!, { kind: "original" });
+                  setPickerFor(null);
                 }}
-              />
-            </label>
+                variant="outline"
+                className="w-full border-[3px] border-ink shadow-comic-sm font-display justify-start hover:bg-comic-yellow/30"
+              >
+                Usar capa original
+              </Button>
+            </div>
+
+            {/* Seção 2: Galeria Oficial da Obra */}
+            {officialCovers.length > 0 && (
+              <div className="space-y-2">
+                <p className="font-display text-base">Galeria Oficial da Obra</p>
+                <div className="grid gap-2 grid-cols-3 sm:grid-cols-4">
+                  {officialCovers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        onAssign(pickerFor!, { kind: "gallery", coverId: c.id });
+                        setPickerFor(null);
+                      }}
+                      className="border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm hover:-translate-y-0.5 transition-transform text-left bg-muted"
+                    >
+                      <div className="aspect-[2/3] relative">
+                        <img
+                          src={
+                            conversionsApi.coverUrl(series.sourceId, {
+                              kind: "gallery",
+                              coverId: c.id,
+                            }) ?? ""
+                          }
+                          alt={c.label}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                        <span className="absolute bottom-1 left-1 font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink truncate max-w-[90%]">
+                          {c.label}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Seção 3: Capas Personalizadas */}
+            {customCovers.length > 0 && (
+              <div className="space-y-2">
+                <p className="font-display text-base">Capas Personalizadas</p>
+                <div className="grid gap-2 grid-cols-3 sm:grid-cols-4">
+                  {customCovers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        onAssign(pickerFor!, {
+                          kind: "upload",
+                          uploadId: c.id,
+                          name: c.label,
+                        });
+                        setPickerFor(null);
+                      }}
+                      className="border-[3px] border-ink rounded-md overflow-hidden shadow-comic-sm hover:-translate-y-0.5 transition-transform text-left bg-muted group"
+                    >
+                      <div className="aspect-[2/3] relative">
+                        <img
+                          src={
+                            conversionsApi.coverUrl(series.sourceId, {
+                              kind: "upload",
+                              uploadId: c.id,
+                              name: c.label,
+                            }) ?? ""
+                          }
+                          alt={c.label}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                        <span className="absolute top-1 right-1 font-display text-[9px] text-white bg-comic-red px-1 border border-ink shadow-comic-sm tracking-wide">
+                          PERSONALIZADA
+                        </span>
+                        <span className="absolute bottom-1 left-1 font-display text-[10px] text-comic-ink bg-comic-yellow px-1 border-2 border-ink truncate max-w-[90%]">
+                          {c.label}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Seção 4: Subir Nova Imagem */}
+            <div className="space-y-2">
+              <p className="font-display text-base">Subir Nova Imagem</p>
+              <label
+                className={cn(
+                  "block border-[3px] border-dashed border-ink rounded-lg p-4 text-center cursor-pointer transition-colors shadow-comic-sm bg-comic-cream/40",
+                  uploading ? "opacity-60 pointer-events-none" : "hover:bg-muted",
+                )}
+              >
+                {uploading ? (
+                  <div className="flex flex-col items-center justify-center py-2 space-y-2">
+                    <Loader2 className="h-7 w-7 animate-spin text-comic-ink" />
+                    <span className="font-display text-base text-comic-ink">
+                      Enviando imagem...
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="mx-auto h-6 w-6 mb-1 text-comic-ink" />
+                    <span className="font-display text-base">Subir minha imagem</span>
+                    <p className="text-xs font-medium opacity-70 mt-0.5">
+                      JPG, PNG ou WEBP até 15MB
+                    </p>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={handleFileUpload}
+                />
+              </label>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1384,44 +1560,89 @@ function CoverPreview({
   covers: SourceInspectResponse["covers"];
   sourceId: string;
 }) {
+  const [loadError, setLoadError] = useState(false);
   const cls = "h-12 w-9 border-[2.5px] border-ink rounded shrink-0 overflow-hidden";
-  if (!ref || ref.kind === "original")
+
+  // Se for upload, renderiza a imagem enviada com fallback se der erro
+  if (ref && ref.kind === "upload") {
+    const url = conversionsApi.coverUrl(sourceId, ref);
+    if (!url || loadError) {
+      return (
+        <div
+          className={cn(
+            cls,
+            "bg-comic-blue flex items-center justify-center text-[9px] font-display text-accent-foreground",
+          )}
+          title={ref.name || "Upload"}
+        >
+          UP
+        </div>
+      );
+    }
     return (
       <img
-        src={conversionsApi.coverUrl(sourceId, { kind: "original" }) ?? ""}
-        alt=""
+        src={url}
+        alt={ref.name || "Capa personalizada"}
+        onError={() => setLoadError(true)}
         className={cn(cls, "object-cover")}
       />
     );
-  if (ref.kind === "upload")
+  }
+
+  if (!ref || ref.kind === "original") {
+    const url = conversionsApi.coverUrl(sourceId, { kind: "original" });
+    if (!url || loadError) {
+      return (
+        <div
+          className={cn(cls, "bg-muted flex items-center justify-center text-[9px] font-display")}
+        >
+          ORIG
+        </div>
+      );
+    }
     return (
-      <div
-        className={cn(
-          cls,
-          "bg-comic-blue flex items-center justify-center text-[9px] font-display text-accent-foreground",
-        )}
-      >
-        UP
+      <img
+        src={url}
+        alt="Capa original"
+        onError={() => setLoadError(true)}
+        className={cn(cls, "object-cover")}
+      />
+    );
+  }
+
+  const c = covers.find((cv) => cv.id === ref.coverId);
+  const galleryUrl = c
+    ? conversionsApi.coverUrl(sourceId, { kind: "gallery", coverId: c.id })
+    : null;
+
+  if (!c || !galleryUrl || loadError) {
+    return (
+      <div className={cn(cls, "bg-muted flex items-center justify-center text-[9px] font-display")}>
+        GAL
       </div>
     );
-  const c = covers.find((cv) => cv.id === ref.coverId);
-  if (!c) return <div className={cn(cls, "bg-muted")} />;
+  }
+
   return (
     <img
-      src={conversionsApi.coverUrl(sourceId, { kind: "gallery", coverId: c.id }) ?? ""}
-      alt=""
+      src={galleryUrl}
+      alt={c.label || "Capa da galeria"}
+      onError={() => setLoadError(true)}
       className={cn(cls, "object-cover")}
     />
   );
 }
 
 function describeRef(ref: CoverRef | undefined, covers: SourceInspectResponse["covers"]): string {
-  if (!ref || ref.kind === "original") return "Capa original";
+  if (!ref || ref.kind === "original") return "Original";
   if (ref.kind === "gallery") {
     const c = covers.find((cv) => cv.id === ref.coverId);
-    return c ? `Galeria · ${c.label}` : `Galeria · ${ref.coverId}`;
+    return `Galeria · ${c?.label || ref.coverId}`;
   }
-  return `Upload · ${ref.name}`;
+  if (ref.kind === "upload") {
+    return `Personalizada · ${ref.name || "Upload"}`;
+  }
+  return "Original";
 }
 
 function buildEffectiveState(
@@ -2120,7 +2341,7 @@ function SizeBudget({ chapters, delivery }: { chapters: number; delivery: Delive
 }
 
 function coverModeLabel(m: CoverMode) {
-  return m === "single" ? "Capa única" : m === "per-volume" ? "Por volume" : "Por capítulo";
+  return m === "single" ? "Capa única" : "Por volume";
 }
 
 /* ---------- Shared bits ---------- */

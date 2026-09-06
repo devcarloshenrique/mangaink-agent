@@ -1,20 +1,28 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChevronLeft, ChevronRight, Library } from "lucide-react";
 import { conversionsApi, scrapingApi } from "@/lib/api";
+import { usePreferredCover } from "@/hooks/usePreferredCover";
+import {
+  selectOverallProgress,
+  useLiveConversionProgress,
+  type LiveConversionProgress,
+} from "@/hooks/useLiveConversionProgress";
 import type { SeriesGroup } from "@/hooks/useConversions";
 import type { CoverRef } from "@/types/conversion";
 
-function getGroupCoverRef(group: SeriesGroup): CoverRef | undefined {
-  const withCover = group.items.find((i) => i.cover);
-  return withCover?.cover as CoverRef | undefined;
-}
-
-function ShelfPoster({ item }: { item: SeriesGroup }) {
+function ShelfPoster({
+  item,
+  liveProgress,
+}: {
+  item: SeriesGroup;
+  liveProgress?: Map<string, LiveConversionProgress>;
+}) {
   const [errorCount, setErrorCount] = useState(0);
+  const { preferredCover } = usePreferredCover(item.sourceId);
 
-  // Busca metadados da obra para obter a descrição e capa remota de fallback
+  // Busca metadados da obra para obter autor, contagem de capítulos e capa remota de fallback
   const { data: source } = useQuery({
     queryKey: ["source", item.sourceId],
     queryFn: () => scrapingApi.getSource(item.sourceId),
@@ -22,16 +30,23 @@ function ShelfPoster({ item }: { item: SeriesGroup }) {
     staleTime: 60_000,
   });
 
-  const coverRef = getGroupCoverRef(item);
-  const localUrl = coverRef ? conversionsApi.coverUrl(item.sourceId, coverRef) : null;
+  // Detecta se há conversão ativa (queued ou processing)
+  const activeConv = item.items?.find((i) => i.status === "queued" || i.status === "processing");
+  const isConverting = !!activeConv;
+  const live = activeConv ? liveProgress?.get(activeConv.conversionId) : undefined;
+  const pct = activeConv ? selectOverallProgress(live?.overall, activeConv.progress) : 0;
+  const format = activeConv?.output?.format || "EPUB";
+  const stageLabel =
+    activeConv?.status === "queued" ? "Na fila..." : pct > 0 ? "Convertendo..." : "Baixando...";
+
+  const activeCoverRef: CoverRef = preferredCover ?? { kind: "original" };
+  const localUrl = activeCoverRef ? conversionsApi.coverUrl(item.sourceId, activeCoverRef) : null;
   const remoteCover = source?.covers?.[0]?.imageUrl ?? null;
   const currentSrc =
     errorCount === 0 ? localUrl || remoteCover : errorCount === 1 ? remoteCover : null;
 
-  const formats = [...new Set(item.items.map((i) => i.output?.format).filter(Boolean))].join(" · ");
-  const description =
-    source?.metadata?.description ||
-    "Acesse seus volumes convertidos e continue a leitura na biblioteca.";
+  const author = source?.metadata?.author || "Autor desconhecido";
+  const chaptersCount = source?.statistics?.chapters ?? source?.chapters?.length ?? 0;
 
   return (
     <Link
@@ -54,22 +69,53 @@ function ShelfPoster({ item }: { item: SeriesGroup }) {
           />
         )}
 
-        {/* Overlay com descrição no hover */}
-        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/55 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <p className="line-clamp-4 text-[11px] font-medium leading-snug text-white/95">
-            {description}
+        {/* Badges superiores se houver conversão ativa */}
+        {isConverting && (
+          <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-1">
+            <span className="rounded border-2 border-ink bg-comic-yellow px-1.5 py-0.5 font-display text-[10px] uppercase text-comic-ink shadow-comic-sm">
+              {format}
+            </span>
+            <span className="flex items-center gap-1 rounded border-2 border-ink bg-comic-blue px-1.5 py-0.5 font-display text-[10px] uppercase text-comic-cream shadow-comic-sm">
+              <span className="animate-pulse">⚡</span> CONVERTENDO
+            </span>
+          </div>
+        )}
+
+        {/* Pílula de progresso na base da capa se houver conversão ativa */}
+        {isConverting && (
+          <div className="absolute inset-x-2 bottom-2 z-10 rounded-md border-2 border-ink bg-comic-ink/90 p-1.5 shadow-comic-sm backdrop-blur-xs">
+            <div className="flex items-center justify-between gap-1 text-[10px] font-bold text-comic-cream">
+              <span className="truncate opacity-80">{stageLabel}</span>
+              <span className="tabular-nums text-comic-yellow">{pct}%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full border border-ink/40 bg-muted/40">
+              <div
+                className="h-full bg-comic-yellow transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Overlay com informações no hover (padrão biblioteca) */}
+        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100 z-20">
+          <p
+            className="font-display text-base leading-tight text-white line-clamp-2"
+            title={item.title}
+          >
+            {item.title}
           </p>
-          <p className="mt-2 truncate text-[10px] font-bold uppercase tracking-wide text-white/80">
-            {formats || "Volume"} · {item.conversionCount}{" "}
-            {item.conversionCount === 1 ? "conversão" : "conversões"}
+          <p className="mt-1 truncate text-[11px] font-medium text-white/80">{author}</p>
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-comic-yellow">
+            {chaptersCount} {chaptersCount === 1 ? "capítulo" : "capítulos"}
           </p>
+          {isConverting && (
+            <p className="mt-1.5 text-[10px] font-bold text-comic-cream/90">
+              ⚡ Conversão em andamento ({pct}%)
+            </p>
+          )}
         </div>
       </div>
-
-      <p className="mt-2 truncate text-sm font-bold leading-tight">{item.title}</p>
-      <p className="truncate text-[11px] font-bold opacity-60">
-        {item.conversionCount} {item.conversionCount === 1 ? "volume" : "volumes"}
-      </p>
     </Link>
   );
 }
@@ -80,6 +126,22 @@ interface LibraryCarouselProps {
 
 export function LibraryCarousel({ items }: LibraryCarouselProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // Coleta os IDs de todas as conversões ativas dos itens
+  const activeConversionIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const group of items) {
+      if (!group.items) continue;
+      for (const conv of group.items) {
+        if (conv.status === "queued" || conv.status === "processing") {
+          ids.push(conv.conversionId);
+        }
+      }
+    }
+    return ids;
+  }, [items]);
+
+  const liveProgress = useLiveConversionProgress(activeConversionIds);
 
   // Exibe todas as obras da coleção na prateleira (até 24 obras com scroll horizontal suave)
   const shelfItems = items.slice(0, 24);
@@ -132,10 +194,10 @@ export function LibraryCarousel({ items }: LibraryCarouselProps) {
       {/* Prateleira com rolagem horizontal suave */}
       <div
         ref={scrollerRef}
-        className="flex snap-x gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x gap-4 overflow-x-auto scroll-smooth pt-2 pb-3 -mt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {shelfItems.map((s) => (
-          <ShelfPoster key={s.sourceId} item={s} />
+          <ShelfPoster key={s.sourceId} item={s} liveProgress={liveProgress} />
         ))}
 
         {/* Card especial de "Ver Mais" ao final da fila se houver muitas obras */}

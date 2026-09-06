@@ -214,7 +214,10 @@ describe("wizard preset logic", () => {
     });
 
     it("modificar campo → hasUnsavedChanges detecta divergencia", () => {
-      const preset = { id: "p1", values: { mangaMode: true } };
+      const preset: { id: string; values: Record<string, string | number | boolean> } = {
+        id: "p1",
+        values: { mangaMode: true },
+      };
       const userPresets = [preset];
 
       // Selecionou preset "p1"

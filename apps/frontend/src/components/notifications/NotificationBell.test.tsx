@@ -41,23 +41,27 @@ vi.mock("@/hooks/useConversions", () => ({
   useActiveConversions: () => ({ data: { items: mocked.activeConversions } }),
 }));
 
-vi.mock("@/hooks/useLiveConversionProgress", () => ({
-  useLiveConversionProgress: () =>
-    new Map(
-      mocked.activeConversions.map((c) => [
-        c.conversionId,
-        {
-          overall: c.progress,
-          done: false,
-          downloadOnly: c.downloadOnly ?? false,
-          chaptersDone: 0,
-          chaptersTotal: 0,
-          chaptersFailed: 0,
-          ...(mocked.liveProgressOverrides.get(c.conversionId) ?? {}),
-        },
-      ]),
-    ),
-}));
+vi.mock("@/hooks/useLiveConversionProgress", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useLiveConversionProgress")>();
+  return {
+    ...actual,
+    useLiveConversionProgress: () =>
+      new Map(
+        mocked.activeConversions.map((c) => [
+          c.conversionId,
+          {
+            overall: c.progress,
+            done: false,
+            downloadOnly: c.downloadOnly ?? false,
+            chaptersDone: 0,
+            chaptersTotal: 0,
+            chaptersFailed: 0,
+            ...(mocked.liveProgressOverrides.get(c.conversionId) ?? {}),
+          },
+        ]),
+      ),
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   notificationsApi: {

@@ -5,6 +5,7 @@ import type { ConversionJobRepository } from '../../../modules/conversion/reposi
 import type { IUserPresetRepository } from '../../../modules/conversion/repositories/user-preset.repository'
 import type { UserChapterProgressRepository } from '../../../modules/reading/repositories/user-chapter-progress.repository'
 import type { NotificationRepository } from '../../../modules/notification/repositories/notification.repository'
+import type { LibraryRepository } from '../../../modules/library/repositories/library.repository'
 import type { IStatusStore } from '../../infra'
 
 import { PrismaSourceRepository } from '../../../modules/scraping/repositories/prisma-source.repository'
@@ -14,6 +15,7 @@ import { PrismaJobRepository } from '../../../modules/conversion/repositories/pr
 import { PrismaUserPresetRepository } from '../../../modules/conversion/repositories/prisma-user-preset.repository'
 import { PrismaUserChapterProgressRepository } from '../../../modules/reading/repositories/prisma-user-chapter-progress.repository'
 import { PrismaNotificationRepository } from '../../../modules/notification/repositories/prisma-notification.repository'
+import { PrismaLibraryRepository } from '../../../modules/library/repositories/prisma-library.repository'
 
 export function getSourceRepository(): SourceCacheRepository {
   return new PrismaSourceRepository()
@@ -42,3 +44,8 @@ export function getUserChapterProgressRepository(): UserChapterProgressRepositor
 export function getNotificationRepository(): NotificationRepository {
   return new PrismaNotificationRepository()
 }
+
+export function getLibraryRepository(): LibraryRepository {
+  return new PrismaLibraryRepository()
+}
+

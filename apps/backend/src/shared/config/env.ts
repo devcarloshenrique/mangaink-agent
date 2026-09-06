@@ -1,5 +1,11 @@
-import 'dotenv/config'
+import { config } from 'dotenv'
+import { resolve } from 'node:path'
 import { z } from 'zod'
+
+config({ path: resolve(process.cwd(), '.env') })
+config({ path: resolve(process.cwd(), 'apps/backend/.env') })
+config({ path: resolve(__dirname, '../../../.env') })
+
 
 // Secrets JWT conhecidos como inseguros/previsíveis (VULN-3/MEC-79). O boot
 // recusa qualquer um deles, independente de NODE_ENV (fail-fast no import).

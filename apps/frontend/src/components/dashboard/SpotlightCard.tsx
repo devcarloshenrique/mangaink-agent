@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Play, Sparkles } from "lucide-react";
 import { conversionsApi, scrapingApi } from "@/lib/api";
 import { cn, relativeTime } from "@/lib/utils";
+import { usePreferredCover } from "@/hooks/usePreferredCover";
 import type { SeriesGroup } from "@/hooks/useConversions";
 import type { CoverRef } from "@/types/conversion";
 
@@ -16,11 +17,6 @@ function getHueFromString(str: string): number {
     hash |= 0;
   }
   return Math.abs(hash) % 360;
-}
-
-function getGroupCoverRef(group: SeriesGroup): CoverRef | undefined {
-  const withCover = group.items.find((i) => i.cover);
-  return withCover?.cover as CoverRef | undefined;
 }
 
 function formatStatus(status?: string | null): string {
@@ -67,7 +63,7 @@ function SpotlightBackdrop({
         alt=""
         aria-hidden="true"
         onError={() => setErrorCount((c) => c + 1)}
-        className="h-full w-full object-cover scale-110 blur-[5px] select-none animate-in fade-in duration-700"
+        className="h-full w-full object-cover scale-110 blur-[2.5px] select-none animate-in fade-in duration-700"
       />
     </div>
   );
@@ -124,6 +120,7 @@ export function SpotlightCard({ items }: SpotlightCardProps) {
   // Considera no máximo as 5 obras mais recentes para rotação no banner
   const activeItems = items.slice(0, 5);
   const currentItem = activeItems[index] ?? activeItems[0];
+  const { preferredCover } = usePreferredCover(currentItem?.sourceId);
 
   // Busca metadados da obra para obter sinopse, capítulos e capa de fallback
   const { data: source } = useQuery({
@@ -147,7 +144,7 @@ export function SpotlightCard({ items }: SpotlightCardProps) {
   }
 
   const hue = getHueFromString(currentItem.sourceId || currentItem.title);
-  const coverRef = getGroupCoverRef(currentItem);
+  const coverRef: CoverRef = preferredCover ?? { kind: "original" };
   const remoteCover = source?.covers?.[0]?.imageUrl ?? null;
 
   const description =
@@ -227,11 +224,18 @@ export function SpotlightCard({ items }: SpotlightCardProps) {
                 {totalChapters} capítulos
               </span>
             )}
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4 text-comic-blue" strokeWidth={2.5} />
-              {currentItem.conversionCount}{" "}
-              {currentItem.conversionCount === 1 ? "conversão" : "conversões"}
-            </span>
+            {currentItem.conversionCount === 0 ? (
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-comic-blue" strokeWidth={2.5} />
+                Na biblioteca
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-comic-blue" strokeWidth={2.5} />
+                {currentItem.conversionCount}{" "}
+                {currentItem.conversionCount === 1 ? "conversão" : "conversões"}
+              </span>
+            )}
             <span className="text-comic-cream/60">
               · última atividade: {relativeTime(currentItem.lastActivity)}
             </span>

@@ -130,6 +130,70 @@ describe('PrismaSourceRepository', () => {
       expect(loaded!.covers).toHaveLength(0)
     })
 
+    it('deve proteger capas personalizadas (type="upload") contra deleção ao re-salvar', async () => {
+      const data = makeSourcePayload('src-test-protect-upload')
+      await repository.save('src-test-protect-upload', data)
+
+      // Insere manualmente uma capa personalizada do tipo 'upload'
+      await getPrisma().cover.create({
+        data: {
+          coverId: 'up_custom_123',
+          sourceId: 'src-test-protect-upload',
+          type: 'upload',
+          label: 'Custom Cover',
+          imageUrl: '/api/conversions/covers/uploaded/up_custom_123',
+        },
+      })
+
+      // Re-salva com novas capas de scraping (sem a capa de upload na lista do scraper)
+      const modified = {
+        ...data,
+        covers: [
+          { id: 'cv_test_002', type: 'original' as const, label: 'Cover 2', imageUrl: 'https://example.com/covers/cover2.jpg' },
+        ],
+      }
+      await repository.save('src-test-protect-upload', modified)
+
+      const loaded = await repository.load('src-test-protect-upload')
+      expect(loaded!.covers).toHaveLength(2)
+
+      const uploadCover = loaded!.covers.find((c) => c.id === 'up_custom_123')
+      expect(uploadCover).toBeDefined()
+      expect(uploadCover!.type).toBe('upload')
+      expect(uploadCover!.label).toBe('Custom Cover')
+
+      const originalCover = loaded!.covers.find((c) => c.id === 'cv_test_002')
+      expect(originalCover).toBeDefined()
+      expect(originalCover!.type).toBe('original')
+
+      // cv_test_001 original deve ter sido removida
+      expect(loaded!.covers.find((c) => c.id === 'cv_test_001')).toBeUndefined()
+    })
+
+    it('deve proteger capas de upload mesmo se a lista de covers enviada no re-save for vazia', async () => {
+      const data = makeSourcePayload('src-test-protect-upload-empty')
+      await repository.save('src-test-protect-upload-empty', data)
+
+      await getPrisma().cover.create({
+        data: {
+          coverId: 'up_custom_456',
+          sourceId: 'src-test-protect-upload-empty',
+          type: 'upload',
+          label: 'Custom Cover 456',
+          imageUrl: '/api/conversions/covers/uploaded/up_custom_456',
+        },
+      })
+
+      // Re-salva com array vazio de covers
+      const modified = { ...data, covers: [] }
+      await repository.save('src-test-protect-upload-empty', modified)
+
+      const loaded = await repository.load('src-test-protect-upload-empty')
+      expect(loaded!.covers).toHaveLength(1)
+      expect(loaded!.covers[0].id).toBe('up_custom_456')
+      expect(loaded!.covers[0].type).toBe('upload')
+    })
+
     it('deve salvar e carregar 35 chapters sem perda (regressao createMany)', async () => {
       const base = makeSourcePayload('src-test-many-chapters')
       base.chapters = Array.from({ length: 35 }, (_, i) => {
