@@ -129,10 +129,16 @@ export class PrismaSourceRepository implements SourceCacheRepository {
             where: {
               sourceId,
               coverId: { notIn: newCoverIds },
+              type: { not: 'upload' }, // Não apaga as capas personalizadas do usuário!
             },
           })
         } else {
-          await tx.cover.deleteMany({ where: { sourceId } })
+          await tx.cover.deleteMany({
+            where: {
+              sourceId,
+              type: { not: 'upload' }, // Não apaga as capas personalizadas do usuário!
+            },
+          })
         }
 
         for (const ch of data.chapters) {

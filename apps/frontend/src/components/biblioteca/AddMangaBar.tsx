@@ -55,17 +55,19 @@ export function AddMangaBar({ value, onChange, mode, onModeChange, onReady }: Pr
     onModeChange("filter");
   }, [onModeChange]);
 
-  if (
-    isUrlMode &&
-    state.status === "ready" &&
-    state.metadata &&
-    state.sourceId &&
-    !hasReportedRef.current
-  ) {
-    hasReportedRef.current = true;
-    onModeChange("filter");
-    onReady(state.sourceId, state.metadata);
-  }
+  useEffect(() => {
+    if (
+      isUrlMode &&
+      state.status === "ready" &&
+      state.metadata &&
+      state.sourceId &&
+      !hasReportedRef.current
+    ) {
+      hasReportedRef.current = true;
+      onModeChange("filter");
+      onReady(state.sourceId, state.metadata);
+    }
+  }, [isUrlMode, state.status, state.metadata, state.sourceId, onModeChange, onReady]);
 
   const inputValue = isUrlMode ? url : value;
 

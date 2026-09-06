@@ -53,6 +53,7 @@ function stagesOf(opts: {
   currentJobProgress?: number;
   apiJobs?: string[];
   downloadOnly?: boolean;
+  conversionStatus?: string;
 }) {
   const {
     processedChapters = 0,
@@ -64,6 +65,7 @@ function stagesOf(opts: {
     currentJobProgress = 0,
     apiJobs = ["queued", "queued"],
     downloadOnly = false,
+    conversionStatus,
   } = opts;
 
   const progress: ProgressState = {
@@ -81,6 +83,7 @@ function stagesOf(opts: {
     progress,
     apiJobs.map((status) => ({ status })),
     downloadOnly,
+    conversionStatus,
   );
 }
 
@@ -150,6 +153,45 @@ describe("deriveStages", () => {
     expect(stages[0].id).toBe("downloading");
     expect(stages[0].status).toBe("active");
     expect(stages[0].progress).toBe(50);
+  });
+
+  it("download deve ter progresso 100% quando completado, mesmo se processedChapters ficou parcial", () => {
+    const stages = stagesOf({
+      processedChapters: 5,
+      totalChapters: 10,
+      apiJobs: ["completed", "completed"],
+    });
+    expect(stages[0].status).toBe("completed");
+    expect(stages[0].progress).toBe(100);
+  });
+
+  it("conversão deve ter progresso 100% quando completada, mesmo se completedJobs/currentJobProgress ficou parcial", () => {
+    const stages = stagesOf({
+      processedChapters: 10,
+      totalChapters: 10,
+      completedJobs: 1,
+      totalJobs: 2,
+      currentJobProgress: 50,
+      apiJobs: ["completed", "completed"],
+    });
+    expect(stages[1].status).toBe("completed");
+    expect(stages[1].progress).toBe(100);
+  });
+
+  it("etapas devem ter progresso 100% quando conversionStatus for completed", () => {
+    const stages = stagesOf({
+      processedChapters: 2,
+      totalChapters: 4,
+      completedJobs: 1,
+      totalJobs: 2,
+      currentJobProgress: 50,
+      apiJobs: ["completed", "queued"],
+      conversionStatus: "completed",
+    });
+    expect(stages[0].status).toBe("completed");
+    expect(stages[0].progress).toBe(100);
+    expect(stages[1].status).toBe("completed");
+    expect(stages[1].progress).toBe(100);
   });
 
   it("download-only completa com estágio único a 100%", () => {

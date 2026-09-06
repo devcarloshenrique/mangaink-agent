@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SpotlightCard } from "./SpotlightCard";
+import { conversionsApi } from "@/lib/api";
+import { setPreferredCover, PREFERRED_COVERS_KEY } from "@/lib/custom-covers";
 import type { SeriesGroup } from "@/hooks/useConversions";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -70,6 +72,8 @@ function renderWithClient(ui: React.ReactElement) {
 
 describe("SpotlightCard", () => {
   beforeEach(() => {
+    localStorage.removeItem(PREFERRED_COVERS_KEY);
+    vi.restoreAllMocks();
     vi.useFakeTimers();
   });
 
@@ -90,6 +94,23 @@ describe("SpotlightCard", () => {
     expect(screen.getByText(/3 conversões/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Começar a ler/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Ver Detalhes/i })).toBeInTheDocument();
+  });
+
+  it("deve renderizar 'Na biblioteca' se a obra tiver 0 conversões", () => {
+    const itemWithoutConversions: SeriesGroup = {
+      sourceId: "src-zero",
+      title: "Solo Leveling",
+      conversionCount: 0,
+      lastActivity: new Date().toISOString(),
+      status: "completed",
+      items: [],
+    };
+
+    renderWithClient(<SpotlightCard items={[itemWithoutConversions]} />);
+
+    expect(screen.getByText("Solo Leveling")).toBeInTheDocument();
+    expect(screen.getByText("Na biblioteca")).toBeInTheDocument();
+    expect(screen.queryByText(/0 convers/i)).not.toBeInTheDocument();
   });
 
   it("deve alternar a obra em destaque ao clicar nos botões de navegação", () => {
@@ -114,5 +135,70 @@ describe("SpotlightCard", () => {
     });
 
     expect(screen.getByText("One Piece")).toBeInTheDocument();
+  });
+
+  it("deve chamar conversionsApi.coverUrl com { kind: 'original' } quando preferredCover não estiver definido mesmo se a conversão do grupo tiver capa customizada", () => {
+    const coverUrlSpy = vi.spyOn(conversionsApi, "coverUrl");
+    const itemWithCustomCover: SeriesGroup = {
+      sourceId: "src-spotlight-custom",
+      title: "Custom Manga",
+      conversionCount: 1,
+      lastActivity: new Date().toISOString(),
+      status: "completed",
+      items: [
+        {
+          conversionId: "conv-custom",
+          sourceId: "src-spotlight-custom",
+          title: "Custom Manga",
+          status: "completed",
+          progress: 100,
+          totalJobs: 1,
+          completedJobs: 1,
+          failedJobs: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          cover: { kind: "gallery", coverId: "cov-custom" },
+          output: { deviceId: "kindle", format: "EPUB" },
+        },
+      ],
+    };
+
+    renderWithClient(<SpotlightCard items={[itemWithCustomCover]} />);
+
+    expect(coverUrlSpy).toHaveBeenCalledWith("src-spotlight-custom", { kind: "original" });
+  });
+
+  it("deve chamar conversionsApi.coverUrl com a capa preferida quando preferredCover estiver definido", () => {
+    const coverUrlSpy = vi.spyOn(conversionsApi, "coverUrl");
+    const preferred = { kind: "gallery" as const, coverId: "cov-spotlight-preferred" };
+    setPreferredCover("src-spotlight-pref", preferred);
+
+    const item: SeriesGroup = {
+      sourceId: "src-spotlight-pref",
+      title: "Preferred Manga",
+      conversionCount: 1,
+      lastActivity: new Date().toISOString(),
+      status: "completed",
+      items: [
+        {
+          conversionId: "conv-1",
+          sourceId: "src-spotlight-pref",
+          title: "Preferred Manga",
+          status: "completed",
+          progress: 100,
+          totalJobs: 1,
+          completedJobs: 1,
+          failedJobs: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          cover: { kind: "original" },
+          output: { deviceId: "kindle", format: "EPUB" },
+        },
+      ],
+    };
+
+    renderWithClient(<SpotlightCard items={[item]} />);
+
+    expect(coverUrlSpy).toHaveBeenCalledWith("src-spotlight-pref", preferred);
   });
 });

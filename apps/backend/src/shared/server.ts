@@ -22,6 +22,7 @@ import { mobiPreviewRoutes } from '../modules/conversion/mobi-preview.routes'
 import { chapterRoutes } from '../modules/scraping/chapter.routes'
 import { readingRoutes } from '../modules/reading/reading.routes'
 import { notificationRoutes } from '../modules/notification/notification.routes'
+import { libraryRoutes } from '../modules/library/library.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
@@ -105,6 +106,7 @@ export async function createServer() {
         { name: 'Conversion', description: 'ConversÃ£o de obras para formatos e-reader' },
         { name: 'Reading', description: 'Tracking de progresso de leitura' },
         { name: 'Notifications', description: 'Notificações de atividades em background' },
+        { name: 'Library', description: 'Gerenciamento da biblioteca de mangás do usuário' },
       ],
       components: {
         securitySchemes: {
@@ -158,11 +160,12 @@ export async function createServer() {
         JOB_NOT_FOUND: 404,
         FORBIDDEN: 403,
         VALIDATION_ERROR: 400,
-        DUPLICATE_CHAPTER: 404,
+        DUPLICATE_CHAPTER: 409,
         INVALID_CONVERSION_STATE: 409,
         INVALID_JOB_STATE: 409,
         KCC_EXECUTION_ERROR: 500,
         DOWNLOAD_FAILED: 500,
+        WORKER_FAILED: 500,
         PREVIEW_NOT_READY: 425,
         LISTING_REQUIRES_PRISMA: 501,
         PRESET_NOT_FOUND: 404,
@@ -249,6 +252,8 @@ export async function createServer() {
   await app.register(chapterRoutes, { runtime })
   await app.register(readingRoutes)
   await app.register(notificationRoutes, { runtime })
+  await app.register(libraryRoutes)
+
 
   // Inicia os workers de background (scraping, conversÃ£o, download-only,
   // preview MOBI e download de capÃ­tulos). Em modo embedded, todos rodam sobre

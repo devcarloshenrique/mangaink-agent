@@ -23,11 +23,21 @@ export class SourceNotFoundError extends ConversionError {
 }
 
 export class InvalidConversionStateError extends ConversionError {
-  constructor(conversionId: string, currentStatus: string, expectedStatus: string) {
-    super(
-      `Conversion ${conversionId} está com status "${currentStatus}", esperado "${expectedStatus}"`,
-      'INVALID_CONVERSION_STATE',
-    )
+  constructor(message: string)
+  constructor(conversionId: string, currentStatus: string, expectedStatus: string)
+  constructor(
+    messageOrConversionId: string,
+    currentStatus?: string,
+    expectedStatus?: string,
+  ) {
+    if (currentStatus !== undefined && expectedStatus !== undefined) {
+      super(
+        `Conversion ${messageOrConversionId} está com status "${currentStatus}", esperado "${expectedStatus}"`,
+        'INVALID_CONVERSION_STATE',
+      )
+    } else {
+      super(messageOrConversionId, 'INVALID_CONVERSION_STATE')
+    }
     this.name = 'InvalidConversionStateError'
   }
 }
@@ -96,6 +106,13 @@ export class DownloadFailedError extends ConversionError {
   }
 }
 
+export class WorkerFailedError extends ConversionError {
+  constructor(jobId: string, message: string) {
+    super(`Falha no worker do job ${jobId}: ${message}`, 'WORKER_FAILED')
+    this.name = 'WorkerFailedError'
+  }
+}
+
 export class ForbiddenError extends ConversionError {
   constructor(conversionId: string) {
     super(`Acesso negado à conversão: ${conversionId}`, 'FORBIDDEN')
@@ -105,7 +122,7 @@ export class ForbiddenError extends ConversionError {
 
 export class ListingNotSupportedError extends ConversionError {
   constructor() {
-    super('Listing requires REPO_BACKEND=prisma', 'LISTING_REQUIRES_PRISMA')
+    super('Listing requires Prisma backend', 'LISTING_REQUIRES_PRISMA')
     this.name = 'ListingNotSupportedError'
   }
 }

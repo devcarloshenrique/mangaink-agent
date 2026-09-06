@@ -30,7 +30,7 @@ describe("useSourceConversions", () => {
   });
 
   it("deve retornar estado vazio quando não houver conversões", async () => {
-    vi.mocked(conversionsApi.list).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(conversionsApi.list).mockResolvedValue({ items: [], total: 0, page: 1, limit: 100 });
 
     const { result } = renderHook(() => useSourceConversions("src-empty", "Série Teste"), {
       wrapper: createWrapper(),
@@ -75,6 +75,8 @@ describe("useSourceConversions", () => {
         } satisfies ConversionSummary,
       ],
       total: 2,
+      page: 1,
+      limit: 100,
     };
 
     const mockDetail: ConversionState = {
@@ -102,9 +104,8 @@ describe("useSourceConversions", () => {
 
     await waitFor(() => {
       expect(result.current.conversions.length).toBe(2);
+      expect(result.current.selectedId).toBe("conv-1");
     });
-
-    expect(result.current.selectedId).toBe("conv-1");
     expect(conversionsApi.list).toHaveBeenCalledWith({ sourceId: "src-1", limit: 100 });
     expect(conversionsApi.get).toHaveBeenCalledWith("conv-1");
   });
@@ -138,6 +139,8 @@ describe("useSourceConversions", () => {
         } satisfies ConversionSummary,
       ],
       total: 2,
+      page: 1,
+      limit: 100,
     };
 
     vi.mocked(conversionsApi.list).mockResolvedValue(mockList);

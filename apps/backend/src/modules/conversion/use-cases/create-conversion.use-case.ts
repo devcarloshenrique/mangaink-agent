@@ -1,6 +1,9 @@
 import { join } from 'node:path'
+import { readdir } from 'node:fs/promises'
 import { env } from '../../../shared/config/env'
-import { getSourceRepository } from '../../../shared/database/repositories'
+import { getSourceRepository, getLibraryRepository } from '../../../shared/database/repositories'
+import type { LibraryRepository } from '../../library/repositories/library.repository'
+import { pathExists } from '../../../shared/utils/filesystem'
 import { createConversionId, createJobId } from '../../../shared/utils/id-generator'
 import { CacheService } from '../../scraping/services/cache.service'
 import { devices } from '../config/devices'
@@ -26,6 +29,7 @@ import {
   SourceNotFoundError,
   DuplicateChapterError,
   ChapterNotFoundError,
+  InvalidConversionStateError,
 } from '../errors/conversion.errors'
 
 /**
@@ -54,6 +58,7 @@ export class CreateConversionUseCase {
     private readonly queue: ConversionQueueService,
     private readonly events: ConversionEventsService,
     private readonly downloadOnlyQueue?: DownloadOnlyQueueService,
+    private readonly libraryRepository?: LibraryRepository,
   ) {}
 
   async execute(request: ConversionConfig): Promise<{
@@ -96,6 +101,44 @@ export class CreateConversionUseCase {
           throw new DuplicateChapterError(chapterId)
         }
         seen.add(chapterId)
+      }
+    }
+
+    // ── Valida capas (gallery e upload) ────────────────────────────
+    const coversToValidate: CoverRef[] = [request.cover]
+    for (const book of request.books) {
+      if (book.cover) {
+        coversToValidate.push(book.cover)
+      }
+    }
+
+    const availableCoverIds = new Set((sourceMeta.covers ?? []).map((c) => c.id))
+    const uploadsDir = join(env.STORAGE_PATH, 'uploads', 'covers')
+
+    for (const cover of coversToValidate) {
+      if (cover.kind === 'gallery') {
+        if (!availableCoverIds.has(cover.coverId)) {
+          throw new InvalidConversionStateError(
+            `Capa da galeria com ID "${cover.coverId}" não foi encontrada na obra`,
+          )
+        }
+      } else if (cover.kind === 'upload') {
+        let exists = false
+        if (await pathExists(uploadsDir)) {
+          try {
+            const files = await readdir(uploadsDir)
+            exists = files.some(
+              (f) => f === cover.uploadId || f.startsWith(`${cover.uploadId}.`) || f.startsWith(cover.uploadId),
+            )
+          } catch {
+            exists = false
+          }
+        }
+        if (!exists) {
+          throw new InvalidConversionStateError(
+            `Capa personalizada com ID "${cover.uploadId}" não encontrada`,
+          )
+        }
       }
     }
 
@@ -208,6 +251,10 @@ export class CreateConversionUseCase {
     for (const data of jobDataList) {
       await targetQueue.enqueue(data)
     }
+
+    // ── Adiciona obra à biblioteca do usuário (user_library) ───────
+    const libraryRepo = this.libraryRepository ?? getLibraryRepository()
+    await libraryRepo.add(request.userId, request.sourceId).catch(() => {})
 
     // ── Estende TTL da source para 30 dias ──────────────────────────
     const cacheService = new CacheService(sourceRepo)

@@ -2,31 +2,21 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route } from "./index";
-import type { ConversionSummary } from "@/types/conversion";
-import type { SeriesGroup } from "@/hooks/useConversions";
+import { consolidateLibraryWithConversions } from "@/hooks/useConversions";
 
 const mockUseConversionsList = vi.fn();
+const mockUseLibrary = vi.fn();
 
-vi.mock("@/hooks/useConversions", () => ({
-  useConversionsList: () => mockUseConversionsList(),
-  groupConversionsBySource: (items: ConversionSummary[]): SeriesGroup[] => {
-    if (!items || items.length === 0) return [];
-    const map = new Map<string, SeriesGroup>();
-    for (const item of items) {
-      const entry = map.get(item.sourceId);
-      if (entry) entry.items.push(item);
-      else
-        map.set(item.sourceId, {
-          sourceId: item.sourceId,
-          title: item.title,
-          items: [item],
-          conversionCount: 1,
-          lastActivity: item.updatedAt,
-          status: "completed",
-        });
-    }
-    return Array.from(map.values());
-  },
+vi.mock("@/hooks/useConversions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useConversions")>();
+  return {
+    ...actual,
+    useConversionsList: () => mockUseConversionsList(),
+  };
+});
+
+vi.mock("@/hooks/useLibrary", () => ({
+  useLibrary: () => mockUseLibrary(),
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
@@ -60,12 +50,20 @@ function renderWithClient(ui: React.ReactElement) {
 describe("Dashboard Route (index.tsx)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseLibrary.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+    });
   });
 
-  it("deve renderizar skeleton quando estiver carregando", () => {
+  it("deve renderizar skeleton quando estiver carregando conversões ou biblioteca", () => {
     mockUseConversionsList.mockReturnValue({
       data: undefined,
       isLoading: true,
+    });
+    mockUseLibrary.mockReturnValue({
+      data: undefined,
+      isLoading: false,
     });
 
     const Component = Route.options.component as React.ComponentType;
@@ -75,8 +73,12 @@ describe("Dashboard Route (index.tsx)", () => {
     expect(skeleton).toBeInTheDocument();
   });
 
-  it("deve renderizar visão de onboarding/empty quando não houver conversões", () => {
+  it("deve renderizar visão de onboarding/empty quando não houver conversões nem obras na biblioteca", () => {
     mockUseConversionsList.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+    });
+    mockUseLibrary.mockReturnValue({
       data: { items: [], total: 0 },
       isLoading: false,
     });
@@ -89,7 +91,42 @@ describe("Dashboard Route (index.tsx)", () => {
     expect(screen.getByText(/Nada por aqui ainda/i)).toBeInTheDocument();
   });
 
-  it("deve renderizar dashboard completo quando houver obras na biblioteca", () => {
+  it("deve renderizar dashboard completo quando houver obras salvas na biblioteca mesmo com 0 conversões", () => {
+    mockUseConversionsList.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+    });
+    mockUseLibrary.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: "lib-1",
+            userId: "u-1",
+            sourceId: "src-naruto",
+            title: "Naruto",
+            author: "Masashi Kishimoto",
+            coverUrl: "https://example.com/naruto.jpg",
+            chaptersCount: 700,
+            isFavorite: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+
+    const Component = Route.options.component as React.ComponentType;
+    renderWithClient(<Component />);
+
+    expect(screen.getAllByText("Naruto").length).toBeGreaterThan(0);
+    expect(screen.getByText("Sua biblioteca")).toBeInTheDocument();
+    expect(screen.getByText("Novos capítulos")).toBeInTheDocument();
+    expect(screen.queryByText("Conversões")).not.toBeInTheDocument();
+  });
+
+  it("deve renderizar dashboard completo quando houver conversões", () => {
     mockUseConversionsList.mockReturnValue({
       data: {
         items: [
@@ -112,6 +149,10 @@ describe("Dashboard Route (index.tsx)", () => {
       },
       isLoading: false,
     });
+    mockUseLibrary.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+    });
 
     const Component = Route.options.component as React.ComponentType;
     renderWithClient(<Component />);
@@ -119,6 +160,6 @@ describe("Dashboard Route (index.tsx)", () => {
     expect(screen.getAllByText("Berserk").length).toBeGreaterThan(0);
     expect(screen.getByText("Sua biblioteca")).toBeInTheDocument();
     expect(screen.getByText("Novos capítulos")).toBeInTheDocument();
-    expect(screen.getByText("Conversões")).toBeInTheDocument();
+    expect(screen.queryByText("Conversões")).not.toBeInTheDocument();
   });
 });

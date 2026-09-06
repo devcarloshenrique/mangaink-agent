@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { conversionsApi } from "@/lib/api";
+import { computeConversionOverall } from "@/lib/conversion-progress";
 import type { ConversionState, SSEJournalEvent } from "@/types/conversion";
 
 // ── Tipos de Stage ────────────────────────────────────────────────────────────
@@ -109,7 +110,13 @@ export interface ProgressState {
 type ProgressAction =
   | { type: "RESET" }
   | { type: "RESTORE"; state: ProgressState }
-  | { type: "SET_TOTALS"; totalChapters: number; totalJobs: number; processedChapters?: number }
+  | {
+      type: "SET_TOTALS";
+      totalChapters: number;
+      totalJobs: number;
+      processedChapters?: number;
+      completedJobs?: number;
+    }
   | { type: "CHAPTER_STARTED"; chapterId: string; totalImages: number; fromCache: boolean }
   | { type: "CHAPTER_PROGRESS"; downloadedImages: number; totalImages: number }
   | { type: "CHAPTER_FINISHED" }
@@ -157,6 +164,7 @@ export function progressReducer(state: ProgressState, action: ProgressAction): P
         totalChapters: action.totalChapters,
         totalJobs: action.totalJobs,
         processedChapters: action.processedChapters ?? state.processedChapters,
+        completedJobs: action.completedJobs ?? state.completedJobs,
       };
 
     case "CHAPTER_STARTED":
@@ -284,23 +292,29 @@ function rememberSnapshot(id: string, snapshot: ConversionSnapshot) {
   }
 }
 
-// ── Deriva stages a partir do ProgressState + apiJobs ─────────────────────────
+// ── Deriva stages a partir do ProgressState + apiJobs + conversionStatus ─────────
 export function deriveStages(
   progress: ProgressState,
   apiJobs: { status: string }[],
   downloadOnly: boolean,
+  conversionStatus?: string,
 ): StageInfo[] {
+  const isOverallDone = conversionStatus === "completed" || conversionStatus === "partial";
   const allDone =
-    apiJobs.length > 0 &&
-    apiJobs.every((j) => ["completed", "failed", "cancelled"].includes(j.status));
+    isOverallDone ||
+    (apiJobs.length > 0 &&
+      apiJobs.every((j) => ["completed", "failed", "cancelled"].includes(j.status)));
 
   // ── Download ─────────────────────────────────────────────────────────
   const downloadDone =
-    allDone || (progress.totalChapters > 0 && progress.processedChapters >= progress.totalChapters);
+    isOverallDone ||
+    allDone ||
+    (progress.totalChapters > 0 && progress.processedChapters >= progress.totalChapters);
   const downloadActive =
     !downloadDone && (progress.processedChapters > 0 || progress.currentChapter !== null);
-  const downloadProgress =
-    progress.totalChapters > 0
+  const downloadProgress = downloadDone
+    ? 100
+    : progress.totalChapters > 0
       ? Math.round((progress.processedChapters / progress.totalChapters) * 100)
       : 0;
 
@@ -316,10 +330,11 @@ export function deriveStages(
   }
 
   // ── Conversion ───────────────────────────────────────────────────────
-  const conversionDone = allDone;
+  const conversionDone = isOverallDone || allDone;
   const conversionActive = progress.conversionActive && !conversionDone;
-  const conversionProgress =
-    progress.totalJobs > 0
+  const conversionProgress = conversionDone
+    ? 100
+    : progress.totalJobs > 0
       ? Math.min(
           100,
           Math.round(
@@ -486,7 +501,11 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   const [error, setError] = useState<string | null>(null);
   const [isCancelled, setIsCancelled] = useState(false);
   const sseRef = useRef<{ close: () => void } | null>(null);
-
+  // Reconexão do SSE (espelha useLiveConversionProgress): backoff 1s→15s.
+  // O replay integral do journal no resubscribe é seguro pelos gates de
+  // dedupe (seenChapters/seenJobs vivem no closure do efeito).
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
   useEffect(() => {
     logsRef.current = progress.logs;
   }, [progress.logs]);
@@ -494,6 +513,10 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   const closeSSE = useCallback(() => {
     sseRef.current?.close();
     sseRef.current = null;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
   }, []);
 
   /**
@@ -593,6 +616,13 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
   useEffect(() => {
     if (!conversionId) return;
     let cancelled = false;
+    reconnectAttemptRef.current = 0;
+    // Dedupe idempotente por capítulo/job dentro desta assinatura (espelha
+    // useLiveConversionProgress): o connect SSE sempre recebe replay integral
+    // do journal, então remontar a página (ou trocar e voltar de conversão)
+    // re-entregaria eventos já contabilizados no snapshot restaurado.
+    const seenChapters = new Set<string>();
+    const seenJobs = new Set<string>();
 
     async function load() {
       setIsLoading(true);
@@ -656,12 +686,15 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
               return sum + (book?.chapters?.length ?? 0);
             }, 0)
         : undefined;
-
       dispatch({
         type: "SET_TOTALS",
         totalChapters,
         totalJobs,
-        processedChapters: initialProcessed,
+        // Snapshot restaurado + replay integral do SSE contaria em dobro:
+        // no hit não-terminal os contadores recomeçam do zero e o replay
+        // reconstrói o valor exato (overall recalcula do zero junto).
+        processedChapters: initialProcessed ?? (cached ? 0 : undefined),
+        completedJobs: cached && initialProcessed === undefined ? 0 : undefined,
       });
 
       // Aplica o journal: no miss, logs + problemas juntos no primeiro paint;
@@ -707,287 +740,345 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
         }
       })();
 
-      const sse = conversionsApi.events(conversionId, {
-        onEvent(event, rawData) {
-          const data = rawData as Record<string, unknown>;
-          const chapterId = data.chapterId as string | undefined;
-          const fromCache = (data.fromCache as boolean) ?? false;
+      // Reconexão com backoff 1s→15s (espelha o live hook): o stream caiu
+      // sem estado terminal — o replay do journal no resubscribe recupera o
+      // que foi perdido. Não reconecta após terminal nem após cleanup.
+      const scheduleReconnect = () => {
+        if (cancelled) return;
+        const current = apiStateRef.current;
+        if (current && isTerminal(current.status)) return;
+        if (reconnectTimerRef.current) return;
+        const delay = Math.min(1_000 * 2 ** Math.min(reconnectAttemptRef.current, 4), 15_000);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (cancelled) return;
+          const cur = apiStateRef.current;
+          if (cur && isTerminal(cur.status)) return;
+          reconnectAttemptRef.current += 1;
+          sseRef.current?.close();
+          sseRef.current = null;
+          subscribe();
+        }, delay);
+      };
 
-          switch (event) {
-            // ── Download events ──────────────────────────────────────
-            case "download.chapter.started":
-              if (chapterId) {
-                dispatch({
-                  type: "CHAPTER_STARTED",
-                  chapterId,
-                  totalImages: (data.totalImages as number) ?? 0,
-                  fromCache,
-                });
-                dispatch({
-                  type: "ADD_LOG",
-                  entry: {
-                    timestamp: now(),
-                    type: toLogType(fromCache),
-                    message: fromCache
-                      ? `${formatChapterId(chapterId)} em cache — pulando download`
-                      : `Baixando ${formatChapterId(chapterId)} (${data.totalImages} imagens)`,
-                  },
-                });
+      const subscribe = () => {
+        const sse = conversionsApi.events(conversionId, {
+          onEvent(event, rawData) {
+            reconnectAttemptRef.current = 0; // stream saudável — zera o backoff
+            const data = rawData as Record<string, unknown>;
+            const chapterId = data.chapterId as string | undefined;
+            const fromCache = (data.fromCache as boolean) ?? false;
+
+            // Evento terminal repetido (replay do journal no connect) — a
+            // primeira ocorrência por id já contabilizou; repetir duplicaria
+            // contadores E linhas de log.
+            if (
+              (event === "download.chapter.finished" ||
+                event === "download.chapter.skipped" ||
+                event === "download.error") &&
+              typeof chapterId === "string" &&
+              chapterId
+            ) {
+              // finished/skipped SELAM o id; error conta mas NÃO sela (espelha
+              // o live hook) — retry bem-sucedido conta normalmente, e replay
+              // de error antigo após finished continua dedupado.
+              if (seenChapters.has(chapterId)) return;
+              if (event !== "download.error") seenChapters.add(chapterId);
+            }
+            if (event === "job.finished" || event === "job.failed") {
+              const eventJobId = data.jobId as string | undefined;
+              if (typeof eventJobId === "string" && eventJobId) {
+                if (seenJobs.has(eventJobId)) return;
+                seenJobs.add(eventJobId);
               }
-              break;
+            }
 
-            case "download.progress":
-              if (chapterId) {
-                dispatch({
-                  type: "CHAPTER_PROGRESS",
-                  downloadedImages: (data.downloadedImages as number) ?? 0,
-                  totalImages: (data.totalImages as number) ?? 0,
-                });
-              }
-              break;
+            switch (event) {
+              // ── Download events ──────────────────────────────────────
+              case "download.chapter.started":
+                if (chapterId) {
+                  dispatch({
+                    type: "CHAPTER_STARTED",
+                    chapterId,
+                    totalImages: (data.totalImages as number) ?? 0,
+                    fromCache,
+                  });
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: toLogType(fromCache),
+                      message: fromCache
+                        ? `${formatChapterId(chapterId)} em cache — pulando download`
+                        : `Baixando ${formatChapterId(chapterId)} (${data.totalImages} imagens)`,
+                    },
+                  });
+                }
+                break;
 
-            case "download.chapter.finished":
-              dispatch({ type: "CHAPTER_FINISHED" });
-              if (chapterId) {
-                dispatch({
-                  type: "ADD_LOG",
-                  entry: {
-                    timestamp: now(),
-                    type: "info",
-                    message: `${formatChapterId(chapterId)} baixado — ${data.downloadedImages ?? "?"}/${data.totalImages ?? "?"} imagens`,
-                  },
-                });
-              }
-              break;
+              case "download.progress":
+                if (chapterId) {
+                  dispatch({
+                    type: "CHAPTER_PROGRESS",
+                    downloadedImages: (data.downloadedImages as number) ?? 0,
+                    totalImages: (data.totalImages as number) ?? 0,
+                  });
+                }
+                break;
 
-            case "download.chapter.skipped":
-              if (chapterId) {
-                dispatch({ type: "CHAPTER_SKIPPED", chapterId });
+              case "download.chapter.finished":
+                dispatch({ type: "CHAPTER_FINISHED" });
+                if (chapterId) {
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "info",
+                      message: `${formatChapterId(chapterId)} baixado — ${data.downloadedImages ?? "?"}/${data.totalImages ?? "?"} imagens`,
+                    },
+                  });
+                }
+                break;
+
+              case "download.chapter.skipped":
+                if (chapterId) {
+                  dispatch({ type: "CHAPTER_SKIPPED", chapterId });
+                  dispatch({
+                    type: "PROBLEM_CHAPTER",
+                    chapterId,
+                    reason: skippedReasonLabel(data.reason as string | undefined),
+                  });
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "warn",
+                      message: `${formatChapterId(chapterId)} indisponível no site — capítulo ignorado`,
+                    },
+                  });
+                }
+                break;
+
+              case "download.image.corrupt":
                 dispatch({
-                  type: "PROBLEM_CHAPTER",
-                  chapterId,
-                  reason: skippedReasonLabel(data.reason as string | undefined),
+                  type: "CORRUPT_PAGE",
+                  chapterId: chapterId ?? "desconhecido",
+                  pageIndex: (data.pageIndex as number) ?? 0,
+                  reason: String(data.reason ?? "Imagem corrompida"),
                 });
                 dispatch({
                   type: "ADD_LOG",
                   entry: {
                     timestamp: now(),
                     type: "warn",
-                    message: `${formatChapterId(chapterId)} indisponível no site — capítulo ignorado`,
+                    message: `${formatChapterId(chapterId ?? "")} pág. ${data.pageIndex} corrompida — ${String(data.reason ?? "desconhecido")}`,
                   },
                 });
-              }
-              break;
+                break;
 
-            case "download.image.corrupt":
-              dispatch({
-                type: "CORRUPT_PAGE",
-                chapterId: chapterId ?? "desconhecido",
-                pageIndex: (data.pageIndex as number) ?? 0,
-                reason: String(data.reason ?? "Imagem corrompida"),
-              });
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "warn",
-                  message: `${formatChapterId(chapterId ?? "")} pág. ${data.pageIndex} corrompida — ${String(data.reason ?? "desconhecido")}`,
-                },
-              });
-              break;
-
-            case "download.error":
-              dispatch({
-                type: "CHAPTER_ERROR",
-                chapterId: chapterId ?? "desconhecido",
-                error: String(data.error ?? "Erro no download"),
-              });
-              if (chapterId) {
+              case "download.error":
                 dispatch({
-                  type: "PROBLEM_CHAPTER",
-                  chapterId,
-                  reason: String(data.error ?? "Erro no download").slice(0, 200),
+                  type: "CHAPTER_ERROR",
+                  chapterId: chapterId ?? "desconhecido",
+                  error: String(data.error ?? "Erro no download"),
                 });
-              }
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "error",
-                  message: `Erro no capítulo ${chapterId ?? "?"}: ${String(data.error ?? "desconhecido")}`,
-                },
-              });
-              break;
-
-            case "job.failed":
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "error",
-                  message: `Job falhou: ${String(data.error ?? "Erro desconhecido")}`,
-                },
-              });
-              break;
-
-            case "conversion.started":
-              dispatch({ type: "CONVERSION_STARTED" });
-              dispatch({ type: "CONVERSION_PROGRESS", progress: 5 });
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "info",
-                  message: `KCC iniciado — ${String(data.deviceId ?? "")} ${String(data.format ?? "")}`,
-                },
-              });
-              break;
-
-            case "conversion.progress":
-              dispatch({
-                type: "CONVERSION_PROGRESS",
-                progress: Math.max(5, Math.min(100, (data.progress as number) ?? 5)),
-              });
-              break;
-
-            case "conversion.finished":
-              dispatch({ type: "CONVERSION_PROGRESS", progress: 100 });
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "info",
-                  message: `KCC concluído — output: ${String(data.outputFile ?? "?")}`,
-                },
-              });
-              break;
-
-            // ── Lifecycle ─────────────────────────────────────────────
-            case "job.started":
-              dispatch({ type: "CONVERSION_PROGRESS", progress: 0 });
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "info",
-                  message: "Iniciando processamento do job…",
-                },
-              });
-              break;
-
-            case "download.started":
-              dispatch({
-                type: "ADD_LOG",
-                entry: {
-                  timestamp: now(),
-                  type: "info",
-                  message: `Iniciando download de ${data.totalChapters ?? "?"} capítulos selecionados…`,
-                },
-              });
-              break;
-
-            case "job.finished":
-              dispatch({ type: "JOB_COMPLETED" });
-              if (data.downloadOnly) {
+                if (chapterId) {
+                  dispatch({
+                    type: "PROBLEM_CHAPTER",
+                    chapterId,
+                    reason: String(data.error ?? "Erro no download").slice(0, 200),
+                  });
+                }
                 dispatch({
                   type: "ADD_LOG",
                   entry: {
                     timestamp: now(),
-                    type: "info",
-                    message: `Download concluído — ${data.successfulChapters ?? "?"} capítulos, ${data.totalImages ?? "?"} imagens`,
+                    type: "error",
+                    message: `Erro no capítulo ${chapterId ?? "?"}: ${String(data.error ?? "desconhecido")}`,
                   },
                 });
-              } else {
-                dispatch({
-                  type: "ADD_LOG",
-                  entry: {
-                    timestamp: now(),
-                    type: "info",
-                    message: `Volume concluído — ${String(data.outputFile ?? "")}${((data.outputSize as number) ?? 0) > 0 ? ` (${((data.outputSize as number) / 1024 / 1024).toFixed(1)} MB)` : ""}`,
-                  },
-                });
-              }
-              break;
-          }
-
-          // Update apiState via setApiState for job-level status
-          setApiState((prev) => {
-            if (!prev) return prev;
-
-            // Guard anti-flicker: estado agregado terminal não regride para
-            // processing (corridas entre eventos otimistas e o refresh
-            // defensivo faziam badges/painéis piscarem).
-            if (isTerminal(prev.status)) return prev;
-
-            const jobId = data.jobId as string | undefined;
-            if (!jobId) return prev;
-
-            const idx = prev.jobs.findIndex((j) => j.jobId === jobId);
-            if (idx === -1) return prev;
-
-            const updatedJobs = [...prev.jobs];
-            const job = { ...updatedJobs[idx] };
-
-            switch (event) {
-              case "job.started":
-                job.status = "preparing";
                 break;
-              case "download.started":
-                job.status = "downloading";
-                break;
-              case "conversion.started":
-                job.status = "converting";
-                break;
-              case "conversion.progress":
-                job.status = "converting";
-                break;
-              case "conversion.finished":
-                job.status = "packaging";
-                break;
-              case "job.finished":
-                job.status = "completed";
-                if (data.outputFile) job.outputFile = data.outputFile as string;
-                if (data.outputSize) job.outputSize = data.outputSize as number;
-                break;
+
               case "job.failed":
-                job.status = "failed";
-                job.error = (data.error as string) ?? "Erro desconhecido";
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "error",
+                    message: `Job falhou: ${String(data.error ?? "Erro desconhecido")}`,
+                  },
+                });
+                break;
+
+              case "conversion.started":
+                dispatch({ type: "CONVERSION_STARTED" });
+                dispatch({ type: "CONVERSION_PROGRESS", progress: 5 });
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: `KCC iniciado — ${String(data.deviceId ?? "")} ${String(data.format ?? "")}`,
+                  },
+                });
+                break;
+
+              case "conversion.progress":
+                dispatch({
+                  type: "CONVERSION_PROGRESS",
+                  progress: Math.max(5, Math.min(100, (data.progress as number) ?? 5)),
+                });
+                break;
+
+              case "conversion.finished":
+                dispatch({ type: "CONVERSION_PROGRESS", progress: 100 });
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: `KCC concluído — output: ${String(data.outputFile ?? "?")}`,
+                  },
+                });
+                break;
+
+              // ── Lifecycle ─────────────────────────────────────────────
+              case "job.started":
+                dispatch({ type: "CONVERSION_PROGRESS", progress: 0 });
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: "Iniciando processamento do job…",
+                  },
+                });
+                break;
+
+              case "download.started":
+                dispatch({
+                  type: "ADD_LOG",
+                  entry: {
+                    timestamp: now(),
+                    type: "info",
+                    message: `Iniciando download de ${data.totalChapters ?? "?"} capítulos selecionados…`,
+                  },
+                });
+                break;
+
+              case "job.finished":
+                dispatch({ type: "JOB_COMPLETED" });
+                if (data.downloadOnly) {
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "info",
+                      message: `Download concluído — ${data.successfulChapters ?? "?"} capítulos, ${data.totalImages ?? "?"} imagens`,
+                    },
+                  });
+                } else {
+                  dispatch({
+                    type: "ADD_LOG",
+                    entry: {
+                      timestamp: now(),
+                      type: "info",
+                      message: `Volume concluído — ${String(data.outputFile ?? "")}${((data.outputSize as number) ?? 0) > 0 ? ` (${((data.outputSize as number) / 1024 / 1024).toFixed(1)} MB)` : ""}`,
+                    },
+                  });
+                }
                 break;
             }
 
-            updatedJobs[idx] = job;
+            // Update apiState via setApiState for job-level status
+            setApiState((prev) => {
+              if (!prev) return prev;
 
-            const allDone = allJobsTerminal(updatedJobs);
-            const hasFailure = updatedJobs.some((j) => j.status === "failed");
-            const hasSuccess = updatedJobs.some((j) => j.status === "completed");
+              // Guard anti-flicker: estado agregado terminal não regride para
+              // processing (corridas entre eventos otimistas e o refresh
+              // defensivo faziam badges/painéis piscarem).
+              if (isTerminal(prev.status)) return prev;
 
-            let newStatus = prev.status;
-            if (allDone) {
-              if (hasFailure && hasSuccess) newStatus = "partial";
-              else if (hasFailure) newStatus = "failed";
-              else newStatus = "completed";
-            } else {
-              newStatus = "processing";
-            }
+              const jobId = data.jobId as string | undefined;
+              if (!jobId) return prev;
 
-            return { ...prev, jobs: updatedJobs, status: newStatus };
-          });
+              const idx = prev.jobs.findIndex((j) => j.jobId === jobId);
+              if (idx === -1) return prev;
 
-          // A sincronização de término (fechar SSE, invalidar listagens,
-          // replay do journal) acontece no efeito dedicado — updaters do
-          // setState devem ser puros.
-        },
+              const updatedJobs = [...prev.jobs];
+              const job = { ...updatedJobs[idx] };
 
-        onError(err) {
-          setError(err.message);
-          dispatch({
-            type: "ADD_LOG",
-            entry: { timestamp: now(), type: "error", message: `SSE erro: ${err.message}` },
-          });
-        },
-      });
+              switch (event) {
+                case "job.started":
+                  job.status = "preparing";
+                  break;
+                case "download.started":
+                  job.status = "downloading";
+                  break;
+                case "conversion.started":
+                  job.status = "converting";
+                  break;
+                case "conversion.progress":
+                  job.status = "converting";
+                  break;
+                case "conversion.finished":
+                  job.status = "packaging";
+                  break;
+                case "job.finished":
+                  job.status = "completed";
+                  if (data.outputFile) job.outputFile = data.outputFile as string;
+                  if (data.outputSize) job.outputSize = data.outputSize as number;
+                  break;
+                case "job.failed":
+                  job.status = "failed";
+                  job.error = (data.error as string) ?? "Erro desconhecido";
+                  break;
+              }
 
-      sseRef.current = sse;
+              updatedJobs[idx] = job;
+
+              const allDone = allJobsTerminal(updatedJobs);
+              const hasFailure = updatedJobs.some((j) => j.status === "failed");
+              const hasSuccess = updatedJobs.some((j) => j.status === "completed");
+
+              let newStatus = prev.status;
+              if (allDone) {
+                if (hasFailure && hasSuccess) newStatus = "partial";
+                else if (hasFailure) newStatus = "failed";
+                else newStatus = "completed";
+              } else {
+                newStatus = "processing";
+              }
+
+              return { ...prev, jobs: updatedJobs, status: newStatus };
+            });
+
+            // A sincronização de término (fechar SSE, invalidar listagens,
+            // replay do journal) acontece no efeito dedicado — updaters do
+            // setState devem ser puros.
+          },
+
+          onError(err) {
+            setError(err.message);
+            dispatch({
+              type: "ADD_LOG",
+              entry: { timestamp: now(), type: "error", message: `SSE erro: ${err.message}` },
+            });
+          },
+
+          onEnd(info) {
+            // 401/404 não são transitórios — sem backoff (espelha o live hook).
+            if (info?.status === 401 || info?.status === 404) return;
+            // Stream caiu sem estado terminal — agenda reconnect com backoff;
+            // o replay do journal no resubscribe recupera o perdido.
+            scheduleReconnect();
+          },
+        });
+
+        sseRef.current = sse;
+      };
+
+      subscribe();
     }
 
     load();
@@ -1023,47 +1114,28 @@ export function useConversionProgress(conversionId: string): UseConversionProgre
 
   // ── Derived values ───────────────────────────────────────────────────────
   const downloadOnly = (apiState?.config as Record<string, unknown>)?.downloadOnly === true;
-  const stages = deriveStages(progress, apiState?.jobs ?? [], downloadOnly);
-
-  // Aggregated conversion progress (same formula as deriveStages)
-  const aggregatedConversion =
-    progress.totalJobs > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (progress.completedJobs * 100) / progress.totalJobs +
-              progress.currentJobConversionProgress / progress.totalJobs,
-          ),
-        )
-      : progress.conversionActive
-        ? progress.currentJobConversionProgress
-        : 0;
+  const stages = deriveStages(progress, apiState?.jobs ?? [], downloadOnly, apiState?.status);
 
   const overallProgress = useMemo(() => {
     if (apiState && isTerminal(apiState.status)) return 100;
 
-    if (downloadOnly) {
-      const raw =
-        progress.totalChapters > 0
-          ? Math.round((progress.processedChapters / progress.totalChapters) * 100)
-          : 0;
-      overallProgressRef.current = Math.max(overallProgressRef.current, raw);
-      return overallProgressRef.current;
-    }
-
-    const raw =
-      progress.totalChapters > 0
-        ? Math.round(
-            (progress.processedChapters / progress.totalChapters) * 50 + aggregatedConversion * 0.5,
-          )
-        : 0;
+    const raw = computeConversionOverall({
+      processedChapters: progress.processedChapters,
+      totalChapters: progress.totalChapters,
+      completedJobs: progress.completedJobs,
+      totalJobs: progress.totalJobs,
+      kccProgress: progress.currentJobConversionProgress,
+      downloadOnly,
+    });
     overallProgressRef.current = Math.max(overallProgressRef.current, raw);
     return overallProgressRef.current;
   }, [
     apiState?.status,
     progress.processedChapters,
     progress.totalChapters,
-    aggregatedConversion,
+    progress.completedJobs,
+    progress.totalJobs,
+    progress.currentJobConversionProgress,
     downloadOnly,
   ]);
 

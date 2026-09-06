@@ -12,6 +12,11 @@ import {
   KccExecutionError,
   DownloadFailedError,
   ForbiddenError,
+  ListingNotSupportedError,
+  UserPresetNotFoundError,
+  DuplicatePresetNameError,
+  PresetLimitReachedError,
+  WorkerFailedError,
 } from '../../errors/conversion.errors'
 
 describe('Conversion Errors', () => {
@@ -41,6 +46,11 @@ describe('Conversion Errors', () => {
     expect(err.name).toBe('InvalidConversionStateError')
     expect(err.code).toBe('INVALID_CONVERSION_STATE')
     expect(err.message).toContain('status "completed"')
+
+    const customErr = new InvalidConversionStateError('Mensagem customizada de erro')
+    expect(customErr.name).toBe('InvalidConversionStateError')
+    expect(customErr.code).toBe('INVALID_CONVERSION_STATE')
+    expect(customErr.message).toBe('Mensagem customizada de erro')
   })
 
   it('JobNotFoundError', () => {
@@ -98,6 +108,45 @@ describe('Conversion Errors', () => {
 
   it('ForbiddenError deve estender ConversionError', () => {
     expect(new ForbiddenError('x')).toBeInstanceOf(ConversionError)
+  })
+
+  it('ListingNotSupportedError', () => {
+    const err = new ListingNotSupportedError()
+    expect(err).toBeInstanceOf(ConversionError)
+    expect(err.name).toBe('ListingNotSupportedError')
+    expect(err.code).toBe('LISTING_REQUIRES_PRISMA')
+  })
+
+  it('UserPresetNotFoundError', () => {
+    const err = new UserPresetNotFoundError('preset_123')
+    expect(err).toBeInstanceOf(ConversionError)
+    expect(err.name).toBe('UserPresetNotFoundError')
+    expect(err.code).toBe('PRESET_NOT_FOUND')
+    expect(err.message).toContain('preset_123')
+  })
+
+  it('DuplicatePresetNameError', () => {
+    const err = new DuplicatePresetNameError('Meu preset')
+    expect(err).toBeInstanceOf(ConversionError)
+    expect(err.name).toBe('DuplicatePresetNameError')
+    expect(err.code).toBe('DUPLICATE_PRESET_NAME')
+    expect(err.message).toContain('Meu preset')
+  })
+
+  it('PresetLimitReachedError', () => {
+    const err = new PresetLimitReachedError(10)
+    expect(err).toBeInstanceOf(ConversionError)
+    expect(err.name).toBe('PresetLimitReachedError')
+    expect(err.code).toBe('PRESET_LIMIT_REACHED')
+    expect(err.message).toContain('10')
+  })
+
+  it('WorkerFailedError', () => {
+    const err = new WorkerFailedError('job_123', 'boom')
+    expect(err).toBeInstanceOf(ConversionError)
+    expect(err.name).toBe('WorkerFailedError')
+    expect(err.code).toBe('WORKER_FAILED')
+    expect(err.message).toContain('job_123')
   })
 
   it('todos os erros devem estender ConversionError', () => {

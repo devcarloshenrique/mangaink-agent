@@ -10,16 +10,19 @@
 │  users   ├─────────┤    conversions     ├─────────┤   sources   │
 │ usuário  │         │ pedido de conversão│ (soft)  │ obra no site│
 └────┬─────┘         └─────────┬──────────┘         └──────┬──────┘
-     │ 1                       │ 1
-     │                         │ N
-     │ N              ┌────────┴──────────┐
-┌────┴──────────────┐│  conversion_jobs  │
-│   notifications   ││ job de um volume  │
-│ atividade em bg   │└───────────────────┘
-├───────────────────┤
-│ user_presets      │ N──1 → users
-├───────────────────┤
-│user_chapter_progress│ N──1 → users, sources, chapters
+     │ 1                       │ 1                         │ 1
+     │                         │ N                         │
+     │ N              ┌────────┴──────────┐                │
+┌────┴──────────────┐│  conversion_jobs  │                │
+│   notifications   ││ job de um volume  │                │
+│ atividade em bg   │└───────────────────┘                │
+├───────────────────┤                                      │
+│ user_presets      │ N──1 → users                         │
+├───────────────────┤                                      │
+│user_chapter_progress│ N──1 → users, sources, chapters    │
+├───────────────────┤                                      │
+│   user_library    │ N──1 → users, 1──N → sources ────────┘
+│ mangás da estante │
 └───────────────────┘
 ```
 
@@ -39,6 +42,9 @@ Cópia local dos metadados da obra raspada do site de origem (`sourceId`
 determinístico via SHA-256 da URL). As imagens baixadas vivem no filesystem,
 não no banco. Em `chapters`, a coluna `unavailable_reason` (VARCHAR(255) nullable)
 registra quando um capítulo não pôde ser obtido da fonte (ex: sem imagens ou páginas corrompidas).
+Em `covers`, a coluna `user_id` (UUID nullable, FK → users, CASCADE) registra o
+dono do upload; o DELETE de capa retorna 404 para outro usuário. NULL = linha
+legada, tratada como global no delete.
 
 ### `conversions` / `conversion_jobs`
 
@@ -88,10 +94,33 @@ empate de `created_at` pode manter alguns registros extras — inofensivo.
 - `(user_id, created_at DESC)` — listagem do sino.
 - `(user_id, read_at)` — contagem de não lidas.
 
-### `user_presets` / `user_chapter_progress`
+### `user_presets` / `user_chapter_progress` / `user_library`
 
 Presets de opções de conversão por usuário; progresso de leitura por capítulo
 (únicos por `(user, source, chapter)`).
+
+### `user_library` (UserLibrary)
+
+Coleção pessoal / estante de mangás do usuário. Representa as obras salvas na
+biblioteca do usuário e seu status de favorito (`is_favorite`).
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID pk | gerado pelo banco (`gen_random_uuid()`) |
+| `user_id` | UUID, FK → users | dono da biblioteca; CASCADE ao deletar usuário |
+| `source_id` | VARCHAR(255), FK → sources | referência para a obra; CASCADE ao deletar source |
+| `is_favorite` | BOOLEAN | flag de favorito (default `false`) |
+| `created_at` | TIMESTAMPTZ | data de adição à biblioteca |
+| `updated_at` | TIMESTAMPTZ | timestamp da última alteração (ordenação da biblioteca) |
+
+**Relações**:
+- `user` → N──1 com `User` (`onDelete: Cascade`)
+- `source` → N──1 com `Source` (`onDelete: Cascade`)
+
+**Índices & Restrições**:
+- `@@unique([userId, sourceId])` — garante uma única entrada por usuário e obra
+- `@@index([userId, updatedAt(sort: Desc)])` — listagem da biblioteca ordenada por atividade recente
+- `@@index([userId, isFavorite])` — filtragem rápida de favoritos do usuário
 
 ## Fluxo Completo da Aplicação no Banco
 

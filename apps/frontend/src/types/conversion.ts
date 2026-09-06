@@ -55,6 +55,8 @@ export type CoverRef =
 export interface Book {
   title: string;
   chapters: string[]; // IDs dos capítulos
+  /** Capa específica deste Book; se omitido, herda a capa global. */
+  cover?: CoverRef;
 }
 
 /** Status individual de um Job dentro de uma Conversion */
@@ -165,13 +167,15 @@ export interface CreateConversionBody {
   errorHandlingStrategy?: "ignore" | "skip_chapter" | "abort";
 }
 
-/** Tipos de eventos SSE de conversão */
+/** Tipos de eventos SSE de conversão (espelha o fio do backend — conversion.types.ts) */
 export type ConversionSSEEventType =
   | "job.started"
   | "download.started"
   | "download.progress"
   | "download.chapter.started"
-  | "download.chapter.done"
+  | "download.chapter.finished"
+  | "download.chapter.skipped"
+  | "download.error"
   | "download.finished"
   | "download.image.corrupt"
   | "conversion.started"

@@ -101,7 +101,7 @@ export function NewChapters() {
       {/* Prateleira com rolagem horizontal suave */}
       <div
         ref={scrollerRef}
-        className="flex snap-x gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x gap-4 overflow-x-auto scroll-smooth pt-2 pb-3 -mt-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {newChapters.map((c) => (
           <ChapterPoster key={`${c.series}-${c.chapter}`} item={c} />
