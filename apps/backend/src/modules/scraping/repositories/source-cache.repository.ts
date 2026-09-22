@@ -14,8 +14,15 @@ export interface SourceCacheRepository {
   /** Carrega o metadata.json completo (com campos de cache). Retorna null se não existir. */
   load(sourceId: string): Promise<SourceMetadataFile | null>
 
-  /** Persiste o metadata.json completo (substituição total). Cria diretórios se necessário. */
+  /** Persiste o metadata.json completo (fusão por união: nunca apaga ausentes). Cria diretórios se necessário. */
   save(sourceId: string, data: SourceMetadataFile): Promise<void>
+
+  /**
+   * Remove capítulos ausentes de um inspect comprovadamente completo.
+   * Nunca chamado por default no `save()` — só quando a extração provou
+   * completude (ex. total da fonte confere). Retorna removidos.
+   */
+  pruneMissingChapters?(sourceId: string, keepChapterIds: string[]): Promise<number>
 
   /** Atualiza apenas campos específicos do objeto cache sem reescrever tudo. */
   update(sourceId: string, patch: Partial<MetadataCache>): Promise<void>

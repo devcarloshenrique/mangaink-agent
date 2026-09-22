@@ -117,7 +117,7 @@ describe('PrismaSourceRepository', () => {
       expect(loaded!.covers[0].imageUrl).toBe('https://example.com/covers/cover1.jpg')
     })
 
-    it('deve remover chapters e covers que desapareceram no re-save', async () => {
+    it('deve preservar chapters e covers existentes quando o re-save vier parcial (fusão por união)', async () => {
       const data = makeSourcePayload('src-test-resave')
       await repository.save('src-test-resave', data)
 
@@ -125,12 +125,25 @@ describe('PrismaSourceRepository', () => {
       await repository.save('src-test-resave', modified)
 
       const loaded = await repository.load('src-test-resave')
-      expect(loaded!.chapters).toHaveLength(1)
-      expect(loaded!.chapters[0].id).toBe('ch_test_001')
-      expect(loaded!.covers).toHaveLength(0)
+      expect(loaded!.chapters).toHaveLength(2)
+      expect(loaded!.chapters.map((c) => c.id).sort()).toEqual(['ch_test_001', 'ch_test_002'])
+      expect(loaded!.covers).toHaveLength(1)
+      expect(loaded!.covers[0].id).toBe('cv_test_001')
     })
 
-    it('deve proteger capas personalizadas (type="upload") contra deleção ao re-salvar', async () => {
+    it('deve remover chapters ausentes somente via pruneMissingChapters (completude comprovada)', async () => {
+      const data = makeSourcePayload('src-test-prune')
+      await repository.save('src-test-prune', data)
+
+      const removed = await repository.pruneMissingChapters('src-test-prune', [data.chapters[0].id])
+      expect(removed).toBe(1)
+
+      const loaded = await repository.load('src-test-prune')
+      expect(loaded!.chapters).toHaveLength(1)
+      expect(loaded!.chapters[0].id).toBe('ch_test_001')
+    })
+
+    it('deve preservar capas de scraping e upload ao re-salvar (fusão por união)', async () => {
       const data = makeSourcePayload('src-test-protect-upload')
       await repository.save('src-test-protect-upload', data)
 
@@ -155,7 +168,7 @@ describe('PrismaSourceRepository', () => {
       await repository.save('src-test-protect-upload', modified)
 
       const loaded = await repository.load('src-test-protect-upload')
-      expect(loaded!.covers).toHaveLength(2)
+      expect(loaded!.covers).toHaveLength(3)
 
       const uploadCover = loaded!.covers.find((c) => c.id === 'up_custom_123')
       expect(uploadCover).toBeDefined()
@@ -166,11 +179,11 @@ describe('PrismaSourceRepository', () => {
       expect(originalCover).toBeDefined()
       expect(originalCover!.type).toBe('original')
 
-      // cv_test_001 original deve ter sido removida
-      expect(loaded!.covers.find((c) => c.id === 'cv_test_001')).toBeUndefined()
+      // cv_test_001 original deve ser preservada (fusão por união, sem deleteMany no save)
+      expect(loaded!.covers.find((c) => c.id === 'cv_test_001')).toBeDefined()
     })
 
-    it('deve proteger capas de upload mesmo se a lista de covers enviada no re-save for vazia', async () => {
+    it('deve preservar capas de scraping e upload mesmo se a lista de covers enviada no re-save for vazia', async () => {
       const data = makeSourcePayload('src-test-protect-upload-empty')
       await repository.save('src-test-protect-upload-empty', data)
 
@@ -189,9 +202,9 @@ describe('PrismaSourceRepository', () => {
       await repository.save('src-test-protect-upload-empty', modified)
 
       const loaded = await repository.load('src-test-protect-upload-empty')
-      expect(loaded!.covers).toHaveLength(1)
-      expect(loaded!.covers[0].id).toBe('up_custom_456')
-      expect(loaded!.covers[0].type).toBe('upload')
+      expect(loaded!.covers).toHaveLength(2)
+      expect(loaded!.covers.map((c) => c.id).sort()).toEqual(['cv_test_001', 'up_custom_456'])
+      expect(loaded!.covers.find((c) => c.id === 'up_custom_456')!.type).toBe('upload')
     })
 
     it('deve salvar e carregar 35 chapters sem perda (regressao createMany)', async () => {

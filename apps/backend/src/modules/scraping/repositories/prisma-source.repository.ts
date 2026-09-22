@@ -87,9 +87,6 @@ export class PrismaSourceRepository implements SourceCacheRepository {
       new Date(data.cache.updatedAt).getTime() + data.cache.cacheTtlHours * 60 * 60 * 1000,
     )
 
-    const newChapterIds = data.chapters.map((c) => c.id)
-    const newCoverIds = data.covers.map((c) => c.id)
-
     const sourceCreate = {
       sourceId,
       url: data.source.url,
@@ -113,33 +110,13 @@ export class PrismaSourceRepository implements SourceCacheRepository {
           update: sourceCreate,
         })
 
-        if (newChapterIds.length > 0) {
-          await tx.chapter.deleteMany({
-            where: {
-              sourceId,
-              chapterId: { notIn: newChapterIds },
-            },
-          })
-        } else {
-          await tx.chapter.deleteMany({ where: { sourceId } })
-        }
-
-        if (newCoverIds.length > 0) {
-          await tx.cover.deleteMany({
-            where: {
-              sourceId,
-              coverId: { notIn: newCoverIds },
-              type: { not: 'upload' }, // Não apaga as capas personalizadas do usuário!
-            },
-          })
-        } else {
-          await tx.cover.deleteMany({
-            where: {
-              sourceId,
-              type: { not: 'upload' }, // Não apaga as capas personalizadas do usuário!
-            },
-          })
-        }
+        // Fusão por união: capítulos e capas vindos no inspect fazem `upsert`;
+        // os ausentes NUNCA são apagados por default — um re-inspect parcial
+        // (timeout, paginação truncada) não pode congelar o catálogo num
+        // número menor nem sumir com capas já conhecidas. Capas `upload`
+        // (personalizadas do usuário) seguem intactas pelo mesmo motivo.
+        // Deleção explícita só via `pruneMissingChapters(sourceId,
+        // keepChapterIds)` após extração com completude comprovada.
 
         for (const ch of data.chapters) {
           await tx.chapter.upsert({
@@ -201,6 +178,19 @@ export class PrismaSourceRepository implements SourceCacheRepository {
         maxWait: 10_000,
       },
     )
+  }
+
+  /**
+   * Remove capítulos ausentes de um inspect comprovadamente completo (ex. o
+   * total da fonte confere com `statistics.chapters` esperado). Nunca chamar
+   * por default no `save()` — só quando a extração provou completude.
+   */
+  async pruneMissingChapters(sourceId: string, keepChapterIds: string[]): Promise<number> {
+    if (keepChapterIds.length === 0) return 0
+    const result = await getPrisma().chapter.deleteMany({
+      where: { sourceId, chapterId: { notIn: keepChapterIds } },
+    })
+    return result.count
   }
 
   async update(sourceId: string, patch: Partial<MetadataCache>): Promise<void> {
