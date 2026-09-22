@@ -6,6 +6,7 @@ import { createInspectSourceController } from './controllers/inspect-source.cont
 import { getSource } from './controllers/preview-source.controller'
 import { createSourceEventsController } from './controllers/source-events.controller'
 import { listProviders, updateProvider } from './controllers/providers.controller'
+import { searchSources } from './controllers/search-sources.controller'
 import { inspectSourceBodySchema, inspectSourceQuerySchema } from './dtos/inspect-source.dto'
 import { sourceParamsSchema } from './dtos/preview-source.dto'
 import {
@@ -14,6 +15,10 @@ import {
   providerResponseSchema,
   updateProviderBodySchema,
 } from './dtos/provider.dto'
+import {
+  searchSourcesQuerySchema,
+  searchSourcesResponseSchema,
+} from './dtos/search-sources.dto'
 import { verifyJwtOptional } from '../../shared/middlewares/verify-jwt-optional'
 import { verifyJwt } from '../../shared/middlewares/verify-jwt'
 import { requireRole } from '../../shared/middlewares/require-role'
@@ -22,10 +27,13 @@ interface ScrapingRoutesOptions {
   runtime?: RuntimeAdapters
 }
 
-// Rate limit do POST /inspect: por usuário autenticado (ou IP, se ausente).
-// Escopo apenas desta rota (global: false).
+// Rate limit por rota: POST /inspect e GET /search. keyGenerator usa o usuário
+// autenticado (sub) quando presente, senão o IP.
+// Escopo apenas destas rotas (global: false).
 const INSPECT_RATE_LIMIT_MAX = 10
 const INSPECT_RATE_LIMIT_WINDOW = '1 minute'
+const SEARCH_RATE_LIMIT_MAX = 20
+const SEARCH_RATE_LIMIT_WINDOW = '1 minute'
 
 const sourceStateSchema = z.object({
   sourceId: z.string(),
@@ -82,7 +90,7 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
   const inspectSource = createInspectSourceController(opts.runtime)
   const sourceEvents = createSourceEventsController(opts.runtime)
 
-  // Rate limit por rota: apenas POST /inspect. keyGenerator usa o usuário
+  // Rate limit por rota: POST /inspect e GET /search. keyGenerator usa o usuário
   // autenticado (sub) quando presente, senão o IP.
   await app.register(rateLimit, {
     global: false,
@@ -167,6 +175,35 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
     getSource,
   )
 
+  // GET /api/conversions/source/search (pública — busca por título não expõe dado sensível;
+  // com rate limit por usuário/IP)
+  app.get(
+    '/api/conversions/source/search',
+    {
+      config: {
+        rateLimit: {
+          max: SEARCH_RATE_LIMIT_MAX,
+          timeWindow: SEARCH_RATE_LIMIT_WINDOW,
+        },
+      },
+      schema: {
+        tags: ['Scraping'],
+        summary: 'Busca obras em todos os providers',
+        description:
+          'Fan-out síncrono da busca por título nos providers ativos (default: 10). ' +
+          'Retorna 200 com resultados agrupáveis por provider; falhas parciais vão em `errors`. ' +
+          'Rota pública sujeita a rate limit por usuário/IP.',
+        querystring: searchSourcesQuerySchema,
+        response: {
+          200: searchSourcesResponseSchema,
+          400: z.object({ error: z.string() }),
+          429: z.object({ error: z.string() }),
+        },
+      },
+    },
+    searchSources,
+  )
+
   // GET /api/conversions/source/providers
   app.get(
     '/api/conversions/source/providers',
@@ -176,7 +213,7 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
         summary: 'Lista providers disponíveis',
         description:
           'Retorna todos os providers de scraping disponíveis, seus slugs, ' +
-          'motores (cheerio, api, playwright), status, URLs e rate limits. ' +
+          'motores (cheerio, api, playwright), status, homepage, tags e rate limits. ' +
           '`allowedDomains` não é exposto (SSRF protection é interna).',
         response: {
           200: listProvidersResponseSchema,
@@ -195,7 +232,7 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
         tags: ['Scraping'],
         summary: 'Atualiza um provider',
         description:
-          'Atualiza campos parciais de um provider (status, metadados, tags e ' +
+          'Atualiza campos parciais de um provider (status, homepage, tags e ' +
           'rate limit). Persiste no banco e propaga a nova config de rate limit ' +
           'para o resolver de providers.',
         security: [{ bearerAuth: [] }],

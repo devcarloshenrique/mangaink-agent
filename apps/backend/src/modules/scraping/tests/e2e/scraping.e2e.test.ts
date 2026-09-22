@@ -86,10 +86,7 @@ const mockProviderRepo = vi.hoisted(() => {
     engine: 'cheerio',
     tags: [],
     status: 'active',
-    description: null,
-    urlExample: null,
     homepage: null,
-    searchUrl: null,
     rateLimitMaxConcurrent: 6,
     rateLimitMinTime: 50,
     rateLimitReservoir: null,
@@ -107,13 +104,9 @@ const mockProviderRepo = vi.hoisted(() => {
         slug: 'mangalivre',
         name: 'Manga Livre',
         engine: 'cheerio',
-        tags: ['mangÃ¡', 'portuguÃªs'],
+        tags: ['mangá', 'pt-BR'],
         status: 'active',
-        description:
-          'Acervo de mangÃ¡s em portuguÃªs com leitura online. Requer scraping de HTML (cheerio).',
-        urlExample: 'https://mangalivre.to/manga/hunter-x-hunter/',
         homepage: 'https://mangalivre.to',
-        searchUrl: 'https://mangalivre.to/busca/?search=',
         rateLimitMaxConcurrent: 10,
         rateLimitMinTime: 0,
       }),
@@ -135,7 +128,7 @@ const mockProviderRepo = vi.hoisted(() => {
         slug: 'mangasbrasuka',
         name: 'Mangas Brasukas',
         engine: 'api',
-        tags: ['mangÃ¡', 'manhwa', 'manhua', 'portuguÃªs'],
+        tags: ['mangá', 'manhwa', 'manhua', 'pt-BR'],
         status: 'active',
         rateLimitMaxConcurrent: 3,
         rateLimitMinTime: 200,
@@ -189,7 +182,8 @@ vi.mock('../../../../shared/infra/redis', async () => {
 
 import { createServer } from '../../../../shared/server'
 import type { FastifyInstance } from 'fastify'
-import { resetProviderResolver } from '../../utils/resolve-provider'
+import { resetProviderResolver, getProviderResolver } from '../../utils/resolve-provider'
+import { __resetSearchCacheForTests } from '../../use-cases/search-sources.use-case'
 import { JWT_AUDIENCE, JWT_ISSUER } from '../../../auth/services/token.service'
 import { randomUUID } from 'node:crypto'
 
@@ -450,10 +444,7 @@ describe('Scraping E2E', () => {
         expect(provider).toHaveProperty('engine')
         expect(provider).toHaveProperty('tags')
         expect(provider).toHaveProperty('status')
-        expect(provider).toHaveProperty('description')
-        expect(provider).toHaveProperty('urlExample')
         expect(provider).toHaveProperty('homepage')
-        expect(provider).toHaveProperty('searchUrl')
         expect(provider).toHaveProperty('rateLimit')
         expect(provider.rateLimit).toHaveProperty('maxConcurrent')
         expect(provider.rateLimit).toHaveProperty('minTime')
@@ -463,12 +454,7 @@ describe('Scraping E2E', () => {
       }
 
       const mangalivre = body.providers.find((p: { slug: string }) => p.slug === 'mangalivre')
-      expect(mangalivre.description).toBe(
-        'Acervo de mangÃ¡s em portuguÃªs com leitura online. Requer scraping de HTML (cheerio).',
-      )
-      expect(mangalivre.urlExample).toBe('https://mangalivre.to/manga/hunter-x-hunter/')
       expect(mangalivre.homepage).toBe('https://mangalivre.to')
-      expect(mangalivre.searchUrl).toBe('https://mangalivre.to/busca/?search=')
       expect(mangalivre.rateLimit).toEqual({ maxConcurrent: 10, minTime: 0, reservoir: null, reservoirRefreshInterval: null })
     })
   })
@@ -518,7 +504,6 @@ describe('Scraping E2E', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           status: 'slow',
-          description: 'Provider em teste',
           rateLimit: { maxConcurrent: 1, minTime: 500 },
         },
       })
@@ -527,7 +512,6 @@ describe('Scraping E2E', () => {
       const body = response.json()
       expect(body.slug).toBe('mangalivre')
       expect(body.status).toBe('slow')
-      expect(body.description).toBe('Provider em teste')
       expect(body.rateLimit.maxConcurrent).toBe(1)
       expect(body.rateLimit.minTime).toBe(500)
 
@@ -549,6 +533,126 @@ describe('Scraping E2E', () => {
       })
 
       expect(response.statusCode).toBe(400)
+    })
+  })
+
+  describe('GET /api/conversions/source/search', () => {
+    beforeEach(() => {
+      __resetSearchCacheForTests()
+    })
+
+    it('deve retornar 400 quando query string "q" não for informada', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search',
+      })
+
+      expect(response.statusCode).toBe(400)
+    })
+
+    it('deve retornar 400 quando "q" tiver menos de 2 caracteres', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search?q=a',
+      })
+
+      expect(response.statusCode).toBe(400)
+    })
+
+    it('deve retornar 400 quando "providers" contiver provedor desconhecido', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search?q=one+piece&providers=inexistente',
+      })
+
+      expect(response.statusCode).toBe(400)
+      const body = response.json()
+      expect(body.error).toContain('Provider desconhecido')
+    })
+
+    it('deve retornar 200 com resultados agregados e searchedProviders', async () => {
+      const strategies = getProviderResolver().listAll()
+      for (const strat of strategies) {
+        if ('search' in strat && typeof (strat as any).search === 'function') {
+          vi.spyOn(strat as any, 'search').mockResolvedValue([
+            {
+              providerSlug: strat.slug,
+              title: `One Piece (${strat.slug})`,
+              url: `https://${strat.slug}.example/manga/one-piece`,
+              coverUrl: `https://${strat.slug}.example/cover.jpg`,
+            },
+          ])
+        }
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search?q=one+piece',
+      })
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.query).toBe('one piece')
+      expect(Array.isArray(body.results)).toBe(true)
+      expect(body.results.length).toBeGreaterThan(0)
+      expect(body.errors).toEqual([])
+      expect(body.searchedProviders.length).toBeGreaterThan(0)
+      expect(body.truncated).toBe(false)
+    })
+
+    it('deve filtrar busca para apenas os provedores especificados via query', async () => {
+      const strategies = getProviderResolver().listAll()
+      for (const strat of strategies) {
+        if ('search' in strat && typeof (strat as any).search === 'function') {
+          vi.spyOn(strat as any, 'search').mockResolvedValue([
+            {
+              providerSlug: strat.slug,
+              title: `Naruto (${strat.slug})`,
+              url: `https://${strat.slug}.example/manga/naruto`,
+            },
+          ])
+        }
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search?q=naruto&providers=mangalivre&limit=5&offset=0',
+      })
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.query).toBe('naruto')
+      expect(body.searchedProviders).toEqual(['mangalivre'])
+      expect(body.results.every((r: any) => r.providerSlug === 'mangalivre')).toBe(true)
+    })
+
+    it('deve retornar 200 com errors[] populado quando um provedor falhar', async () => {
+      const strategies = getProviderResolver().listAll()
+      for (const strat of strategies) {
+        if ('search' in strat && typeof (strat as any).search === 'function') {
+          if (strat.slug === 'mangalivre') {
+            vi.spyOn(strat as any, 'search').mockRejectedValue(new Error('Falha de conexão com Manga Livre'))
+          } else {
+            vi.spyOn(strat as any, 'search').mockResolvedValue([
+              {
+                providerSlug: strat.slug,
+                title: 'Result',
+                url: `https://${strat.slug}.example/manga/result`,
+              },
+            ])
+          }
+        }
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/search?q=bleach',
+      })
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.query).toBe('bleach')
+      expect(body.errors.some((e: any) => e.providerSlug === 'mangalivre')).toBe(true)
     })
   })
 })
