@@ -1,7 +1,6 @@
-import { useState, useMemo, useEffect, useCallback, memo, useLayoutEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
   CheckCircle,
   CloudOff,
@@ -321,33 +320,9 @@ export const TabCapitulos = memo(function TabCapitulos({
 
   const isFiltering = searchQuery.trim().length > 0;
 
-  /* ── Virtualização da lista (window virtualizer — usa o scroll da página) ── */
-
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
-
-  // Distância entre o topo do documento e o topo da lista (com resize listener).
-  useLayoutEffect(() => {
-    const updateScrollMargin = () => {
-      const el = listRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setScrollMargin(rect.top + window.scrollY);
-    };
-
-    updateScrollMargin();
-    window.addEventListener("resize", updateScrollMargin);
-    return () => window.removeEventListener("resize", updateScrollMargin);
-  }, [chapters.length, activeFilter, searchQuery, sortOrder, selectionMode]);
-
-  const virtualizer = useWindowVirtualizer({
-    count: sorted.length,
-    estimateSize: () => 62,
-    overscan: 8,
-    scrollMargin,
-  });
-
-  const virtualItems = virtualizer.getVirtualItems();
+  /* ── Lista direta (sem virtualização): o scroll real vive no <main>
+     (overflow-y-scroll em __root.tsx), não no window — useWindowVirtualizer
+     nunca recebia scroll e congelava nas ~15 linhas iniciais. ── */
 
   /* ── Handlers estáveis (evitam re-render das linhas memorizadas) ── */
 
@@ -616,57 +591,41 @@ export const TabCapitulos = memo(function TabCapitulos({
         </p>
       )}
 
-      {/* Lista virtualizada: apenas as linhas visíveis (+ overscan) estão no DOM */}
-      <div ref={listRef}>
-        <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
-          {virtualItems.map((vi) => {
-            const chapter = sorted[vi.index];
-            if (!chapter) return null;
-            const isRead = readChapterIds.has(chapter.id);
-            const isDownloading = !chapter.isDownloaded && downloadingChapterIds.has(chapter.id);
-            const failedReason = !chapter.isDownloaded
-              ? (failedChapterMap.get(chapter.id) ?? chapter.unavailableReason ?? undefined)
-              : undefined;
+      {/* Lista direta: todos os capítulos no DOM (sem virtualização) */}
+      <div>
+        {sorted.map((chapter, index) => {
+          const isRead = readChapterIds.has(chapter.id);
+          const isDownloading = !chapter.isDownloaded && downloadingChapterIds.has(chapter.id);
+          const failedReason = !chapter.isDownloaded
+            ? (failedChapterMap.get(chapter.id) ?? chapter.unavailableReason ?? undefined)
+            : undefined;
 
-            return (
-              <div
-                key={chapter.id}
-                data-index={vi.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)`,
-                }}
-              >
-                <ChapterRow
-                  chapter={chapter}
-                  sourceId={sourceId}
-                  isRead={isRead}
-                  isLast={vi.index === sorted.length - 1}
-                  selectionMode={selectionMode}
-                  isSelected={selectedIds.has(chapter.id)}
-                  searchQuery={searchQuery}
-                  menuOpen={openMenuId === chapter.id}
-                  isDownloading={isDownloading}
-                  failedReason={failedReason}
-                  onOpenChapter={handleOpenChapter}
-                  onToggleRead={onToggleRead}
-                  onDownloadRequest={onDownloadRequest}
-                  onDownloadBackground={handleDownloadSingleBackground}
-                  onDeleteCache={handleDeleteSingleCache}
-                  onToggleSelect={toggleSelection}
-                  onStartLongPress={startLongPress}
-                  onCancelLongPress={cancelLongPress}
-                  onCheckPreventClick={checkPreventClick}
-                  onToggleMenu={setOpenMenuId}
-                />
-              </div>
-            );
-          })}
-        </div>
+          return (
+            <ChapterRow
+              key={chapter.id}
+              chapter={chapter}
+              sourceId={sourceId}
+              isRead={isRead}
+              isLast={index === sorted.length - 1}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(chapter.id)}
+              searchQuery={searchQuery}
+              menuOpen={openMenuId === chapter.id}
+              isDownloading={isDownloading}
+              failedReason={failedReason}
+              onOpenChapter={handleOpenChapter}
+              onToggleRead={onToggleRead}
+              onDownloadRequest={onDownloadRequest}
+              onDownloadBackground={handleDownloadSingleBackground}
+              onDeleteCache={handleDeleteSingleCache}
+              onToggleSelect={toggleSelection}
+              onStartLongPress={startLongPress}
+              onCancelLongPress={cancelLongPress}
+              onCheckPreventClick={checkPreventClick}
+              onToggleMenu={setOpenMenuId}
+            />
+          );
+        })}
 
         {isFiltering && sorted.length === 0 && (
           <div className="py-12 text-center">

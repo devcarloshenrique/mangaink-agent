@@ -577,4 +577,25 @@ describe("TabCapitulos", () => {
 
     expect(screen.queryByText("Baixando...")).toBeNull();
   });
+
+  it("deve renderizar todos os capítulos de obra longa sem corte (regressão: 148 no DOM)", () => {
+    const chapters = Array.from({ length: 148 }, (_, i) =>
+      makeChapter({ id: `ch${i + 1}`, number: `${i + 1}`, title: `Cap ${i + 1}` }),
+    );
+
+    const { container } = render(
+      <TabCapitulos
+        chapters={chapters}
+        sourceId="src-test"
+        readChapterIds={emptySet}
+        onToggleRead={onToggleRead}
+        onDownloadRequest={onDownloadRequest}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.getByText("Todos (148)")).toBeTruthy();
+    expect(screen.getByText("Cap 148")).toBeTruthy();
+    expect(container.querySelectorAll("button[aria-label^='Ações de download']").length).toBe(148);
+  });
 });
