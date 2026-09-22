@@ -18,9 +18,20 @@ export const MANGALIVRE_SELECTORS = {
   /** Container principal do leitor de capítulos */
   readerContainer: '#reader, .reader-container, .reading-content, .chapter-content, .entry-content',
   /** Imagens dentro do leitor */
-  chapterImages: '#reader img, .reader-container img, .reading-content img, .chapter-content img, .entry-content img',
+  chapterImages:
+    '#reader img, .reader-container img, .reading-content img, .chapter-content img, .entry-content img',
   /** Imagens com lazy loading (data-src) */
   chapterImagesLazy: 'img[data-src*="mangalivre"], img[data-src*="wp-content"], img[data-lazy-src]',
   /** Possível script com array de imagens */
   imageScript: 'script:contains("images"), script:contains("imgs"), script:contains("pages")',
+
+  // ── Seletores de busca (?s= + post_type=wp-manga) ─────────────────
+  /** Card de cada resultado na página de busca */
+  searchResults: '.row.c-tabs-item__content',
+  /** Título dentro do card */
+  searchTitle: '.post-title h3 a, .post-title a',
+  /** Capa dentro do card */
+  searchCover: '.tab-thumb img',
+  /** Autor dentro do card */
+  searchAuthor: '.post-content_item.mg_author .summary-content',
 } as const

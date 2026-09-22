@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { createHmac } from 'node:crypto'
 import { MangasBrasukaStrategy } from '../../providers/mangasbrasuka/mangasbrasuka.provider'
 import { ScrapingNetworkError } from '../../errors/scraping.errors'
-import type { RateLimiter } from '../../rate-limit/types'
 
 const mockGet = vi.hoisted(() => vi.fn())
 
@@ -38,11 +38,13 @@ describe('MangasBrasukaStrategy', () => {
       expect(provider.engine).toBe('api')
     })
 
-    it('deve ter allowedDomains com 3 domínios', () => {
+    it('deve ter allowedDomains com reader, API e CDNs', () => {
       expect(provider.allowedDomains).toEqual([
         'mangasbrasuka.com.br',
+        'mangasbrasuka.org',
         'app.mangasbrasuka.com.br',
         'cdn.mugiverso.com',
+        'aurora.snipercache.com',
       ])
     })
 
@@ -212,13 +214,61 @@ describe('MangasBrasukaStrategy', () => {
     it('deve lançar erro para URL de capítulo inválida', async () => {
       await expect(provider.getChapterImages('https://example.com/invalid-url')).rejects.toThrow()
     })
+
+    it('deve resolver token HMAC para URL assinada do CDN', async () => {
+      // (createHmac importado no topo do arquivo)
+      const key = Buffer.alloc(32, 7)
+      const nonce = Buffer.alloc(8, 3)
+      const plain = Buffer.from('https://aurora.snipercache.com/p1.webp?sig=x')
+      const stream = Buffer.alloc(plain.length)
+      let offset = 0
+      let counter = 0
+      while (offset < plain.length) {
+        const block = createHmac('sha256', key)
+          .update(Buffer.concat([nonce, Buffer.from([counter & 0xff])]))
+          .digest()
+        const take = Math.min(block.length, plain.length - offset)
+        for (let i = 0; i < take; i++) stream[offset + i] = plain[offset + i] ^ block[i]
+        offset += take
+        counter += 1
+      }
+      const token = Buffer.concat([Buffer.from([1]), Buffer.alloc(4, 0), nonce, stream]).toString('base64url')
+
+      mockGet.mockResolvedValueOnce({
+        data: { data: { chapterId: '1', pages: [{ index: 1, imageUrl: token, width: 0, height: 0, isDouble: false }] } },
+      })
+      mockGet.mockResolvedValueOnce({ data: { v: 1, e: 0, k: key.toString('base64') } })
+
+      const images = await provider.getChapterImages(
+        'https://mangasbrasuka.com.br/manga/manga-de-teste/1',
+      )
+
+      expect(images).toEqual(['https://aurora.snipercache.com/p1.webp?sig=x'])
+      expect(mockGet).toHaveBeenCalledWith(
+        'https://mangasbrasuka.org/api/atfield/key?v=1&e=0',
+        expect.objectContaining({ headers: expect.objectContaining({ Origin: 'https://mangasbrasuka.org' }) }),
+      )
+    })
+
+    it('deve manter token bruto quando a chave falhar (vira erro de download)', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: { data: { chapterId: '1', pages: [{ index: 1, imageUrl: 'AQAAAVU', width: 0, height: 0, isDouble: false }] } },
+      })
+      mockGet.mockRejectedValueOnce(new Error('403'))
+
+      const images = await provider.getChapterImages(
+        'https://mangasbrasuka.com.br/manga/manga-de-teste/1',
+      )
+
+      expect(images).toEqual(['AQAAAVU'])
+    })
   })
 
   // ─── downloadImage ─────────────────────────────────────────────────────
-
   describe('downloadImage', () => {
     it('deve retornar buffer e contentType no sucesso', async () => {
       const fakeBuffer = Buffer.from('fake-image-data')
+      mockGet.mockReset()
       mockGet.mockResolvedValue({
         data: fakeBuffer,
         headers: { 'content-type': 'image/webp' },

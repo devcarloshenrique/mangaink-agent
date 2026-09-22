@@ -1,6 +1,6 @@
 import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
 import type { RateLimiter } from '../../rate-limit/types'
-import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
+import type { ProviderEngine, ProviderInfo, ProviderSearchResult } from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 
 const fakeLimiter: RateLimiter = {
@@ -20,6 +20,8 @@ export class MockScrapingProvider implements IProviderStrategy {
   private _inspectError: Error | null = null
   private _chapterImagesResult: string[] = []
   private _chapterImagesError: Error | null = null
+  private _searchResult: ProviderSearchResult[] | null = null
+  private _searchError: Error | null = null
 
   supports(url: string): boolean {
     if (!this._supportsResult) return false
@@ -33,6 +35,11 @@ export class MockScrapingProvider implements IProviderStrategy {
 
   getInfo(): ProviderInfo {
     return { slug: this.slug, name: this.name, engine: this.engine }
+  }
+
+  async search(_query: string): Promise<ProviderSearchResult[]> {
+    if (this._searchError) throw this._searchError
+    return this._searchResult ?? []
   }
 
   async getChapterImages(_chapterUrl: string): Promise<string[]> {
@@ -85,11 +92,21 @@ export class MockScrapingProvider implements IProviderStrategy {
     this._chapterImagesError = error
   }
 
+  setSearchResult(results: ProviderSearchResult[]): void {
+    this._searchResult = results
+  }
+
+  setSearchError(error: Error): void {
+    this._searchError = error
+  }
+
   reset(): void {
     this._supportsResult = true
     this._inspectResult = null
     this._inspectError = null
     this._chapterImagesResult = []
     this._chapterImagesError = null
+    this._searchResult = null
+    this._searchError = null
   }
 }

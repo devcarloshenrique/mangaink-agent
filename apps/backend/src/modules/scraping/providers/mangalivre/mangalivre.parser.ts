@@ -196,6 +196,43 @@ export function parseSourceInfo(canonicalUrl: string): SourceInfo {
 export function buildProviderInfo(): ProviderInfo {
   return PROVIDER_INFO
 }
+/**
+ * Extrai resultados da página de busca (`?s=<termo>&post_type=wp-manga`).
+ * Cada card `.row.c-tabs-item__content` vira um item com título, URL canônica
+ * `/manga/<slug>/`, capa (sufixo `-WxH` removido) e autor quando presente.
+ * Links fora do padrão `/manga/` são descartados (o inspect posterior rejeita).
+ */
+export function parseSearchResults(
+  $: CheerioAPI,
+  base: string,
+): Array<{ title: string; url: string; coverUrl: string | null; author: string | null }> {
+  const results: Array<{ title: string; url: string; coverUrl: string | null; author: string | null }> = []
+  const seen = new Set<string>()
+
+  $(SEL.searchResults).each((_, card) => {
+    const $card = $(card)
+    const linkEl = $card.find(SEL.searchTitle).first()
+    const href = linkEl.attr('href')
+    const title = sanitize(linkEl.text()) ?? sanitize(linkEl.attr('title'))
+    const url = href ? absoluteUrl(href, base) : undefined
+    if (!url || !title) return
+    if (!/\/manga\/[^/]+\/?$/.test(url)) return
+    const canonical = url.endsWith('/') ? url : `${url}/`
+    if (seen.has(canonical)) return
+    seen.add(canonical)
+
+    const imgEl = $card.find(SEL.searchCover).first()
+    const rawCover =
+      imgEl.attr('data-src') || imgEl.attr('data-lazy-src') || imgEl.attr('src') || undefined
+    const coverAbs = absoluteUrl(rawCover, base)
+    const coverUrl = coverAbs ? stripResolutionSuffix(coverAbs) : null
+    const author = sanitize($card.find(SEL.searchAuthor).first().text()) ?? null
+
+    results.push({ title, url: canonical, coverUrl, author })
+  })
+
+  return results
+}
 
 /**
  * Extrai URLs de imagens de uma página de capítulo.

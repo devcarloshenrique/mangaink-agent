@@ -3,7 +3,12 @@ import { createHttpClient } from '../../../../shared/http/http-client'
 import { createSourceId } from '../../../../shared/utils/id-generator'
 import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
 import type { RateLimiter } from '../../rate-limit/types'
-import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
+import type {
+  ProviderEngine,
+  ProviderInfo,
+  ProviderSearchOptions,
+  ProviderSearchResult,
+} from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 import {
   buildProviderInfo,
@@ -11,6 +16,7 @@ import {
   parseChapters,
   parseCover,
   parseMetadata,
+  parseSearchResults,
   parseSourceInfo,
 } from './mangalivre.parser'
 import { ScrapingNetworkError, ScrapingParseError } from '../../errors/scraping.errors'
@@ -34,7 +40,6 @@ export class MangaLivreStrategy implements IProviderStrategy {
   readonly allowedDomains = ['mangalivre.to']
 
   constructor(readonly rateLimiter: RateLimiter) {}
-
   supports(url: string): boolean {
     try {
       const { hostname } = new URL(url)
@@ -46,6 +51,27 @@ export class MangaLivreStrategy implements IProviderStrategy {
 
   getInfo(): ProviderInfo {
     return buildProviderInfo()
+  }
+
+  async search(query: string, opts?: ProviderSearchOptions): Promise<ProviderSearchResult[]> {
+    if ((opts?.offset ?? 0) > 0) return []
+    const limit = opts?.limit ?? 10
+    const url = `${BASE_URL}/?s=${encodeURIComponent(query)}&post_type=wp-manga`
+    let html: string
+    try {
+      const response = await this.rateLimiter.schedule(() =>
+        http.get<string>(url, { signal: opts?.signal }),
+      )
+      html = response.data
+    } catch (err) {
+      throw new ScrapingNetworkError(url, err)
+    }
+
+    const $ = cheerio.load(html)
+    return parseSearchResults($, BASE_URL)
+      .filter((r) => this.urlPattern.test(r.url))
+      .slice(0, limit)
+      .map((r) => ({ ...r, providerSlug: this.slug }))
   }
 
   async inspect(canonicalUrl: string): Promise<SourceInspectResponse> {
@@ -120,7 +146,7 @@ export class MangaLivreStrategy implements IProviderStrategy {
         typeof response.headers['content-type'] === 'string'
           ? response.headers['content-type']
           : Array.isArray(response.headers['content-type'])
-            ? response.headers['content-type'][0] ?? ''
+            ? (response.headers['content-type'][0] ?? '')
             : ''
 
       return { buffer, contentType: contentType || 'application/octet-stream' }
@@ -130,7 +156,4 @@ export class MangaLivreStrategy implements IProviderStrategy {
   }
 }
 
-/**
- * @deprecated Use MangaLivreStrategy (renamed for consistency with IProviderStrategy)
- */
 export { MangaLivreStrategy as MangalivreProvider }

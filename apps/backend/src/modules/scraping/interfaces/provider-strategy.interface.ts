@@ -1,4 +1,4 @@
-import type { ProviderEngine, ProviderInfo } from '../types/provider.types'
+import type { ProviderEngine, ProviderInfo, ProviderSearchOptions, ProviderSearchResult } from '../types/provider.types'
 import type { SourceInspectResponse } from '../types/source.types'
 import type { RateLimiter } from '../rate-limit/types'
 
@@ -37,6 +37,14 @@ export interface IProviderStrategy {
    * Recebe a URL já normalizada (canonical).
    */
   inspect(canonicalUrl: string): Promise<SourceInspectResponse>
+
+  /**
+   * Busca obras por termo no site do provider.
+   * `query` chega já trimada (2–100 chars, validada na rota).
+   * `limit` default 10. Toda chamada HTTP passa por `rateLimiter.schedule`.
+   * Erros de rede/parse propagam (o agregador converte em `errors[]`).
+   */
+  search(query: string, opts?: ProviderSearchOptions): Promise<ProviderSearchResult[]>
 
   /**
    * Extrai as URLs das imagens de um capítulo específico.

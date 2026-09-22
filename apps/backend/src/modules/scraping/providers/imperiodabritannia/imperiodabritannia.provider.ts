@@ -3,7 +3,12 @@ import { createSourceId } from '../../../../shared/utils/id-generator'
 import { env } from '../../../../shared/config/env'
 import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
 import type { RateLimiter } from '../../rate-limit/types'
-import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
+import type {
+  ProviderEngine,
+  ProviderInfo,
+  ProviderSearchOptions,
+  ProviderSearchResult,
+} from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 import { ScrapingNetworkError, ScrapingParseError } from '../../errors/scraping.errors'
 import {
@@ -20,6 +25,7 @@ import type {
 
 const BASE_URL = 'https://imperiodabritannia.net'
 const API_BASE = 'https://api.imperiodabritannia.net'
+const CDN_BASE = 'https://cdn.imperiodabritannia.net'
 
 const http = createHttpClient({
   timeout: 30_000,
@@ -33,6 +39,18 @@ const http = createHttpClient({
   retries: 3,
   retryDelay: 2_000,
 })
+
+interface BritanniaSearchObra {
+  id: number
+  nome: string
+  imagem: string | null
+  slug?: string | null
+}
+
+interface BritanniaSearchResponse {
+  sucesso?: boolean
+  obras?: BritanniaSearchObra[]
+}
 
 export class ImperioDaBritanniaStrategy implements IProviderStrategy {
   readonly slug = 'imperiodabritannia'
@@ -61,6 +79,66 @@ export class ImperioDaBritanniaStrategy implements IProviderStrategy {
 
   getInfo(): ProviderInfo {
     return buildProviderInfo()
+  }
+
+  async search(query: string, opts?: ProviderSearchOptions): Promise<ProviderSearchResult[]> {
+    const limit = opts?.limit ?? 10
+    const offset = opts?.offset ?? 0
+    const pagina = Math.floor(offset / limit) + 1
+    const url = `${API_BASE}/api/obras?busca=${encodeURIComponent(query)}&limite=${limit}&pagina=${pagina}`
+    let obras: BritanniaSearchObra[]
+    try {
+      const res = await this.rateLimiter.schedule(() =>
+        http.get<BritanniaSearchResponse>(url, { signal: opts?.signal }),
+      )
+      obras = res.data?.obras ?? []
+    } catch (err) {
+      if (err instanceof ScrapingNetworkError) throw err
+      throw new ScrapingNetworkError(url, err)
+    }
+
+    const startIndex = offset % limit
+    const candidates = obras.slice(startIndex, startIndex + limit).filter((obra) => obra?.nome)
+    const settled = await Promise.allSettled(
+      candidates.map(async (obra): Promise<ProviderSearchResult> => {
+        let slug = obra.slug ?? null
+        if (!slug && typeof obra.id === 'number') {
+          slug = await this.fetchSlugByObraId(obra.id, opts?.signal)
+        }
+        if (!slug) {
+          throw new Error(`Não foi possível resolver o slug da obra "${obra.nome}"`)
+        }
+        return {
+          providerSlug: this.slug,
+          title: obra.nome,
+          url: `${BASE_URL}/manga/${slug}/`,
+          coverUrl: obra.imagem ? `${CDN_BASE}/${obra.imagem}` : null,
+          author: null,
+        }
+      }),
+    )
+
+    const seen = new Set<string>()
+    const results: ProviderSearchResult[] = []
+    const hydrationErrors: unknown[] = []
+    for (const outcome of settled) {
+      if (outcome.status === 'fulfilled') {
+        if (seen.has(outcome.value.url)) continue
+        seen.add(outcome.value.url)
+        results.push(outcome.value)
+      } else {
+        hydrationErrors.push(outcome.reason)
+      }
+    }
+
+    if (results.length === 0 && hydrationErrors.length > 0) {
+      throw new ScrapingNetworkError(
+        `${API_BASE}/api/obras?busca=${encodeURIComponent(query)}`,
+        hydrationErrors[0],
+      )
+    }
+
+    return results
   }
 
   async inspect(canonicalUrl: string): Promise<SourceInspectResponse> {
@@ -97,7 +175,7 @@ export class ImperioDaBritanniaStrategy implements IProviderStrategy {
         typeof response.headers['content-type'] === 'string'
           ? response.headers['content-type']
           : Array.isArray(response.headers['content-type'])
-            ? response.headers['content-type'][0] ?? ''
+            ? (response.headers['content-type'][0] ?? '')
             : ''
 
       return { buffer, contentType: contentType || 'application/octet-stream' }
@@ -116,7 +194,9 @@ export class ImperioDaBritanniaStrategy implements IProviderStrategy {
       const data = res.data as { sucesso?: boolean; obra?: BritanniaObra }
 
       if (!data?.sucesso || !data?.obra) {
-        throw new Error(`API retornou erro para slug "${slug}": ${JSON.stringify(data)}`)
+        throw new Error(
+          `API retornou resposta inválida para slug "${slug}" (sucesso=${data?.sucesso ?? false})`,
+        )
       }
 
       // Cachear obra_id
@@ -143,7 +223,7 @@ export class ImperioDaBritanniaStrategy implements IProviderStrategy {
 
       if (!data?.sucesso || !data?.capitulo) {
         throw new Error(
-          `API retornou erro para capítulo ${numero} da obra ${obraId}: ${JSON.stringify(data)}`,
+          `API retornou resposta inválida para capítulo ${numero} da obra ${obraId} (sucesso=${data?.sucesso ?? false})`,
         )
       }
 
@@ -163,5 +243,25 @@ export class ImperioDaBritanniaStrategy implements IProviderStrategy {
     }
     const obra = await this.fetchObraBySlug(slug)
     return obra.id
+  }
+
+  /**
+   * Hydrate do slug via detalhe da obra quando a listagem de busca não o traz.
+   * Retorna null apenas quando a API responde sem slug; falha de rede propaga
+   * como `ScrapingNetworkError` para o agregador registrar em `errors[]`.
+   */
+  private async fetchSlugByObraId(obraId: number, signal?: AbortSignal): Promise<string | null> {
+    try {
+      const res = await this.rateLimiter.schedule(() =>
+        http.get<{ sucesso?: boolean; obra?: { slug?: string } }>(
+          `${API_BASE}/api/obras/${obraId}`,
+          { signal },
+        ),
+      )
+      return res.data?.obra?.slug ?? null
+    } catch (err) {
+      if (err instanceof ScrapingNetworkError) throw err
+      throw new ScrapingNetworkError(`${API_BASE}/api/obras/${obraId}`, err)
+    }
   }
 }

@@ -1,7 +1,12 @@
 import { createHttpClient } from '../../../../shared/http/http-client'
 import type { IProviderStrategy } from '../../interfaces/provider-strategy.interface'
 import type { RateLimiter } from '../../rate-limit/types'
-import type { ProviderEngine, ProviderInfo } from '../../types/provider.types'
+import type {
+  ProviderEngine,
+  ProviderInfo,
+  ProviderSearchOptions,
+  ProviderSearchResult,
+} from '../../types/provider.types'
 import type { SourceInspectResponse } from '../../types/source.types'
 import { ScrapingNetworkError, ScrapingParseError } from '../../errors/scraping.errors'
 import {
@@ -13,6 +18,7 @@ import {
   mapAtHomeToImageUrls,
   mapMangaToInspectResponse,
   PROVIDER_SLUG,
+  UPLOADS_BASE,
 } from './mangadex.mapper'
 import type {
   MangaDexAtHomeResponse,
@@ -33,6 +39,11 @@ const http = createHttpClient({
 })
 
 const CHAPTERS_PAGE_SIZE = 100
+
+interface MangaDexMangaListResponse {
+  result: string
+  data: MangaDexMangaData[]
+}
 
 export class MangaDexStrategy implements IProviderStrategy {
   readonly slug = PROVIDER_SLUG
@@ -60,6 +71,32 @@ export class MangaDexStrategy implements IProviderStrategy {
 
   getInfo(): ProviderInfo {
     return buildProviderInfo()
+  }
+
+  async search(query: string, opts?: ProviderSearchOptions): Promise<ProviderSearchResult[]> {
+    const limit = opts?.limit ?? 10
+    const offset = opts?.offset ?? 0
+    const url =
+      `${API_BASE}/manga?title=${encodeURIComponent(query)}` +
+      `&limit=${limit}&offset=${offset}&includes[]=cover_art&includes[]=author`
+    let items: MangaDexMangaData[]
+    try {
+      const res = await this.rateLimiter.schedule(() =>
+        http.get<MangaDexMangaListResponse>(url, { signal: opts?.signal }),
+      )
+      items = res.data?.data ?? []
+    } catch (err) {
+      if (err instanceof ScrapingNetworkError) throw err
+      throw new ScrapingNetworkError(url, err)
+    }
+
+    return items.slice(0, limit).map((manga) => ({
+      providerSlug: this.slug,
+      title: resolveSearchTitle(manga),
+      url: `${BASE_URL}/title/${manga.id}`,
+      coverUrl: resolveSearchCover(manga),
+      author: resolveSearchAuthor(manga),
+    }))
   }
 
   async inspect(canonicalUrl: string): Promise<SourceInspectResponse> {
@@ -146,25 +183,20 @@ export class MangaDexStrategy implements IProviderStrategy {
 
     for (;;) {
       let data: MangaDexChapterData[]
-      let total = 0
       try {
-        const url = `${API_BASE}/chapter?manga=${mangaId}&translatedLanguage[]=pt-br&translatedLanguage[]=pt&limit=${CHAPTERS_PAGE_SIZE}&offset=${offset}&order[chapter]=asc`
         const res = await this.rateLimiter.schedule(() =>
-          http.get<MangaDexChapterListResponse>(url),
+          http.get<MangaDexChapterListResponse>(
+            `${API_BASE}/manga/${mangaId}/feed?translatedLanguage[]=pt-br&translatedLanguage[]=pt&limit=${CHAPTERS_PAGE_SIZE}&offset=${offset}&order[chapter]=asc&includes[]=scanlation_group`,
+          ),
         )
-        const body = res.data
-        data = body?.data ?? []
-        total = body?.total ?? 0
+        data = res.data?.data ?? []
       } catch (err) {
         if (err instanceof ScrapingNetworkError) throw err
-        throw new ScrapingNetworkError(
-          `${API_BASE}/chapter?manga=${mangaId}&offset=${offset}`,
-          err,
-        )
+        throw new ScrapingNetworkError(`${API_BASE}/manga/${mangaId}/feed`, err)
       }
 
       chapters.push(...data)
-      if (chapters.length >= total || data.length === 0) break
+      if (data.length < CHAPTERS_PAGE_SIZE) break
       offset += CHAPTERS_PAGE_SIZE
     }
 
@@ -176,18 +208,27 @@ export class MangaDexStrategy implements IProviderStrategy {
       const res = await this.rateLimiter.schedule(() =>
         http.get<MangaDexAtHomeResponse>(`${API_BASE}/at-home/server/${chapterId}`),
       )
-      const data = res.data
-
-      if (!data?.baseUrl || !data.chapter?.data) {
-        throw new Error(
-          `MangaDex At-Home retornou resposta inválida para capítulo "${chapterId}"`,
-        )
-      }
-
-      return data
+      return res.data
     } catch (err) {
       if (err instanceof ScrapingNetworkError) throw err
       throw new ScrapingNetworkError(`${API_BASE}/at-home/server/${chapterId}`, err)
     }
   }
+}
+
+function resolveSearchTitle(manga: MangaDexMangaData): string {
+  const title = manga.attributes?.title ?? {}
+  return title['pt-br'] ?? title.pt ?? title.en ?? Object.values(title)[0] ?? 'Título desconhecido'
+}
+
+function resolveSearchCover(manga: MangaDexMangaData): string | null {
+  const coverRel = manga.relationships?.find((r) => r.type === 'cover_art')
+  const fileName = coverRel?.attributes?.fileName
+  if (!fileName) return null
+  return `${UPLOADS_BASE}/covers/${manga.id}/${fileName}`
+}
+
+function resolveSearchAuthor(manga: MangaDexMangaData): string | null {
+  const authorRel = manga.relationships?.find((r) => r.type === 'author')
+  return authorRel?.attributes?.name ?? null
 }

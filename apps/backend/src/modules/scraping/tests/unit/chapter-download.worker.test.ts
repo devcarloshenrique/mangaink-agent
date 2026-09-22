@@ -100,6 +100,7 @@ function createMockProvider() {
     supports: vi.fn(() => true),
     getInfo: vi.fn(() => ({ slug: 'test', name: 'Test Provider', engine: 'cheerio' })),
     inspect: vi.fn(),
+    search: vi.fn().mockResolvedValue([]),
     getChapterImages: vi.fn(),
     downloadImage: vi.fn(),
   }

@@ -282,6 +282,13 @@ describe('mapPaginasToImageUrls', () => {
     expect(urls).toEqual(['https://cdn.mugiverso.com/p1.webp', 'https://cdn.mugiverso.com/p2.webp'])
   })
 
+  it('deve preservar tokens HMAC opacos (resolução acontece no provider)', () => {
+    const urls = mapPaginasToImageUrls([
+      { index: 1, imageUrl: 'AQAAUOcT2DcOOYKRlKI6qC0RelsnErkJdaAfVTE-6Sz', width: 0, height: 0, isDouble: false },
+    ])
+    expect(urls).toEqual(['AQAAUOcT2DcOOYKRlKI6qC0RelsnErkJdaAfVTE-6Sz'])
+  })
+
   it('deve retornar lista vazia quando paginas é vazio', () => {
     expect(mapPaginasToImageUrls([])).toEqual([])
   })
