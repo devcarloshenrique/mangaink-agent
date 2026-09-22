@@ -13,6 +13,7 @@ import type {
   ListProvidersResponse,
   ProviderRecord,
   ProviderUpdateInput,
+  SearchSourcesResponse,
   SourceInspectResponse,
 } from "@/types/scraping";
 import type {
@@ -218,6 +219,24 @@ export const scrapingApi = {
   /** GET /api/conversions/source/providers — lista providers disponíveis */
   async providers(): Promise<ListProvidersResponse> {
     return request<ListProvidersResponse>("/api/conversions/source/providers");
+  },
+
+  /**
+   * GET /api/conversions/source/search — busca unificada por título.
+   * `signal` cancela o fetch anterior (debounce por keystroke).
+   */
+  async search(
+    query: string,
+    opts?: { providers?: string; limit?: number; offset?: number },
+    signal?: AbortSignal,
+  ): Promise<SearchSourcesResponse> {
+    const params = new URLSearchParams({ q: query });
+    if (opts?.providers) params.set("providers", opts.providers);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    return request<SearchSourcesResponse>(`/api/conversions/source/search?${params.toString()}`, {
+      signal,
+    });
   },
 
   /** PATCH /api/conversions/source/providers/:slug — atualiza campos parciais de um provider */

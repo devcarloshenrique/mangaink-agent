@@ -14,6 +14,10 @@ import {
 } from "@/hooks/useConversions";
 import { useLibrary } from "@/hooks/useLibrary";
 import { authGuard } from "./-authGuard";
+import { HomeSearchBar } from "@/components/dashboard/HomeSearchBar";
+import { HomeSearchResults } from "@/components/dashboard/HomeSearchResults";
+import { useProviderSearch } from "@/hooks/useProviderSearch";
+import { useProviders } from "@/hooks/useProviders";
 
 export const Route = createFileRoute("/")({
   beforeLoad: authGuard,
@@ -51,6 +55,19 @@ function Dashboard() {
   const { data: convData, isLoading: convLoading } = useConversionsList({ limit: 100 });
   const { data: activeData } = useActiveConversions();
   const { data: libraryData, isLoading: libraryLoading } = useLibrary();
+  const { data: provData } = useProviders();
+  const providers = provData?.providers ?? [];
+  const {
+    query,
+    setQuery,
+    debouncedQuery,
+    data: searchData,
+    isFetching: searchFetching,
+    error: searchError,
+    refetch: refetchSearch,
+    loadProviderPage,
+  } = useProviderSearch();
+  const isSearching = query.trim().length >= 2;
 
   const groups = useMemo(() => {
     const allConvs = convData?.items ?? [];
@@ -79,6 +96,24 @@ function Dashboard() {
         <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
           <div className="h-[340px] animate-pulse rounded-xl border-[3px] border-ink bg-card shadow-comic" />
           <div className="h-60 animate-pulse rounded-xl border-[3px] border-ink bg-card shadow-comic" />
+        </main>
+      </div>
+    );
+  }
+  if (isSearching) {
+    return (
+      <div className="flex-1 bg-background">
+        <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
+          <HomeSearchBar query={query} onChange={setQuery} isFetching={searchFetching} />
+          <HomeSearchResults
+            providers={providers}
+            debouncedQuery={debouncedQuery}
+            data={searchData}
+            isFetching={searchFetching}
+            error={searchError}
+            refetch={refetchSearch}
+            onLoadMore={loadProviderPage}
+          />
         </main>
       </div>
     );
@@ -137,7 +172,8 @@ function Dashboard() {
   return (
     <div className="flex-1 bg-background">
       <main className="mx-auto max-w-6xl space-y-10 px-4 py-6 pb-12">
-        {/* Continuar lendo — Top 5 obras mais recentes */}
+        <HomeSearchBar query={query} onChange={setQuery} isFetching={searchFetching} />
+
         <SpotlightCard items={groups} />
 
         {/* Biblioteca — todas as obras da coleção na estante */}

@@ -75,10 +75,7 @@ export interface ProviderRecord {
   engine: "api" | "cheerio" | "playwright";
   tags: string[];
   status: string;
-  description: string | null;
-  urlExample: string | null;
   homepage: string | null;
-  searchUrl: string | null;
   rateLimit: RateLimitConfig;
 }
 
@@ -86,14 +83,27 @@ export type ProviderStatus = "active" | "slow" | "beta" | "offline" | "soon";
 
 export interface ProviderUpdateInput {
   status?: ProviderStatus;
-  description?: string;
-  urlExample?: string;
   homepage?: string;
   tags?: string[];
-  searchUrl?: string;
   rateLimit?: Partial<RateLimitConfig>;
 }
 
 export interface ListProvidersResponse {
   providers: ProviderRecord[];
+}
+
+export interface ProviderSearchResult {
+  providerSlug: string;
+  title: string;
+  url: string;
+  coverUrl?: string | null;
+  author?: string | null;
+}
+
+export interface SearchSourcesResponse {
+  query: string;
+  results: ProviderSearchResult[];
+  errors: Array<{ providerSlug: string; message: string }>;
+  searchedProviders: string[];
+  truncated: boolean;
 }

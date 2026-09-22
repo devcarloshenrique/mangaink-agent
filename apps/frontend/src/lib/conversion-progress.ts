@@ -17,9 +17,7 @@ export interface ConversionProgressInput {
 
 export function computeConversionOverall(input: ConversionProgressInput): number {
   const pctChapters =
-    input.totalChapters > 0
-      ? Math.round((input.processedChapters / input.totalChapters) * 100)
-      : 0;
+    input.totalChapters > 0 ? Math.round((input.processedChapters / input.totalChapters) * 100) : 0;
 
   if (input.downloadOnly) return Math.min(100, pctChapters);
 
@@ -35,5 +33,8 @@ export function computeConversionOverall(input: ConversionProgressInput): number
 
   if (input.totalChapters <= 0) return 0;
 
-  return Math.min(100, Math.round((input.processedChapters / input.totalChapters) * 50 + agg * 0.5));
+  return Math.min(
+    100,
+    Math.round((input.processedChapters / input.totalChapters) * 50 + agg * 0.5),
+  );
 }
