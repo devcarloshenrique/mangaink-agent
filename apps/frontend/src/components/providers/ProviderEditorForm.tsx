@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -13,10 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { scrapingApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { ProviderRecord, ProviderUpdateInput } from "@/types/scraping";
 import { STATUS_CONFIG, type SourceStatus } from "./constants";
-import { Loader2, Save, X } from "lucide-react";
+import { CURATED_TAGS, tagLabel } from "./provider-tags";
 
+import { Check, Copy, Loader2, Save, X } from "lucide-react";
 const STATUS_OPTIONS: SourceStatus[] = ["active", "slow", "beta", "offline", "soon"];
 
 function isSourceStatus(status: string): status is SourceStatus {
@@ -40,11 +41,8 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
   const [status, setStatus] = useState<SourceStatus>(
     isSourceStatus(provider.status) ? provider.status : "soon",
   );
-  const [description, setDescription] = useState(provider.description ?? "");
-  const [urlExample, setUrlExample] = useState(provider.urlExample ?? "");
-  const [homepage, setHomepage] = useState(provider.homepage ?? "");
-  const [searchUrl, setSearchUrl] = useState(provider.searchUrl ?? "");
-  const [tagsText, setTagsText] = useState((provider.tags ?? []).join(", "));
+  const homepage = provider.homepage ?? "";
+  const [tagsText, setTagsText] = useState(() => (provider.tags ?? []).join(", "));
   const [maxConcurrent, setMaxConcurrent] = useState(String(provider.rateLimit.maxConcurrent));
   const [minTime, setMinTime] = useState(String(provider.rateLimit.minTime));
   const [reservoir, setReservoir] = useState(
@@ -56,8 +54,19 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
       : String(provider.rateLimit.reservoirRefreshInterval),
   );
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const tags = useMemo(() => splitTags(tagsText), [tagsText]);
+  const contentTags = useMemo(() => splitTags(tagsText), [tagsText]);
+  const tags = useMemo(() => Array.from(new Set(contentTags)), [contentTags]);
+
+  const toggleContentTag = (slug: string) => {
+    const current = splitTags(tagsText);
+    setTagsText(
+      current.includes(slug)
+        ? current.filter((t) => t !== slug).join(", ")
+        : [...current, slug].join(", "),
+    );
+  };
 
   const removeTag = (tag: string) => {
     setTagsText(
@@ -65,6 +74,21 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
         .filter((t) => t !== tag)
         .join(", "),
     );
+  };
+
+  const handleCopyHomepage = async () => {
+    if (!homepage) {
+      toast.error("Este provider não tem homepage cadastrada");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(homepage);
+      toast.success("Link copiado");
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Não foi possível copiar o link");
+    }
   };
 
   const buildPatch = (): ProviderUpdateInput | null => {
@@ -92,10 +116,6 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
 
     return {
       status,
-      description,
-      urlExample,
-      homepage,
-      searchUrl,
       tags,
       rateLimit: {
         maxConcurrent: maxC,
@@ -141,52 +161,64 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
       </div>
 
       <div className="space-y-1.5 sm:col-span-2">
-        <Label className="font-display">Descrição</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="O que esse site oferece..."
-          rows={3}
-          className="border-[3px] border-ink shadow-comic-sm"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="font-display">URL exemplo</Label>
-        <Input
-          value={urlExample}
-          onChange={(e) => setUrlExample(e.target.value)}
-          placeholder="https://mangalivre.net/manga/x"
-          className="border-[3px] border-ink h-11 shadow-comic-sm"
-        />
-      </div>
-
-      <div className="space-y-1.5">
         <Label className="font-display">Homepage</Label>
-        <Input
-          value={homepage}
-          onChange={(e) => setHomepage(e.target.value)}
-          placeholder="https://mangalivre.net"
-          className="border-[3px] border-ink h-11 shadow-comic-sm"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="font-display">Search URL</Label>
-        <Input
-          value={searchUrl}
-          onChange={(e) => setSearchUrl(e.target.value)}
-          placeholder="https://mangalivre.net/busca/{termo}"
-          className="border-[3px] border-ink h-11 shadow-comic-sm"
-        />
+        <div className="flex gap-2">
+          <Input
+            value={homepage}
+            readOnly
+            placeholder="Sem homepage cadastrada"
+            aria-label="Homepage do provider (somente leitura)"
+            className="border-[3px] border-ink h-11 shadow-comic-sm flex-1 bg-muted/50"
+          />
+          <Button
+            type="button"
+            onClick={handleCopyHomepage}
+            disabled={!homepage}
+            aria-label="Copiar link da homepage"
+            title="Copiar link"
+            className={cn(
+              "h-11 w-11 shrink-0 border-[3px] border-ink shadow-comic-sm",
+              copied
+                ? "bg-comic-blue text-primary-foreground hover:bg-comic-blue"
+                : "bg-comic-yellow text-comic-ink hover:bg-comic-yellow/90",
+            )}
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="text-[11px] font-medium opacity-70">
+          Endereço oficial da fonte. Somente leitura — use o botão ao lado para copiar.
+        </p>
       </div>
 
       <div className="space-y-1.5 sm:col-span-2">
         <Label className="font-display">Tags</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {CURATED_TAGS.map(({ slug }) => {
+            const active = contentTags.includes(slug);
+            return (
+              <button
+                key={slug}
+                type="button"
+                onClick={() => toggleContentTag(slug)}
+                aria-pressed={active}
+                className={cn(
+                  "inline-flex items-center gap-1 px-2.5 py-1 rounded-md border-[2.5px] font-display text-xs transition-all",
+                  active
+                    ? "bg-comic-red text-primary-foreground border-ink shadow-comic-sm"
+                    : "bg-card border-ink hover:-translate-y-0.5 shadow-comic-sm",
+                )}
+              >
+                {tagLabel(slug)}
+              </button>
+            );
+          })}
+        </div>
         <Input
           value={tagsText}
           onChange={(e) => setTagsText(e.target.value)}
-          placeholder="pt-BR, sem ads, rápido"
+          placeholder="mangá, manhwa, manhua, webtoon..."
+          aria-label="Tags personalizadas (separadas por vírgula)"
           className="border-[3px] border-ink h-11 shadow-comic-sm"
         />
         {tags.length > 0 && (
@@ -211,52 +243,76 @@ export function ProviderEditorForm({ provider, onSaved }: ProviderEditorFormProp
         )}
       </div>
 
-      <div className="sm:col-span-2">
+      <div className="sm:col-span-2 space-y-1.5">
         <Label className="font-display">Rate limit</Label>
         <div className="grid gap-3 sm:grid-cols-2 mt-1.5">
           <div className="space-y-1.5">
+            <Label htmlFor="rl-max-concurrent" className="font-display">
+              Máx. simultâneas
+            </Label>
             <Input
+              id="rl-max-concurrent"
               type="number"
               min={1}
               step={1}
               value={maxConcurrent}
               onChange={(e) => setMaxConcurrent(e.target.value)}
-              placeholder="maxConcurrent (>= 1)"
+              placeholder="Ex.: 6"
               className="border-[3px] border-ink h-11 shadow-comic-sm"
             />
+            <p className="text-[11px] font-medium opacity-70">
+              Quantas requisições simultâneas ao site.
+            </p>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="rl-min-time" className="font-display">
+              Intervalo mínimo (ms)
+            </Label>
             <Input
+              id="rl-min-time"
               type="number"
               min={0}
               step={1}
               value={minTime}
               onChange={(e) => setMinTime(e.target.value)}
-              placeholder="minTime ms (>= 0)"
+              placeholder="Ex.: 50"
               className="border-[3px] border-ink h-11 shadow-comic-sm"
             />
+            <p className="text-[11px] font-medium opacity-70">
+              Intervalo mínimo entre requisições, em ms.
+            </p>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="rl-reservoir" className="font-display">
+              Teto por janela
+            </Label>
             <Input
+              id="rl-reservoir"
               type="number"
               min={1}
               step={1}
               value={reservoir}
               onChange={(e) => setReservoir(e.target.value)}
-              placeholder="reservoir (vazio = null)"
+              placeholder="Vazio = sem teto"
               className="border-[3px] border-ink h-11 shadow-comic-sm"
             />
+            <p className="text-[11px] font-medium opacity-70">Teto de requisições por janela.</p>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="rl-reservoir-refresh" className="font-display">
+              Duração da janela (ms)
+            </Label>
             <Input
+              id="rl-reservoir-refresh"
               type="number"
               min={100}
               step={100}
               value={reservoirRefreshInterval}
               onChange={(e) => setReservoirRefreshInterval(e.target.value)}
-              placeholder="reservoirRefreshInterval (>= 100)"
+              placeholder="Ex.: 60000"
               className="border-[3px] border-ink h-11 shadow-comic-sm"
             />
+            <p className="text-[11px] font-medium opacity-70">Duração da janela do teto, em ms.</p>
           </div>
         </div>
       </div>

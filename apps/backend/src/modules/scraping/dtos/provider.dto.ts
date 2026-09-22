@@ -10,10 +10,7 @@ export const providerResponseSchema = z.object({
   engine: z.enum(['api', 'cheerio', 'playwright']),
   tags: z.array(z.string()),
   status: z.string(),
-  description: z.string().nullable(),
-  urlExample: z.string().nullable(),
   homepage: z.string().nullable(),
-  searchUrl: z.string().nullable(),
   rateLimit: z.object({
     maxConcurrent: z.number(),
     minTime: z.number(),
@@ -38,11 +35,8 @@ export type ProviderParams = z.infer<typeof providerParamsSchema>
 
 export const updateProviderBodySchema = z.object({
   status: providerStatusSchema.optional(),
-  description: z.string().optional(),
-  urlExample: z.string().optional(),
-  homepage: z.string().optional(),
+  homepage: z.string().url().refine(v => ['http:','https:'].includes(new URL(v).protocol), { message: 'URL deve ser http(s)' }).optional(),
   tags: z.array(z.string()).optional(),
-  searchUrl: z.string().optional(),
   rateLimit: z
     .object({
       maxConcurrent: z.number().int().min(1).optional(),
@@ -67,10 +61,7 @@ export function toProviderResponse(provider: ProviderRecord | KnownProvider): Pr
     engine: provider.engine,
     tags: provider.tags ?? [],
     status: provider.status ?? 'active',
-    description: provider.description ?? null,
-    urlExample: provider.urlExample ?? null,
     homepage: provider.homepage ?? null,
-    searchUrl: provider.searchUrl ?? null,
     rateLimit: {
       maxConcurrent: provider.rateLimitMaxConcurrent ?? 6,
       minTime: provider.rateLimitMinTime ?? 50,

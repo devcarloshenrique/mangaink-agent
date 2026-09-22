@@ -8,7 +8,7 @@ const SEED: ProviderSeed[] = [
     slug: 'mangalivre',
     name: 'Manga Livre',
     engine: 'cheerio',
-    tags: ['mangá', 'português'],
+    tags: ['mangá', 'pt-BR'],
     status: 'active',
     rateLimitMaxConcurrent: 8,
     rateLimitMinTime: 0,
@@ -51,7 +51,7 @@ describe('PrismaProviderRepository', () => {
     const found = await repository.findBySlug('mangalivre')
     expect(found).not.toBeNull()
     expect(found?.name).toBe('Manga Livre')
-    expect(found?.tags).toContain('português')
+    expect(found?.tags).toContain('pt-BR')
 
     const missing = await repository.findBySlug('nao-existe')
     expect(missing).toBeNull()
@@ -84,10 +84,9 @@ describe('PrismaProviderRepository', () => {
     expect(mangalivre?.engine).toBe('cheerio')
   })
 
-  it('upsertFromSeed mantém edições do admin (description/status/tags) feitas via update()', async () => {
+  it('upsertFromSeed mantém edições do admin (status/tags) feitas via update()', async () => {
     await repository.upsertFromSeed(SEED)
     await repository.update('mangalivre', {
-      description: 'Editado pelo admin',
       status: 'slow',
       tags: ['custom'],
     })
@@ -95,7 +94,6 @@ describe('PrismaProviderRepository', () => {
     await repository.upsertFromSeed(SEED)
 
     const reloaded = await repository.findBySlug('mangalivre')
-    expect(reloaded?.description).toBe('Editado pelo admin')
     expect(reloaded?.status).toBe('slow')
     expect(reloaded?.tags).toEqual(['custom'])
     expect(reloaded?.rateLimitMaxConcurrent).toBe(8)
@@ -105,19 +103,17 @@ describe('PrismaProviderRepository', () => {
     await repository.upsertFromSeed(SEED)
 
     const updated = await repository.update('mangalivre', {
-      description: 'Novo descricao',
       rateLimitMaxConcurrent: 5,
     })
     expect(updated).not.toBeNull()
-    expect(updated?.description).toBe('Novo descricao')
     expect(updated?.rateLimitMaxConcurrent).toBe(5)
 
     const reloaded = await repository.findBySlug('mangalivre')
-    expect(reloaded?.description).toBe('Novo descricao')
+    expect(reloaded?.rateLimitMaxConcurrent).toBe(5)
   })
 
   it('update retorna null para slug inexistente', async () => {
-    const result = await repository.update('nao-existe', { description: 'x' })
+    const result = await repository.update('nao-existe', { status: 'slow' })
     expect(result).toBeNull()
   })
 })

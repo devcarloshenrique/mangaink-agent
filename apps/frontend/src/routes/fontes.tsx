@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 import { STATUS_CONFIG, type SourceStatus } from "@/components/providers/constants";
 import { EngineBadge } from "@/components/providers/EngineBadge";
 import { ProviderConfigDialog } from "@/components/providers/ProviderConfigDialog";
+import { applyProviderFilters, collectContentTags } from "@/components/providers/provider-tags";
 import { useProviders } from "@/hooks/useProviders";
-import type { ProviderRecord } from "@/types/scraping";
 import {
   Select,
   SelectContent,
@@ -44,6 +44,15 @@ function isSourceStatus(status: string): status is SourceStatus {
 
 function asStatus(status: string): SourceStatus {
   return isSourceStatus(status) ? status : "soon";
+}
+
+function isHttpUrl(href: string): boolean {
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function StatusIndicator({ status }: { status: string }) {
@@ -89,32 +98,16 @@ function FontesPage() {
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [configSlug, setConfigSlug] = useState<string | null>(null);
 
-  const allTags = useMemo(
-    () =>
-      Array.from(new Set(providers.flatMap((p) => p.tags))).sort((a, b) =>
-        a.localeCompare(b, "pt-BR"),
-      ),
-    [providers],
-  );
+  const allTags = useMemo(() => collectContentTags(providers), [providers]);
 
   const hasFilters = query.trim() !== "" || statusFilter !== "all" || selectedTags.length > 0;
 
   const filtered = useMemo(() => {
-    let result = providers;
-    const q = query.trim().toLowerCase();
-    if (q) {
-      result = result.filter((p) =>
-        [p.name, p.slug, p.description, ...(p.tags ?? [])]
-          .filter((v): v is string => Boolean(v))
-          .some((v) => v.toLowerCase().includes(q)),
-      );
-    }
-    if (statusFilter !== "all") {
-      result = result.filter((p) => p.status === statusFilter);
-    }
-    if (selectedTags.length > 0) {
-      result = result.filter((p) => selectedTags.every((t) => (p.tags ?? []).includes(t)));
-    }
+    const result = applyProviderFilters(providers, {
+      query,
+      status: statusFilter,
+      selectedTags,
+    });
     const sorted = [...result];
     switch (sortBy) {
       case "name":
@@ -187,7 +180,8 @@ function FontesPage() {
         </div>
 
         {allTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-xs uppercase opacity-60">Tags:</span>
             {allTags.map((tag) => {
               const active = selectedTags.includes(tag);
               return (
@@ -270,7 +264,6 @@ function FontesPage() {
             )}
           </div>
         )}
-
         {!isLoading && !isError && filtered.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((p) => (
@@ -283,7 +276,7 @@ function FontesPage() {
                       </h2>
                       <StatusIndicator status={p.status} />
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1.5">
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                       <EngineBadge engine={p.engine} />
                       <span className="text-[10px] font-medium opacity-50 truncate">
                         {highlightMatch(`#${p.slug}`, query)}
@@ -302,19 +295,9 @@ function FontesPage() {
                     </button>
                   )}
                 </div>
-                {p.description && (
-                  <p className="text-xs font-medium opacity-70 mb-2 line-clamp-2">
-                    {highlightMatch(p.description, query)}
-                  </p>
-                )}
-                {p.urlExample && (
-                  <code className="block text-[10px] bg-muted border-[2px] border-ink rounded px-2 py-1 mb-3 truncate">
-                    {p.urlExample}
-                  </code>
-                )}
-                {p.tags.length > 0 && (
+                {(p.tags ?? []).length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3 mt-auto">
-                    {p.tags.map((tag) => (
+                    {(p.tags ?? []).map((tag) => (
                       <span
                         key={tag}
                         className="text-[10px] px-1.5 py-0.5 bg-muted border-[2px] border-ink rounded"
@@ -324,7 +307,7 @@ function FontesPage() {
                     ))}
                   </div>
                 )}
-                {p.homepage && (
+                {p.homepage && isHttpUrl(p.homepage) ? (
                   <a
                     href={p.homepage}
                     target="_blank"
@@ -333,7 +316,11 @@ function FontesPage() {
                   >
                     Abrir site <ExternalLink className="h-3 w-3" />
                   </a>
-                )}
+                ) : p.homepage ? (
+                  <span className="inline-flex items-center gap-1 font-display text-xs opacity-60">
+                    Abrir site <ExternalLink className="h-3 w-3" />
+                  </span>
+                ) : null}
               </ComicPanel>
             ))}
           </div>

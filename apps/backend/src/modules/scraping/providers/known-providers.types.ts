@@ -11,10 +11,7 @@ export interface ProviderRecord {
   engine: ProviderEngine
   tags: string[]
   status: string
-  description: string | null
-  urlExample: string | null
   homepage: string | null
-  searchUrl: string | null
   rateLimitMaxConcurrent: number
   rateLimitMinTime: number
   rateLimitReservoir: number | null
@@ -33,10 +30,7 @@ export interface ProviderSeed {
   engine: ProviderEngine
   tags?: string[]
   status?: string
-  description?: string | null
-  urlExample?: string | null
   homepage?: string | null
-  searchUrl?: string | null
   rateLimitMaxConcurrent?: number
   rateLimitMinTime?: number
   rateLimitReservoir?: number | null

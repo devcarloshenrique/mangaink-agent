@@ -11,9 +11,22 @@ import {
 import { getProviderResolver } from '../utils/resolve-provider'
 
 /** Achata o body parcial da API (com `rateLimit` aninhado) para o formato do repositório. */
+function normalizeTags(tags: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of tags) {
+    const tag = raw.trim()
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    out.push(tag)
+  }
+  return out
+}
+
 function toUpdateData(input: UpdateProviderBody): ProviderUpdate {
-  const { rateLimit, ...fields } = input
+  const { rateLimit, tags, ...fields } = input
   const data: ProviderUpdate = { ...fields }
+  if (tags !== undefined) data.tags = normalizeTags(tags)
   if (rateLimit) {
     if (rateLimit.maxConcurrent !== undefined) data.rateLimitMaxConcurrent = rateLimit.maxConcurrent
     if (rateLimit.minTime !== undefined) data.rateLimitMinTime = rateLimit.minTime

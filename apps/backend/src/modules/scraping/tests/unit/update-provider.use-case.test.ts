@@ -12,10 +12,7 @@ function makeRecord(over: Record<string, unknown> = {}): Record<string, unknown>
     engine: 'cheerio',
     tags: ['mangá'],
     status: 'active',
-    description: null,
-    urlExample: null,
     homepage: null,
-    searchUrl: null,
     rateLimitMaxConcurrent: 2,
     rateLimitMinTime: 250,
     rateLimitReservoir: null,
@@ -31,7 +28,6 @@ describe('UpdateProviderUseCase', () => {
     const updated = makeRecord({
       slug: 'mangalivre',
       status: 'slow',
-      description: 'Em manutenção',
       rateLimitMaxConcurrent: 1,
       rateLimitMinTime: 500,
     })
@@ -41,13 +37,11 @@ describe('UpdateProviderUseCase', () => {
     const useCase = new UpdateProviderUseCase(repository, resolver as never)
     const result = await useCase.execute('mangalivre', {
       status: 'slow',
-      description: 'Em manutenção',
       rateLimit: { maxConcurrent: 1, minTime: 500 },
     })
 
     expect(repository.update).toHaveBeenCalledWith('mangalivre', {
       status: 'slow',
-      description: 'Em manutenção',
       rateLimitMaxConcurrent: 1,
       rateLimitMinTime: 500,
     })
@@ -60,8 +54,22 @@ describe('UpdateProviderUseCase', () => {
     })
     expect(result.slug).toBe('mangalivre')
     expect(result.status).toBe('slow')
-    expect(result.description).toBe('Em manutenção')
     expect(result.rateLimit).toEqual({ maxConcurrent: 1, minTime: 500, reservoir: null, reservoirRefreshInterval: null })
+  })
+
+  it('remove tags duplicadas e vazias antes de salvar', async () => {
+    const updated = makeRecord({ tags: ['mangá', 'pt-BR'] })
+    const repository = { update: vi.fn().mockResolvedValue(updated) } as unknown as ProviderRepository
+    const resolver = { updateRateLimit: vi.fn() }
+
+    const useCase = new UpdateProviderUseCase(repository, resolver as never)
+    await useCase.execute('mangalivre', {
+      tags: ['mangá', 'pt-BR', 'mangá', '  pt-BR  ', ''],
+    })
+
+    expect(repository.update).toHaveBeenCalledWith('mangalivre', {
+      tags: ['mangá', 'pt-BR'],
+    })
   })
 
   it('deve propagar reservoir/reservoirRefreshInterval quando presentes', async () => {

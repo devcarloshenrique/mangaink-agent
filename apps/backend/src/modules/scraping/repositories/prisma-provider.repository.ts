@@ -26,10 +26,7 @@ function toCreateData(seed: ProviderSeed): Prisma.ProviderCreateInput {
     engine: seed.engine,
     tags: seed.tags ?? [],
     status: seed.status ?? 'active',
-    description: seed.description ?? null,
-    urlExample: seed.urlExample ?? null,
     homepage: seed.homepage ?? null,
-    searchUrl: seed.searchUrl ?? null,
     rateLimitMaxConcurrent: seed.rateLimitMaxConcurrent ?? 6,
     rateLimitMinTime: seed.rateLimitMinTime ?? 50,
     rateLimitReservoir: seed.rateLimitReservoir ?? null,
@@ -40,9 +37,9 @@ function toCreateData(seed: ProviderSeed): Prisma.ProviderCreateInput {
 /**
  * Monta o objeto de update do upsert: apenas campos vindos do código e que NÃO
  * são editáveis pelo admin (name/engine). Campos de display/rate limit
- * (tags, status, description, urlExample, homepage, searchUrl,
- * rate limits) são editáveis via PATCH e NÃO devem ser revertidos pelo seed a
- * cada boot — o seed só cria providers ausentes (decisão MEC-31 revisada).
+ * (tags, status, homepage, rate limits) são editáveis via PATCH e NÃO devem
+ * ser revertidos pelo seed a cada boot — o seed só cria providers ausentes
+ * (decisão MEC-31 revisada).
  */
 function toUpdateData(seed: ProviderSeed): Prisma.ProviderUpdateInput {
   return {
