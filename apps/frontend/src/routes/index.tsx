@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { SpotlightCard } from "@/components/dashboard/SpotlightCard";
 import { LibraryCarousel } from "@/components/dashboard/LibraryCarousel";
@@ -16,6 +16,7 @@ import { useLibrary } from "@/hooks/useLibrary";
 import { authGuard } from "./-authGuard";
 import { HomeSearchBar } from "@/components/dashboard/HomeSearchBar";
 import { HomeSearchResults } from "@/components/dashboard/HomeSearchResults";
+import { DEFAULT_FILTERS, SearchFilters } from "@/components/dashboard/search-filter.types";
 import { useProviderSearch } from "@/hooks/useProviderSearch";
 import { useProviders } from "@/hooks/useProviders";
 
@@ -56,7 +57,8 @@ function Dashboard() {
   const { data: activeData } = useActiveConversions();
   const { data: libraryData, isLoading: libraryLoading } = useLibrary();
   const { data: provData } = useProviders();
-  const providers = provData?.providers ?? [];
+  const providers = useMemo(() => provData?.providers ?? [], [provData?.providers]);
+  const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const {
     query,
     setQuery,
@@ -68,6 +70,108 @@ function Dashboard() {
     loadProviderPage,
   } = useProviderSearch();
   const isSearching = query.trim().length >= 2;
+
+  // Aplicação reativa e mockada dos filtros no resultado de busca
+  const filteredSearchData = useMemo(() => {
+    if (!searchData?.results) return searchData;
+
+    const filteredResults: Record<string, (typeof searchData.results)[string]> = {};
+
+    for (const [providerSlug, res] of Object.entries(searchData.results)) {
+      // Filtro de provedor
+      if (filters.providers.length > 0 && !filters.providers.includes(providerSlug)) {
+        continue;
+      }
+
+      // Filtro de idioma
+      if (filters.language !== "all") {
+        const provMeta = providers.find((p) => p.slug === providerSlug);
+        const knownForeignLangs = [
+          "en",
+          "es",
+          "ja",
+          "ko",
+          "zh",
+          "fr",
+          "it",
+          "de",
+          "ru",
+          "id",
+          "vi",
+          "tr",
+          "pl",
+          "ar",
+          "th",
+        ];
+        const provIsPtBr =
+          provMeta?.tags?.some((t) => t.toLowerCase() === "pt-br") ||
+          !provMeta?.tags?.some((t) => knownForeignLangs.includes(t.toLowerCase()));
+
+        if (filters.language === "pt-br" && !provIsPtBr) {
+          continue;
+        } else if (
+          filters.language !== "pt-br" &&
+          !provMeta?.tags?.some((t) => t.toLowerCase() === filters.language)
+        ) {
+          continue;
+        }
+      }
+
+      let items = [...res.items];
+
+      // Filtro de tipo de obra (mangá, manhwa, manhua, webtoon, comic)
+      if (filters.workTypes.length > 0) {
+        items = items.filter((item) => {
+          const typeStr = (item.type || "").toLowerCase();
+          const genresStr = (item.genres || []).join(" ").toLowerCase();
+          const titleStr = item.title.toLowerCase();
+
+          return filters.workTypes.some((wt) => {
+            if (wt === "manga") return typeStr.includes("manga") || genresStr.includes("manga");
+            if (wt === "manhwa")
+              return (
+                typeStr.includes("manhwa") ||
+                genresStr.includes("manhwa") ||
+                genresStr.includes("corean")
+              );
+            if (wt === "manhua")
+              return (
+                typeStr.includes("manhua") ||
+                genresStr.includes("manhua") ||
+                genresStr.includes("chines")
+              );
+            if (wt === "webtoon")
+              return (
+                typeStr.includes("webtoon") ||
+                genresStr.includes("webtoon") ||
+                titleStr.includes("webtoon")
+              );
+            if (wt === "comic")
+              return (
+                typeStr.includes("comic") || genresStr.includes("comic") || genresStr.includes("hq")
+              );
+            return false;
+          });
+        });
+      }
+
+      // Ordenação
+      if (filters.sortBy === "alphabetical") {
+        items.sort((a, b) => a.title.localeCompare(b.title));
+      }
+
+      filteredResults[providerSlug] = {
+        ...res,
+        items,
+        total: items.length,
+      };
+    }
+
+    return {
+      ...searchData,
+      results: filteredResults,
+    };
+  }, [searchData, filters, providers]);
 
   const groups = useMemo(() => {
     const allConvs = convData?.items ?? [];
@@ -104,11 +208,18 @@ function Dashboard() {
     return (
       <div className="flex-1 bg-background">
         <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
-          <HomeSearchBar query={query} onChange={setQuery} isFetching={searchFetching} />
+          <HomeSearchBar
+            query={query}
+            onChange={setQuery}
+            isFetching={searchFetching}
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableProviders={providers}
+          />
           <HomeSearchResults
             providers={providers}
             debouncedQuery={debouncedQuery}
-            data={searchData}
+            data={filteredSearchData}
             isFetching={searchFetching}
             error={searchError}
             refetch={refetchSearch}
@@ -124,6 +235,15 @@ function Dashboard() {
     return (
       <div className="flex-1 bg-background">
         <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 pb-10">
+          <HomeSearchBar
+            query={query}
+            onChange={setQuery}
+            isFetching={searchFetching}
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableProviders={providers}
+          />
+
           {/* Hero de boas-vindas */}
           <EmptyHero />
 
@@ -172,7 +292,14 @@ function Dashboard() {
   return (
     <div className="flex-1 bg-background">
       <main className="mx-auto max-w-6xl space-y-10 px-4 py-6 pb-12">
-        <HomeSearchBar query={query} onChange={setQuery} isFetching={searchFetching} />
+        <HomeSearchBar
+          query={query}
+          onChange={setQuery}
+          isFetching={searchFetching}
+          filters={filters}
+          onFiltersChange={setFilters}
+          availableProviders={providers}
+        />
 
         <SpotlightCard items={groups} />
 

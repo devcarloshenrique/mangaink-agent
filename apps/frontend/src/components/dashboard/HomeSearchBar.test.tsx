@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { HomeSearchBar } from "./HomeSearchBar";
+import { DEFAULT_FILTERS, SearchFilters } from "./search-filter.types";
 
 describe("HomeSearchBar", () => {
   it("renderiza o input de busca com placeholder correto", () => {
@@ -65,5 +66,75 @@ describe("HomeSearchBar", () => {
     render(<HomeSearchBar query="" onChange={vi.fn()} isFetching={false} />);
 
     expect(screen.queryByRole("button", { name: "Limpar busca" })).not.toBeInTheDocument();
+  });
+
+  it("renderiza o seletor de idioma dentro do input com valor padrão PT-BR", () => {
+    render(<HomeSearchBar query="" onChange={vi.fn()} isFetching={false} />);
+
+    const langTrigger = screen.getByRole("button", { name: /Idioma: Português/i });
+    expect(langTrigger).toBeInTheDocument();
+    expect(langTrigger.textContent?.trim()).toBe("PT-BR");
+  });
+
+  it("permite alterar o idioma e notifica via onFiltersChange", () => {
+    const handleFiltersChange = vi.fn();
+    render(
+      <HomeSearchBar
+        query=""
+        onChange={vi.fn()}
+        isFetching={false}
+        filters={DEFAULT_FILTERS}
+        onFiltersChange={handleFiltersChange}
+      />,
+    );
+
+    const langTrigger = screen.getByRole("button", { name: /Idioma: Português/i });
+    fireEvent.click(langTrigger);
+
+    const englishOption = screen.getByRole("button", { name: /Inglês/i });
+    expect(englishOption).toBeInTheDocument();
+    fireEvent.click(englishOption);
+
+    expect(handleFiltersChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: "en",
+      }),
+    );
+  });
+
+  it("renderiza o botão externo de Filtro ao lado do input", () => {
+    render(<HomeSearchBar query="" onChange={vi.fn()} isFetching={false} />);
+
+    const filterButton = screen.getByRole("button", { name: "Filtro" });
+    expect(filterButton).toBeInTheDocument();
+  });
+
+  it("exibe o badge com a contagem de filtros ativos no botão de filtro", () => {
+    const activeFilters: SearchFilters = {
+      language: "pt-br",
+      workTypes: ["manga", "manhwa"],
+      providers: ["mangalivre"],
+      sortBy: "alphabetical",
+    };
+
+    render(
+      <HomeSearchBar query="" onChange={vi.fn()} isFetching={false} filters={activeFilters} />,
+    );
+
+    const badge = screen.getByTestId("filter-badge");
+    expect(badge).toBeInTheDocument();
+    // 2 workTypes + 1 provider + 1 sort = 4
+    expect(badge).toHaveTextContent("4");
+  });
+
+  it("abre a gaveta de filtros ao clicar no botão Filtro", () => {
+    render(<HomeSearchBar query="" onChange={vi.fn()} isFetching={false} />);
+
+    const filterButton = screen.getByRole("button", { name: "Filtro" });
+    fireEvent.click(filterButton);
+
+    expect(screen.getByText("Filtros de Busca")).toBeInTheDocument();
+    expect(screen.getByText("Tipo de Obra")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Filtrar por nome ou tag...")).toBeInTheDocument();
   });
 });
