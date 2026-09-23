@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { LanguageSelectorPopover } from "./LanguageSelectorPopover";
 import { SearchFilterDrawer } from "./SearchFilterDrawer";
-import { DEFAULT_FILTERS, SearchFilters, SearchLanguage } from "./search-filter.types";
+import {
+  DEFAULT_FILTERS,
+  MOCK_PROVIDERS_CATALOG,
+  SearchFilters,
+  SearchLanguage,
+} from "./search-filter.types";
 
 export interface HomeSearchBarProps {
   query: string;
@@ -37,10 +42,17 @@ export function HomeSearchBar({
     });
   };
 
+  const totalProvidersCount =
+    availableProviders && availableProviders.length > 0
+      ? availableProviders.length
+      : MOCK_PROVIDERS_CATALOG.length;
+
+  const enginesRestricted = activeFilters.engines && activeFilters.engines.length < 3 ? 1 : 0;
+  const providersRestricted =
+    activeFilters.providers && activeFilters.providers.length < totalProvidersCount ? 1 : 0;
+
   const activeFilterCount =
-    activeFilters.workTypes.length +
-    activeFilters.providers.length +
-    (activeFilters.sortBy !== "relevance" ? 1 : 0);
+    activeFilters.workTypes.length + enginesRestricted + providersRestricted;
 
   return (
     <section aria-label="Buscar mangá" className="w-full">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { SpotlightCard } from "@/components/dashboard/SpotlightCard";
 import { LibraryCarousel } from "@/components/dashboard/LibraryCarousel";
@@ -16,7 +16,11 @@ import { useLibrary } from "@/hooks/useLibrary";
 import { authGuard } from "./-authGuard";
 import { HomeSearchBar } from "@/components/dashboard/HomeSearchBar";
 import { HomeSearchResults } from "@/components/dashboard/HomeSearchResults";
-import { DEFAULT_FILTERS, SearchFilters } from "@/components/dashboard/search-filter.types";
+import {
+  DEFAULT_FILTERS,
+  ProviderEngine,
+  SearchFilters,
+} from "@/components/dashboard/search-filter.types";
 import { useProviderSearch } from "@/hooks/useProviderSearch";
 import { useProviders } from "@/hooks/useProviders";
 
@@ -59,6 +63,18 @@ function Dashboard() {
   const { data: provData } = useProviders();
   const providers = useMemo(() => provData?.providers ?? [], [provData?.providers]);
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
+
+  // Garante que todos os provedores vindos da API venham marcados por padrão
+  const hasInitializedProvidersRef = useRef(false);
+  useEffect(() => {
+    if (!hasInitializedProvidersRef.current && providers.length > 0) {
+      hasInitializedProvidersRef.current = true;
+      setFilters((prev) => ({
+        ...prev,
+        providers: providers.map((p) => p.slug),
+      }));
+    }
+  }, [providers]);
   const {
     query,
     setQuery,
@@ -79,13 +95,20 @@ function Dashboard() {
 
     for (const [providerSlug, res] of Object.entries(searchData.results)) {
       // Filtro de provedor
-      if (filters.providers.length > 0 && !filters.providers.includes(providerSlug)) {
+      if (filters.providers && !filters.providers.includes(providerSlug)) {
+        continue;
+      }
+
+      const provMeta = providers.find((p) => p.slug === providerSlug);
+
+      // Filtro de engine (api, cheerio, playwright)
+      const provEngine = (provMeta?.engine || "cheerio") as ProviderEngine;
+      if (filters.engines && !filters.engines.includes(provEngine)) {
         continue;
       }
 
       // Filtro de idioma
       if (filters.language !== "all") {
-        const provMeta = providers.find((p) => p.slug === providerSlug);
         const knownForeignLangs = [
           "en",
           "es",
@@ -153,11 +176,6 @@ function Dashboard() {
             return false;
           });
         });
-      }
-
-      // Ordenação
-      if (filters.sortBy === "alphabetical") {
-        items.sort((a, b) => a.title.localeCompare(b.title));
       }
 
       filteredResults[providerSlug] = {

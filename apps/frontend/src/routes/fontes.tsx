@@ -37,6 +37,7 @@ export const Route = createFileRoute("/fontes")({
 type SortBy = "name" | "status" | "engine";
 
 const STATUS_ORDER: SourceStatus[] = ["active", "slow", "beta", "offline", "soon"];
+const SPEED_ORDER: string[] = ["cheerio", "api", "playwright"];
 
 function isSourceStatus(status: string): status is SourceStatus {
   return status in STATUS_CONFIG;
@@ -120,7 +121,11 @@ function FontesPage() {
         );
         break;
       case "engine":
-        sorted.sort((a, b) => a.engine.localeCompare(b.engine));
+        sorted.sort(
+          (a, b) =>
+            (SPEED_ORDER.indexOf(a.engine) === -1 ? 99 : SPEED_ORDER.indexOf(a.engine)) -
+            (SPEED_ORDER.indexOf(b.engine) === -1 ? 99 : SPEED_ORDER.indexOf(b.engine)),
+        );
         break;
     }
     return sorted;
@@ -212,7 +217,7 @@ function FontesPage() {
             <SelectContent className="border-[3px] border-ink">
               <SelectItem value="name">Nome A–Z</SelectItem>
               <SelectItem value="status">Status</SelectItem>
-              <SelectItem value="engine">Engine</SelectItem>
+              <SelectItem value="engine">Velocidade</SelectItem>
             </SelectContent>
           </Select>
         </div>

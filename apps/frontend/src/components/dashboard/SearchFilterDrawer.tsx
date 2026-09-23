@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { SlidersHorizontal, Search, X, Check, RotateCcw } from "lucide-react";
+import { SlidersHorizontal, Search, X, Check, RotateCcw, Zap, Rocket, Globe } from "lucide-react";
 import {
   Sheet,
   SheetTrigger,
@@ -12,11 +12,14 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { EngineBadge } from "@/components/providers/EngineBadge";
 import {
   SearchFilters,
   SearchProviderOption,
   WorkType,
   WORK_TYPE_OPTIONS,
+  ProviderEngine,
+  ALL_ENGINES,
   MOCK_PROVIDERS_CATALOG,
 } from "./search-filter.types";
 
@@ -67,17 +70,56 @@ export function SearchFilterDrawer({
     return list;
   }, [availableProviders]);
 
-  // Provedores filtrados pela busca interna do drawer
+  const ENGINE_OPTIONS: Array<{
+    value: ProviderEngine;
+    label: string;
+    desc: string;
+    icon: typeof Zap;
+    activeClass: string;
+  }> = [
+    {
+      value: "cheerio",
+      label: "Ultra Rápido",
+      desc: "HTML direto (~1s)",
+      icon: Zap,
+      activeClass: "bg-comic-yellow text-comic-ink",
+    },
+    {
+      value: "api",
+      label: "Rápido",
+      desc: "Conexão API (~2s)",
+      icon: Rocket,
+      activeClass: "bg-comic-blue text-white",
+    },
+    {
+      value: "playwright",
+      label: "Padrão",
+      desc: "Navegador web (~8s)",
+      icon: Globe,
+      activeClass: "bg-comic-red text-white",
+    },
+  ];
+
+  // Provedores filtrados pela busca interna do drawer e engines selecionadas
   const filteredProviders = useMemo(() => {
-    if (!providerQuery.trim()) return allProviders;
+    let list = allProviders;
+
+    if (filters.engines && filters.engines.length > 0) {
+      list = list.filter((p) => {
+        const eng = (p.engine || "cheerio") as ProviderEngine;
+        return filters.engines.includes(eng);
+      });
+    }
+
+    if (!providerQuery.trim()) return list;
     const q = providerQuery.toLowerCase();
-    return allProviders.filter(
+    return list.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.slug.toLowerCase().includes(q) ||
         p.tags?.some((t) => t.toLowerCase().includes(q)),
     );
-  }, [allProviders, providerQuery]);
+  }, [allProviders, providerQuery, filters.engines]);
 
   const toggleWorkType = (type: WorkType) => {
     const exists = filters.workTypes.includes(type);
@@ -85,6 +127,13 @@ export function SearchFilterDrawer({
       ? filters.workTypes.filter((t) => t !== type)
       : [...filters.workTypes, type];
     onChange({ ...filters, workTypes: updated });
+  };
+
+  const toggleEngine = (engine: ProviderEngine) => {
+    const current = filters.engines || ALL_ENGINES;
+    const exists = current.includes(engine);
+    const updated = exists ? current.filter((e) => e !== engine) : [...current, engine];
+    onChange({ ...filters, engines: updated });
   };
 
   const toggleProvider = (slug: string) => {
@@ -120,8 +169,8 @@ export function SearchFilterDrawer({
     onChange({
       language: filters.language, // mantém o idioma selecionado no input
       workTypes: [],
-      providers: [],
-      sortBy: "relevance",
+      engines: [...ALL_ENGINES],
+      providers: allProviders.map((p) => p.slug),
     });
   };
 
@@ -206,7 +255,51 @@ export function SearchFilterDrawer({
             </div>
           </div>
 
-          {/* Seção 2: Provedores / Fontes */}
+          {/* Seção 2: Velocidade de Busca */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                  Velocidade de Busca
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  Filtre fontes pela rapidez da resposta
+                </span>
+              </div>
+              <span className="text-[11px] font-bold text-muted-foreground shrink-0">
+                {(filters.engines || ALL_ENGINES).length}/3 ativas
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {ENGINE_OPTIONS.map((eng) => {
+                const isSelected = (filters.engines || ALL_ENGINES).includes(eng.value);
+                const Icon = eng.icon;
+                return (
+                  <button
+                    key={eng.value}
+                    type="button"
+                    onClick={() => toggleEngine(eng.value)}
+                    aria-pressed={isSelected}
+                    aria-label={`Filtro velocidade ${eng.label}`}
+                    className={cn(
+                      "flex flex-col items-center justify-center p-2.5 min-h-[68px] rounded-md border-2 border-ink text-xs transition-all shadow-comic-sm cursor-pointer select-none",
+                      isSelected
+                        ? cn(eng.activeClass, "font-bold shadow-none translate-y-0.5")
+                        : "bg-card text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted font-medium",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 mb-1.5 stroke-[2.5]" />
+                    <span className="font-sans font-bold text-xs tracking-tight">{eng.label}</span>
+                    <span className="text-[10px] font-medium opacity-90 leading-tight mt-0.5 text-center">
+                      {eng.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Seção 3: Provedores / Fontes */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -316,49 +409,16 @@ export function SearchFilterDrawer({
                         </div>
                       </div>
                       {p.engine && (
-                        <span className="shrink-0 rounded border border-ink/30 bg-muted px-1.5 py-0.5 text-[9px] font-mono uppercase text-muted-foreground">
-                          {p.engine}
-                        </span>
+                        <EngineBadge
+                          engine={p.engine as ProviderEngine}
+                          size="sm"
+                          className="shrink-0 scale-90"
+                        />
                       )}
                     </label>
                   );
                 })
               )}
-            </div>
-          </div>
-
-          {/* Seção 3: Ordenação */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Ordenação
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onChange({ ...filters, sortBy: "relevance" })}
-                className={cn(
-                  "rounded-md border-2 border-ink p-2.5 text-left text-xs transition-all shadow-comic-sm cursor-pointer",
-                  filters.sortBy === "relevance"
-                    ? "bg-comic-yellow text-ink border-ink font-bold shadow-none translate-y-0.5"
-                    : "bg-card text-foreground hover:bg-muted font-medium",
-                )}
-              >
-                <div className="font-bold">Relevância</div>
-                <div className="text-[10px] opacity-70">Melhor correspondência</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange({ ...filters, sortBy: "alphabetical" })}
-                className={cn(
-                  "rounded-md border-2 border-ink p-2.5 text-left text-xs transition-all shadow-comic-sm cursor-pointer",
-                  filters.sortBy === "alphabetical"
-                    ? "bg-comic-yellow text-ink border-ink font-bold shadow-none translate-y-0.5"
-                    : "bg-card text-foreground hover:bg-muted font-medium",
-                )}
-              >
-                <div className="font-bold">Alfabética (A-Z)</div>
-                <div className="text-[10px] opacity-70">Ordem do título</div>
-              </button>
             </div>
           </div>
         </div>

@@ -19,21 +19,15 @@ export type SearchLanguage =
 
 export type WorkType = "manga" | "manhwa" | "manhua" | "webtoon" | "comic";
 
-export type SortOption = "relevance" | "alphabetical";
+export type ProviderEngine = "api" | "cheerio" | "playwright";
+export const ALL_ENGINES: ProviderEngine[] = ["api", "cheerio", "playwright"];
 
 export interface SearchFilters {
   language: SearchLanguage;
   workTypes: WorkType[];
+  engines: ProviderEngine[];
   providers: string[]; // slugs dos provedores selecionados
-  sortBy: SortOption;
 }
-
-export const DEFAULT_FILTERS: SearchFilters = {
-  language: "pt-br",
-  workTypes: [],
-  providers: [],
-  sortBy: "relevance",
-};
 
 export interface LanguageOption {
   value: SearchLanguage;
@@ -229,7 +223,7 @@ export const MOCK_PROVIDERS_CATALOG: SearchProviderOption[] = [
   {
     slug: "randomscan",
     name: "Random Scan",
-    engine: "cheerio",
+    engine: "playwright",
     tags: ["manhwa", "pt-br"],
     language: "pt-br",
   },
@@ -264,3 +258,10 @@ export const MOCK_PROVIDERS_CATALOG: SearchProviderOption[] = [
   { slug: "rawkuma", name: "Rawkuma", engine: "cheerio", tags: ["manga", "ja"], language: "ja" },
   { slug: "klmanga", name: "KlManga", engine: "cheerio", tags: ["manga", "ja"], language: "ja" },
 ];
+
+export const DEFAULT_FILTERS: SearchFilters = {
+  language: "pt-br",
+  workTypes: [],
+  engines: ["api", "cheerio", "playwright"],
+  providers: MOCK_PROVIDERS_CATALOG.map((p) => p.slug),
+};

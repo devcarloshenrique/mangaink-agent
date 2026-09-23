@@ -113,8 +113,8 @@ describe("HomeSearchBar", () => {
     const activeFilters: SearchFilters = {
       language: "pt-br",
       workTypes: ["manga", "manhwa"],
+      engines: ["api"],
       providers: ["mangalivre"],
-      sortBy: "alphabetical",
     };
 
     render(
@@ -123,8 +123,16 @@ describe("HomeSearchBar", () => {
 
     const badge = screen.getByTestId("filter-badge");
     expect(badge).toBeInTheDocument();
-    // 2 workTypes + 1 provider + 1 sort = 4
+    // 2 workTypes + 1 engine restrita + 1 provider restrito = 4
     expect(badge).toHaveTextContent("4");
+  });
+
+  it("não exibe o badge de filtros quando todos os filtros estão no padrão", () => {
+    render(
+      <HomeSearchBar query="" onChange={vi.fn()} isFetching={false} filters={DEFAULT_FILTERS} />,
+    );
+
+    expect(screen.queryByTestId("filter-badge")).not.toBeInTheDocument();
   });
 
   it("abre a gaveta de filtros ao clicar no botão Filtro", () => {
