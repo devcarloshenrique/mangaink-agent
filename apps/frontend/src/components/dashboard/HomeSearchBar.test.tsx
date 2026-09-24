@@ -123,8 +123,8 @@ describe("HomeSearchBar", () => {
 
     const badge = screen.getByTestId("filter-badge");
     expect(badge).toBeInTheDocument();
-    // 2 workTypes + 1 engine restrita + 1 provider restrito = 4
-    expect(badge).toHaveTextContent("4");
+    // 1 workType parcial + 1 engine restrita + 1 provider restrito = 3
+    expect(badge).toHaveTextContent("3");
   });
 
   it("não exibe o badge de filtros quando todos os filtros estão no padrão", () => {

@@ -1,32 +1,48 @@
 import { useState, useMemo } from "react";
-import { SlidersHorizontal, Search, X, Check, RotateCcw, Zap, Rocket, Globe } from "lucide-react";
+import {
+  SlidersHorizontal,
+  Search,
+  X,
+  Check,
+  RotateCcw,
+  Zap,
+  Rocket,
+  Globe,
+  ChevronDown,
+} from "lucide-react";
 import {
   Sheet,
   SheetTrigger,
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { EngineBadge } from "@/components/providers/EngineBadge";
+import { STATUS_CONFIG, SourceStatus } from "@/components/providers/constants";
 import {
   SearchFilters,
   SearchProviderOption,
   WorkType,
   WORK_TYPE_OPTIONS,
+  ALL_WORK_TYPES,
   ProviderEngine,
   ALL_ENGINES,
-  MOCK_PROVIDERS_CATALOG,
 } from "./search-filter.types";
 
 interface SearchFilterDrawerProps {
   filters: SearchFilters;
   onChange: (filters: SearchFilters) => void;
-  availableProviders?: Array<{ slug: string; name: string; engine?: string; tags?: string[] }>;
+  availableProviders?: Array<{
+    slug: string;
+    name: string;
+    engine?: string;
+    tags?: string[];
+    status?: string;
+  }>;
   activeFilterCount: number;
 }
 
@@ -38,8 +54,17 @@ export function SearchFilterDrawer({
 }: SearchFilterDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [providerQuery, setProviderQuery] = useState("");
+  const [sectionsOpen, setSectionsOpen] = useState({
+    workTypes: true,
+    engines: true,
+    providers: true,
+  });
 
-  // Combina provedores reais com catálogo mockado garantindo lista rica escalável
+  const toggleSection = (section: "workTypes" | "engines" | "providers") => {
+    setSectionsOpen((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Apenas provedores reais (GET /providers)
   const allProviders = useMemo<SearchProviderOption[]>(() => {
     const list: SearchProviderOption[] = [];
     const seen = new Set<string>();
@@ -53,17 +78,10 @@ export function SearchFilterDrawer({
             name: p.name,
             engine: p.engine,
             tags: p.tags,
+            status: p.status,
             language: p.tags?.some((t) => t.toLowerCase() === "pt-br") ? "pt-br" : undefined,
           });
         }
-      }
-    }
-
-    // Adiciona mocks para demonstrar a escala de 100+ provedores
-    for (const mock of MOCK_PROVIDERS_CATALOG) {
-      if (!seen.has(mock.slug)) {
-        seen.add(mock.slug);
-        list.push(mock);
       }
     }
 
@@ -151,16 +169,6 @@ export function SearchFilterDrawer({
     });
   };
 
-  const selectPtBrProviders = () => {
-    const ptBrSlugs = allProviders
-      .filter((p) => p.language === "pt-br" || p.tags?.some((t) => t.toLowerCase() === "pt-br"))
-      .map((p) => p.slug);
-    onChange({
-      ...filters,
-      providers: ptBrSlugs,
-    });
-  };
-
   const clearProviders = () => {
     onChange({ ...filters, providers: [] });
   };
@@ -168,7 +176,7 @@ export function SearchFilterDrawer({
   const handleClearAll = () => {
     onChange({
       language: filters.language, // mantém o idioma selecionado no input
-      workTypes: [],
+      workTypes: [...ALL_WORK_TYPES],
       engines: [...ALL_ENGINES],
       providers: allProviders.map((p) => p.slug),
     });
@@ -221,223 +229,272 @@ export function SearchFilterDrawer({
               </button>
             )}
           </div>
-          <SheetDescription className="text-xs text-muted-foreground text-left">
-            Refine os resultados por tipo de obra e provedores homologados.
-          </SheetDescription>
         </SheetHeader>
 
         {/* Corpo com scroll */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 flex flex-col gap-6 p-5 min-h-0 overflow-y-auto">
           {/* Seção 1: Tipo de Obra */}
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Tipo de Obra
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {WORK_TYPE_OPTIONS.map((type) => {
-                const isSelected = filters.workTypes.includes(type.value);
-                return (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() => toggleWorkType(type.value)}
-                    className={cn(
-                      "rounded-md border-2 border-ink px-3 py-1.5 text-xs font-bold transition-all shadow-comic-sm cursor-pointer",
-                      isSelected
-                        ? "bg-comic-blue text-white translate-y-0.5 shadow-none"
-                        : "bg-card text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {type.label}
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => toggleSection("workTypes")}
+              className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer select-none"
+              aria-expanded={sectionsOpen.workTypes}
+            >
+              <span>Tipo de Obra</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-muted-foreground lowercase">
+                  {filters.workTypes.length}/{ALL_WORK_TYPES.length} ativos
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform duration-200 stroke-[2.5]",
+                    sectionsOpen.workTypes && "rotate-180",
+                  )}
+                />
+              </div>
+            </button>
+            {sectionsOpen.workTypes && (
+              <div className="grid grid-cols-5 gap-2">
+                {WORK_TYPE_OPTIONS.map((type) => {
+                  const isSelected = filters.workTypes.includes(type.value);
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => toggleWorkType(type.value)}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        "min-w-0 rounded-md border-2 border-ink px-1 py-1.5 text-[11px] font-bold transition-all shadow-comic-sm cursor-pointer truncate",
+                        isSelected
+                          ? "bg-comic-blue text-white translate-y-0.5 shadow-none"
+                          : "bg-card text-foreground hover:bg-muted",
+                      )}
+                    >
+                      {type.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Seção 2: Velocidade de Busca */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                  Velocidade de Busca
-                </label>
-                <span className="text-[11px] text-muted-foreground">
-                  Filtre fontes pela rapidez da resposta
+            <button
+              type="button"
+              onClick={() => toggleSection("engines")}
+              className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer select-none"
+              aria-expanded={sectionsOpen.engines}
+            >
+              <span>Velocidade de Busca</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-muted-foreground lowercase">
+                  {(filters.engines || ALL_ENGINES).length}/3 ativas
                 </span>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform duration-200 stroke-[2.5]",
+                    sectionsOpen.engines && "rotate-180",
+                  )}
+                />
               </div>
-              <span className="text-[11px] font-bold text-muted-foreground shrink-0">
-                {(filters.engines || ALL_ENGINES).length}/3 ativas
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {ENGINE_OPTIONS.map((eng) => {
-                const isSelected = (filters.engines || ALL_ENGINES).includes(eng.value);
-                const Icon = eng.icon;
-                return (
-                  <button
-                    key={eng.value}
-                    type="button"
-                    onClick={() => toggleEngine(eng.value)}
-                    aria-pressed={isSelected}
-                    aria-label={`Filtro velocidade ${eng.label}`}
-                    className={cn(
-                      "flex flex-col items-center justify-center p-2.5 min-h-[68px] rounded-md border-2 border-ink text-xs transition-all shadow-comic-sm cursor-pointer select-none",
-                      isSelected
-                        ? cn(eng.activeClass, "font-bold shadow-none translate-y-0.5")
-                        : "bg-card text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted font-medium",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 mb-1.5 stroke-[2.5]" />
-                    <span className="font-sans font-bold text-xs tracking-tight">{eng.label}</span>
-                    <span className="text-[10px] font-medium opacity-90 leading-tight mt-0.5 text-center">
-                      {eng.desc}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            </button>
+            {sectionsOpen.engines && (
+              <div className="grid grid-cols-3 gap-2">
+                {ENGINE_OPTIONS.map((eng) => {
+                  const isSelected = (filters.engines || ALL_ENGINES).includes(eng.value);
+                  const Icon = eng.icon;
+                  return (
+                    <button
+                      key={eng.value}
+                      type="button"
+                      onClick={() => toggleEngine(eng.value)}
+                      aria-pressed={isSelected}
+                      aria-label={`Filtro velocidade ${eng.label}`}
+                      title={eng.desc}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 h-9 px-2 rounded-md border-2 border-ink text-xs transition-all shadow-comic-sm cursor-pointer select-none",
+                        isSelected
+                          ? cn(eng.activeClass, "font-bold shadow-none translate-y-0.5")
+                          : "bg-card text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted font-medium",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" />
+                      <span className="font-sans font-bold text-[11px] tracking-tight leading-none truncate">
+                        {eng.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Seção 3: Provedores / Fontes */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Provedores ({allProviders.length} fontes)
-              </label>
-              {filters.providers.length > 0 && (
-                <span className="text-[11px] font-bold text-comic-blue">
-                  {filters.providers.length} selecionado(s)
-                </span>
-              )}
-            </div>
-
-            {/* Busca interna para escalar 100+ provedores */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                value={providerQuery}
-                onChange={(e) => setProviderQuery(e.target.value)}
-                placeholder="Filtrar por nome ou tag..."
-                aria-label="Filtrar provedores"
-                className="h-9 pl-8 pr-7 text-xs border-2 border-ink bg-card"
-              />
-              {providerQuery.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setProviderQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Limpar busca de provedores"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Ações rápidas */}
-            <div className="flex items-center gap-2 text-[11px] pt-0.5">
-              <button
-                type="button"
-                onClick={selectAllProviders}
-                className="font-bold text-ink hover:underline cursor-pointer"
-              >
-                Todos
-              </button>
-              <span className="text-muted-foreground">•</span>
-              <button
-                type="button"
-                onClick={selectPtBrProviders}
-                className="font-bold text-comic-blue hover:underline cursor-pointer"
-              >
-                Apenas PT-BR
-              </button>
-              <span className="text-muted-foreground">•</span>
-              <button
-                type="button"
-                onClick={clearProviders}
-                className="font-bold text-muted-foreground hover:text-comic-red cursor-pointer"
-              >
-                Limpar seleção
-              </button>
-            </div>
-
-            {/* Lista rolável de provedores */}
-            <div
-              tabIndex={0}
-              role="region"
-              aria-label="Lista de provedores disponíveis"
-              className="max-h-[260px] overflow-y-auto space-y-1.5 rounded-lg border-2 border-ink/40 bg-muted/20 p-2 pr-1"
+          <div className="flex-1 flex flex-col space-y-2.5 min-h-0">
+            <button
+              type="button"
+              onClick={() => toggleSection("providers")}
+              className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer select-none"
+              aria-expanded={sectionsOpen.providers}
             >
-              {filteredProviders.length === 0 ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  Nenhum provedor encontrado para &ldquo;{providerQuery}&rdquo;.
-                </p>
-              ) : (
-                filteredProviders.map((p) => {
-                  const isChecked = filters.providers.includes(p.slug);
-                  return (
-                    <label
-                      key={p.slug}
-                      className={cn(
-                        "flex items-center justify-between rounded-md border border-ink/30 bg-card p-2 text-xs transition-colors hover:bg-muted cursor-pointer select-none",
-                        isChecked && "border-ink bg-comic-yellow/15",
-                      )}
+              <span>Provedores ({allProviders.length} fontes)</span>
+              <div className="flex items-center gap-1.5">
+                {filters.providers.length > 0 && (
+                  <span className="text-[11px] font-bold text-comic-blue lowercase">
+                    {filters.providers.length}/{allProviders.length}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform duration-200 stroke-[2.5]",
+                    sectionsOpen.providers && "rotate-180",
+                  )}
+                />
+              </div>
+            </button>
+
+            {sectionsOpen.providers && (
+              <>
+                {/* Busca interna para escalar provedores */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={providerQuery}
+                    onChange={(e) => setProviderQuery(e.target.value)}
+                    placeholder="Filtrar por nome ou tag..."
+                    aria-label="Filtrar provedores"
+                    className="h-9 pl-8 pr-7 text-xs border-2 border-ink bg-card"
+                  />
+                  {providerQuery.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setProviderQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label="Limpar busca de provedores"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Ações rápidas */}
+                <div className="flex items-center justify-between pt-0.5">
+                  <button
+                    type="button"
+                    onClick={selectAllProviders}
+                    className={cn(
+                      "rounded-md border-2 border-ink px-3 py-1.5 text-xs font-bold transition-all shadow-comic-sm cursor-pointer",
+                      filters.providers.length === allProviders.length
+                        ? "bg-comic-blue text-white translate-y-0.5 shadow-none"
+                        : "bg-card text-foreground hover:bg-muted",
+                    )}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearProviders}
+                    className={cn(
+                      "text-xs font-bold cursor-pointer shrink-0",
+                      filters.providers.length === 0
+                        ? "text-comic-red"
+                        : "text-muted-foreground hover:text-comic-red hover:underline",
+                    )}
+                  >
+                    Limpar seleção
+                  </button>
+                </div>
+
+                {/* Lista rolável de provedores */}
+                <div
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Lista de provedores disponíveis"
+                  className="flex-1 min-h-[200px] overflow-y-auto space-y-1.5 rounded-lg border-2 border-ink/40 bg-muted/20 p-2 pr-1"
+                >
+                  {filteredProviders.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-muted-foreground">
+                      Nenhum provedor encontrado para &ldquo;{providerQuery}&rdquo;.
+                    </p>
+                  ) : (
+                    filteredProviders.map((p) => {
+                      const isChecked = filters.providers.includes(p.slug);
+                      const statusCfg = p.status
+                        ? STATUS_CONFIG[p.status as SourceStatus]
+                        : undefined;
+                      return (
+                        <label
+                          key={p.slug}
                           className={cn(
-                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-ink transition-colors",
-                            isChecked ? "bg-comic-blue text-white" : "bg-background",
+                            "flex items-center justify-between rounded-md border border-ink/30 bg-card p-2 text-xs transition-colors hover:bg-muted cursor-pointer select-none",
+                            isChecked && "border-ink bg-comic-yellow/15",
                           )}
                         >
-                          {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleProvider(p.slug)}
-                          className="sr-only"
-                          aria-label={`Selecionar provedor ${p.name}`}
-                        />
-                        <div className="truncate">
-                          <span className="font-bold text-ink">{p.name}</span>
-                          {p.tags && p.tags.length > 0 && (
-                            <span className="ml-1.5 text-[10px] text-muted-foreground">
-                              ({p.tags.slice(0, 2).join(", ")})
-                            </span>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={cn(
+                                "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-ink transition-colors",
+                                isChecked ? "bg-comic-blue text-white" : "bg-background",
+                              )}
+                            >
+                              {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleProvider(p.slug)}
+                              className="sr-only"
+                              aria-label={`Selecionar provedor ${p.name}`}
+                            />
+                            <div className="truncate flex items-center gap-1.5">
+                              {statusCfg && (
+                                <span
+                                  className={cn("h-2 w-2 rounded-full shrink-0", statusCfg.dot)}
+                                  title={`Status: ${statusCfg.label}`}
+                                />
+                              )}
+                              <span className="font-bold text-ink truncate">{p.name}</span>
+                              {p.tags && p.tags.length > 0 && (
+                                <span className="text-[10px] text-muted-foreground shrink-0">
+                                  ({p.tags.slice(0, 2).join(", ")})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {p.engine && (
+                            <EngineBadge
+                              engine={p.engine as ProviderEngine}
+                              size="sm"
+                              className="shrink-0 scale-90"
+                            />
                           )}
-                        </div>
-                      </div>
-                      {p.engine && (
-                        <EngineBadge
-                          engine={p.engine as ProviderEngine}
-                          size="sm"
-                          className="shrink-0 scale-90"
-                        />
-                      )}
-                    </label>
-                  );
-                })
-              )}
-            </div>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
         {/* Rodapé da gaveta */}
         <SheetFooter className="p-4 border-t-[3px] border-ink bg-card flex flex-row items-center justify-between gap-3">
-          <div className="text-xs text-muted-foreground font-medium">
-            {activeFilterCount === 0
-              ? "Nenhum filtro ativo"
-              : `${activeFilterCount} filtro(s) ativo(s)`}
-          </div>
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className={cn(
+              "text-xs font-bold cursor-pointer shrink-0",
+              activeFilterCount === 0
+                ? "text-comic-red"
+                : "text-muted-foreground hover:text-comic-red hover:underline",
+            )}
+          >
+            Limpar
+          </button>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleClearAll}
-              className="rounded-md border-2 border-ink bg-background px-3 py-1.5 text-xs font-bold hover:bg-muted cursor-pointer"
-            >
-              Limpar
-            </button>
             <SheetClose asChild>
               <button
                 type="button"

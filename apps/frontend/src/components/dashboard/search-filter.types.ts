@@ -65,8 +65,10 @@ export const WORK_TYPE_OPTIONS: Array<{
   { value: "manhwa", label: "Manhwa", description: "Quadrinhos coreanos" },
   { value: "manhua", label: "Manhua", description: "Quadrinhos chineses" },
   { value: "webtoon", label: "Webtoon", description: "Formato scroll vertical" },
-  { value: "comic", label: "Comic / HQ", description: "Quadrinhos ocidentais" },
+  { value: "comic", label: "Comic/HQ", description: "Quadrinhos ocidentais" },
 ];
+
+export const ALL_WORK_TYPES: WorkType[] = WORK_TYPE_OPTIONS.map((o) => o.value);
 
 export interface SearchProviderOption {
   slug: string;
@@ -74,6 +76,7 @@ export interface SearchProviderOption {
   engine?: string;
   tags?: string[];
   language?: SearchLanguage | string;
+  status?: string;
 }
 
 /** Provedores padrão e mockados para demonstração de escala (100+ provedores). */
@@ -261,7 +264,8 @@ export const MOCK_PROVIDERS_CATALOG: SearchProviderOption[] = [
 
 export const DEFAULT_FILTERS: SearchFilters = {
   language: "pt-br",
-  workTypes: [],
+  workTypes: [...ALL_WORK_TYPES],
   engines: ["api", "cheerio", "playwright"],
-  providers: MOCK_PROVIDERS_CATALOG.map((p) => p.slug),
+  // Populado ao carregar os providers reais (veja useEffect em routes/index.tsx)
+  providers: [],
 };

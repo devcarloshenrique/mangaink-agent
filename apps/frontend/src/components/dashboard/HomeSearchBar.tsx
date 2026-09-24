@@ -3,8 +3,8 @@ import { Loader2, Search, X } from "lucide-react";
 import { LanguageSelectorPopover } from "./LanguageSelectorPopover";
 import { SearchFilterDrawer } from "./SearchFilterDrawer";
 import {
+  ALL_WORK_TYPES,
   DEFAULT_FILTERS,
-  MOCK_PROVIDERS_CATALOG,
   SearchFilters,
   SearchLanguage,
 } from "./search-filter.types";
@@ -15,7 +15,13 @@ export interface HomeSearchBarProps {
   isFetching: boolean;
   filters?: SearchFilters;
   onFiltersChange?: (filters: SearchFilters) => void;
-  availableProviders?: Array<{ slug: string; name: string; engine?: string; tags?: string[] }>;
+  availableProviders?: Array<{
+    slug: string;
+    name: string;
+    engine?: string;
+    tags?: string[];
+    status?: string;
+  }>;
 }
 
 export function HomeSearchBar({
@@ -42,17 +48,23 @@ export function HomeSearchBar({
     });
   };
 
-  const totalProvidersCount =
-    availableProviders && availableProviders.length > 0
-      ? availableProviders.length
-      : MOCK_PROVIDERS_CATALOG.length;
+  const totalProvidersCount = availableProviders?.length ?? 0;
 
   const enginesRestricted = activeFilters.engines && activeFilters.engines.length < 3 ? 1 : 0;
   const providersRestricted =
-    activeFilters.providers && activeFilters.providers.length < totalProvidersCount ? 1 : 0;
+    totalProvidersCount > 0
+      ? activeFilters.providers && activeFilters.providers.length < totalProvidersCount
+        ? 1
+        : 0
+      : activeFilters.providers && activeFilters.providers.length > 0
+        ? 1
+        : 0;
+  const workTypesRestricted =
+    activeFilters.workTypes.length > 0 && activeFilters.workTypes.length < ALL_WORK_TYPES.length
+      ? 1
+      : 0;
 
-  const activeFilterCount =
-    activeFilters.workTypes.length + enginesRestricted + providersRestricted;
+  const activeFilterCount = workTypesRestricted + enginesRestricted + providersRestricted;
 
   return (
     <section aria-label="Buscar mangá" className="w-full">

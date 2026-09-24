@@ -1,7 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SearchFilterDrawer } from "./SearchFilterDrawer";
-import { DEFAULT_FILTERS, SearchFilters } from "./search-filter.types";
+import { ALL_WORK_TYPES, DEFAULT_FILTERS, SearchFilters } from "./search-filter.types";
+
+const TEST_PROVIDERS = [
+  { slug: "mangalivre", name: "MangaLivre", engine: "cheerio", tags: ["pt-br"], status: "active" },
+  {
+    slug: "imperiodabritannia",
+    name: "Império da Britannia",
+    engine: "api",
+    tags: ["pt-br"],
+    status: "active",
+  },
+  { slug: "webtoonxyz", name: "Webtoon XYZ", engine: "cheerio", tags: ["en"], status: "active" },
+];
 
 describe("SearchFilterDrawer", () => {
   it("renderiza o botão Filtro com acessibilidade", () => {
@@ -28,6 +40,23 @@ describe("SearchFilterDrawer", () => {
     expect(badge).toHaveTextContent("1");
   });
 
+  it("vem com todos os tipos de obra marcados por padrão", () => {
+    render(
+      <SearchFilterDrawer filters={DEFAULT_FILTERS} onChange={vi.fn()} activeFilterCount={0} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
+
+    expect(screen.getByRole("button", { name: "Mangá" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Manhwa" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Manhua" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Webtoon" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Comic/HQ" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("permite alternar tipos de obra", () => {
     const handleChange = vi.fn();
     render(
@@ -45,14 +74,19 @@ describe("SearchFilterDrawer", () => {
 
     expect(handleChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        workTypes: ["manhwa"],
+        workTypes: expect.not.arrayContaining(["manhwa"]),
       }),
     );
   });
 
   it("permite filtrar a lista de provedores pela busca interna", () => {
     render(
-      <SearchFilterDrawer filters={DEFAULT_FILTERS} onChange={vi.fn()} activeFilterCount={0} />,
+      <SearchFilterDrawer
+        filters={{ ...DEFAULT_FILTERS, providers: ["mangalivre", "imperiodabritannia"] }}
+        onChange={vi.fn()}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={0}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
@@ -68,8 +102,9 @@ describe("SearchFilterDrawer", () => {
     const handleChange = vi.fn();
     render(
       <SearchFilterDrawer
-        filters={DEFAULT_FILTERS}
+        filters={{ ...DEFAULT_FILTERS, providers: ["mangalivre", "imperiodabritannia"] }}
         onChange={handleChange}
+        availableProviders={TEST_PROVIDERS}
         activeFilterCount={0}
       />,
     );
@@ -112,34 +147,13 @@ describe("SearchFilterDrawer", () => {
     );
   });
 
-  it("seleciona apenas provedores PT-BR na ação rápida", () => {
-    const handleChange = vi.fn();
-    render(
-      <SearchFilterDrawer
-        filters={DEFAULT_FILTERS}
-        onChange={handleChange}
-        activeFilterCount={0}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
-
-    const ptBrQuickAction = screen.getByRole("button", { name: "Apenas PT-BR" });
-    fireEvent.click(ptBrQuickAction);
-
-    expect(handleChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providers: expect.arrayContaining(["mangalivre", "imperiodabritannia", "mangasbrasuka"]),
-      }),
-    );
-  });
-
   it("permite selecionar todos os provedores ou limpar seleção", () => {
     const handleChange = vi.fn();
     render(
       <SearchFilterDrawer
         filters={{ ...DEFAULT_FILTERS, providers: [] }}
         onChange={handleChange}
+        availableProviders={TEST_PROVIDERS}
         activeFilterCount={0}
       />,
     );
@@ -175,7 +189,12 @@ describe("SearchFilterDrawer", () => {
     };
 
     render(
-      <SearchFilterDrawer filters={activeFilters} onChange={handleChange} activeFilterCount={3} />,
+      <SearchFilterDrawer
+        filters={activeFilters}
+        onChange={handleChange}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={3}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
@@ -186,7 +205,7 @@ describe("SearchFilterDrawer", () => {
     expect(handleChange).toHaveBeenCalledWith(
       expect.objectContaining({
         language: "en", // preserva o idioma escolhido no seletor
-        workTypes: [],
+        workTypes: expect.arrayContaining(ALL_WORK_TYPES),
         engines: ["api", "cheerio", "playwright"],
         providers: expect.arrayContaining(["mangalivre", "imperiodabritannia"]),
       }),

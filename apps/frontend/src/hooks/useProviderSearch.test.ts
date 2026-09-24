@@ -188,6 +188,80 @@ describe("useProviderSearch", () => {
       undefined,
     );
   });
+
+  it("passa providerSlugs para a API de busca server-side", async () => {
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() => useProviderSearch(["mangadex", "mangasbrasuka"]), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.setQuery("naruto");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(scrapingApi.search).toHaveBeenCalledWith(
+      "naruto",
+      { providers: "mangadex,mangasbrasuka" },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("passa language para a API quando especificado", async () => {
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() => useProviderSearch(["mangadex"], "pt-br"), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.setQuery("bleach");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(scrapingApi.search).toHaveBeenCalledWith(
+      "bleach",
+      { providers: "mangadex", language: "pt-br" },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("não dispara busca quando providerSlugs está vazio (seleção limpa)", async () => {
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() => useProviderSearch([]), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.setQuery("naruto");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(scrapingApi.search).not.toHaveBeenCalled();
+  });
 });
 
 describe("loadProviderPage standalone", () => {

@@ -227,13 +227,14 @@ export const scrapingApi = {
    */
   async search(
     query: string,
-    opts?: { providers?: string; limit?: number; offset?: number },
+    opts?: { providers?: string; limit?: number; offset?: number; language?: string },
     signal?: AbortSignal,
   ): Promise<SearchSourcesResponse> {
     const params = new URLSearchParams({ q: query });
     if (opts?.providers) params.set("providers", opts.providers);
     if (opts?.limit) params.set("limit", String(opts.limit));
     if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    if (opts?.language && opts.language !== "all") params.set("language", opts.language);
     return request<SearchSourcesResponse>(`/api/conversions/source/search?${params.toString()}`, {
       signal,
     });
