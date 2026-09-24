@@ -41,6 +41,8 @@ describe('MangasBrasukaStrategy', () => {
         url: 'https://mangasbrasuka.com.br/manga/one-piece/',
         coverUrl: 'https://cdn.example.com/cover.webp',
         author: null,
+        type: 'manga',
+        genres: null,
       },
     ])
     expect(mockGet).toHaveBeenCalledWith(

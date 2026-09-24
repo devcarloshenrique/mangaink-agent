@@ -29,6 +29,7 @@ export interface SearchSourcesArgs {
   offsetPerProvider?: number
   timeoutMs?: number
   maxProviders?: number
+  language?: string
 }
 
 export interface SearchSourcesResult {
@@ -49,8 +50,13 @@ const inFlight = new Map<string, Promise<SearchSourcesResult>>()
 
 const globalSearchLimiter = new Bottleneck({ maxConcurrent: GLOBAL_MAX_CONCURRENT })
 
-function buildCacheKey(query: string, searchedProviders: string[], limit: number): string {
-  return `${query.trim().toLowerCase()}|${searchedProviders.join(',')}|${limit}`
+function buildCacheKey(
+  query: string,
+  searchedProviders: string[],
+  limit: number,
+  language?: string,
+): string {
+  return `${query.trim().toLowerCase()}|${searchedProviders.join(',')}|${limit}|${language ?? ''}`
 }
 
 function pruneCache(): void {
@@ -145,7 +151,7 @@ export class SearchSourcesUseCase {
     }
 
     const searchedProviders = targets.map((s) => s.slug)
-    const cacheKey = buildCacheKey(query, searchedProviders, limit)
+    const cacheKey = buildCacheKey(query, searchedProviders, limit, args.language)
 
     if (useCache) {
       const hit = cache.get(cacheKey)
@@ -154,7 +160,7 @@ export class SearchSourcesUseCase {
       if (ongoing) return cloneResult(await ongoing)
     }
 
-    const run = this.fanOut(query, targets, limit, offset, timeoutMs, truncated)
+    const run = this.fanOut(query, targets, limit, offset, timeoutMs, truncated, args.language)
     if (!useCache) return run
 
     const shared = run.then((result) => {
@@ -174,12 +180,18 @@ export class SearchSourcesUseCase {
     offset: number,
     timeoutMs: number,
     truncated: boolean,
+    language?: string,
   ): Promise<SearchSourcesResult> {
     const settled = await Promise.allSettled(
       targets.map((strategy) =>
         globalSearchLimiter.schedule(() =>
           withTimeout(
-            strategy.search(query, { limit, offset, signal: AbortSignal.timeout(timeoutMs) }),
+            strategy.search(query, {
+              limit,
+              offset,
+              signal: AbortSignal.timeout(timeoutMs),
+              language,
+            }),
             timeoutMs,
             strategy.slug,
           ),

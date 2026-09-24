@@ -49,6 +49,15 @@ export function extractChapterId(url: string): string | null {
   return uuidMatch?.[1] ?? null
 }
 
+export function extractLanguage(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.searchParams.get('lang')?.toLowerCase().trim() || 'pt-br'
+  } catch {
+    return 'pt-br'
+  }
+}
+
 export function resolveStatus(status: string | null): string {
   const s = status?.toLowerCase() ?? ''
   if (s === 'ongoing') return 'ongoing'
@@ -73,12 +82,13 @@ export function mapMangaToInspectResponse(
   manga: MangaDexMangaData,
   chapters: MangaDexChapterData[],
   canonicalUrl: string,
+  language = 'pt-br',
 ): SourceInspectResponse {
   const sourceId = createSourceId(PROVIDER_SLUG, canonicalUrl)
-  const metadata = mapMetadata(manga)
+  const metadata = mapMetadata(manga, language)
   const covers = mapCovers(manga)
   const mappedChapters = mapChapters(chapters, manga.id)
-  const source: SourceInfo = { url: canonicalUrl, language: 'pt-BR' }
+  const source: SourceInfo = { url: canonicalUrl, language }
 
   return {
     sourceId,
@@ -95,24 +105,47 @@ export function mapMangaToInspectResponse(
   }
 }
 
-function mapMetadata(manga: MangaDexMangaData): MangaMetadata {
-  const titles = manga.attributes.title
-  const mainTitle =
-    titles['pt-br'] ||
-    titles.pt ||
-    titles.en ||
-    titles['ja-ro'] ||
-    Object.values(titles)[0] ||
-    'Manga Desconhecido'
+function mapMetadata(manga: MangaDexMangaData, language = 'pt-br'): MangaMetadata {
+  const titles = manga.attributes.title || {}
+  const lang = language.toLowerCase().trim()
 
-  // Descriptions in pt-br, pt or en
-  const desc = manga.attributes.description
-  const description =
-    desc?.['pt-br'] ||
-    desc?.pt ||
-    desc?.en ||
-    (desc ? Object.values(desc)[0] : null) ||
-    null
+  let mainTitle: string
+  if (lang === 'pt-br' || lang === 'pt') {
+    mainTitle =
+      titles['pt-br'] ||
+      titles.pt ||
+      titles.en ||
+      titles['ja-ro'] ||
+      Object.values(titles)[0] ||
+      'Manga Desconhecido'
+  } else {
+    mainTitle =
+      titles[lang] ||
+      titles.en ||
+      titles['ja-ro'] ||
+      titles['pt-br'] ||
+      Object.values(titles)[0] ||
+      'Manga Desconhecido'
+  }
+
+  // Descriptions in selected language, falling back to pt-br/en
+  const desc = manga.attributes.description || {}
+  let description: string | null = null
+  if (lang === 'pt-br' || lang === 'pt') {
+    description =
+      desc['pt-br'] ||
+      desc.pt ||
+      desc.en ||
+      (desc ? Object.values(desc)[0] : null) ||
+      null
+  } else {
+    description =
+      desc[lang] ||
+      desc.en ||
+      desc['pt-br'] ||
+      (desc ? Object.values(desc)[0] : null) ||
+      null
+  }
 
   // Author relationship
   const authorRel = manga.relationships?.find(

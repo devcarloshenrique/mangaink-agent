@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   extractMangaId,
   extractChapterId,
+  extractLanguage,
   resolveStatus,
   normalizeChapterNumber,
   mapMangaToInspectResponse,
@@ -22,6 +23,12 @@ describe('MangaDex Mapper', () => {
   it('extracts chapter ID from chapter URL', () => {
     const url = 'https://mangadex.org/chapter/b29b7415-ebbd-4e5d-bb40-e9757f2a3bac'
     expect(extractChapterId(url)).toBe('b29b7415-ebbd-4e5d-bb40-e9757f2a3bac')
+  })
+
+  it('extracts language from URL query parameter or defaults to pt-br', () => {
+    expect(extractLanguage('https://mangadex.org/title/123/?lang=en')).toBe('en')
+    expect(extractLanguage('https://mangadex.org/title/123/?lang=PT-BR')).toBe('pt-br')
+    expect(extractLanguage('https://mangadex.org/title/123/')).toBe('pt-br')
   })
 
   it('normalizes statuses correctly', () => {
@@ -107,6 +114,32 @@ describe('MangaDex Mapper', () => {
     expect(res.chapters[0].number).toBe('1')
     expect(res.covers).toHaveLength(1)
     expect(res.covers[0].imageUrl).toContain('covers/183b5c1e-5bfd-4f7f-9b21-3ac88c584987/cover.jpg')
+  })
+
+  it('maps manga with English metadata when language is en', () => {
+    const manga: MangaDexMangaData = {
+      id: '183b5c1e-5bfd-4f7f-9b21-3ac88c584987',
+      type: 'manga',
+      attributes: {
+        title: { en: 'Orb: On the Movements of the Earth', 'ja-ro': 'Chi.' },
+        altTitles: [],
+        description: { en: 'Story about heliocentrism.', 'pt-br': 'História sobre a teoria heliocêntrica.' },
+        status: 'completed',
+        tags: [],
+      },
+      relationships: [],
+    }
+
+    const res = mapMangaToInspectResponse(
+      manga,
+      [],
+      'https://mangadex.org/title/183b5c1e-5bfd-4f7f-9b21-3ac88c584987/?lang=en',
+      'en',
+    )
+
+    expect(res.metadata.title).toBe('Orb: On the Movements of the Earth')
+    expect(res.metadata.description).toBe('Story about heliocentrism.')
+    expect(res.source.language).toBe('en')
   })
 
   it('maps At-Home response to page image URLs', () => {

@@ -4,6 +4,7 @@ export interface MangaDexMangaAttributes {
   description: Record<string, string>
   status: 'ongoing' | 'completed' | 'hiatus' | 'cancelled' | string
   year?: number | null
+  originalLanguage?: string | null
   tags?: Array<{
     id: string
     type: string

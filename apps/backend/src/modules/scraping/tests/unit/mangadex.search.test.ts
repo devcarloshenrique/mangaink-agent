@@ -48,12 +48,38 @@ describe('MangaDexStrategy.search', () => {
         url: 'https://mangadex.org/title/manga-id-1',
         coverUrl: 'https://uploads.mangadex.org/covers/manga-id-1/cover.jpg',
         author: 'Eiichiro Oda',
+        type: null,
+        genres: null,
       },
     ])
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('/manga?title=one%20piece'),
       expect.anything(),
     )
+  })
+
+  it('mapeia originalLanguage para type e tags para genres', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        result: 'ok',
+        data: [
+          {
+            ...SEARCH_ITEM,
+            attributes: {
+              ...SEARCH_ITEM.attributes,
+              originalLanguage: 'ja',
+              tags: [
+                { id: 't1', type: 'tag', attributes: { name: { en: 'Action' } } },
+                { id: 't2', type: 'tag', attributes: { name: { en: 'Adventure' } } },
+              ],
+            },
+          },
+        ],
+      },
+    })
+    const results = await provider.search('one piece', { limit: 5 })
+    expect(results[0]?.type).toBe('manga')
+    expect(results[0]?.genres).toEqual(['Action', 'Adventure'])
   })
 
   it('propaga erro de rede', async () => {
@@ -68,6 +94,51 @@ describe('MangaDexStrategy.search', () => {
     await provider.search('one piece', { limit: 10, offset: 20 })
     expect(mockGet).toHaveBeenCalledWith(
       expect.stringContaining('limit=10&offset=20'),
+      expect.anything(),
+    )
+  })
+
+  it('filtra por availableTranslatedLanguage[]=pt-br quando language=pt-br', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: { data: [SEARCH_ITEM] },
+    })
+    await provider.search('one piece', { language: 'pt-br' })
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('availableTranslatedLanguage[]=pt-br&availableTranslatedLanguage[]=pt'),
+      expect.anything(),
+    )
+  })
+
+  it('filtra por availableTranslatedLanguage[]=en quando language=en e prioriza title.en', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            ...SEARCH_ITEM,
+            attributes: {
+              ...SEARCH_ITEM.attributes,
+              title: { 'pt-br': 'Uma Pedaço', en: 'One Piece' },
+            },
+          },
+        ],
+      },
+    })
+    const results = await provider.search('one piece', { language: 'en' })
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('availableTranslatedLanguage[]=en'),
+      expect.anything(),
+    )
+    expect(results[0]?.title).toBe('One Piece')
+    expect(results[0]?.url).toBe('https://mangadex.org/title/manga-id-1?lang=en')
+  })
+
+  it('não passa availableTranslatedLanguage quando language=all', async () => {
+    mockGet.mockResolvedValueOnce({
+      data: { data: [SEARCH_ITEM] },
+    })
+    await provider.search('one piece', { language: 'all' })
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.not.stringContaining('availableTranslatedLanguage'),
       expect.anything(),
     )
   })

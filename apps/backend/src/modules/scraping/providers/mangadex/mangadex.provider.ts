@@ -14,6 +14,7 @@ import {
   BASE_URL,
   buildProviderInfo,
   extractChapterId,
+  extractLanguage,
   extractMangaId,
   mapAtHomeToImageUrls,
   mapMangaToInspectResponse,
@@ -76,9 +77,10 @@ export class MangaDexStrategy implements IProviderStrategy {
   async search(query: string, opts?: ProviderSearchOptions): Promise<ProviderSearchResult[]> {
     const limit = opts?.limit ?? 10
     const offset = opts?.offset ?? 0
+    const langParams = buildLanguageParams(opts?.language)
     const url =
       `${API_BASE}/manga?title=${encodeURIComponent(query)}` +
-      `&limit=${limit}&offset=${offset}&includes[]=cover_art&includes[]=author`
+      `&limit=${limit}&offset=${offset}&includes[]=cover_art&includes[]=author${langParams}`
     let items: MangaDexMangaData[]
     try {
       const res = await this.rateLimiter.schedule(() =>
@@ -90,12 +92,19 @@ export class MangaDexStrategy implements IProviderStrategy {
       throw new ScrapingNetworkError(url, err)
     }
 
+    const langParam =
+      opts?.language && opts.language !== 'all'
+        ? `?lang=${encodeURIComponent(opts.language.toLowerCase().trim())}`
+        : ''
+
     return items.slice(0, limit).map((manga) => ({
       providerSlug: this.slug,
-      title: resolveSearchTitle(manga),
-      url: `${BASE_URL}/title/${manga.id}`,
+      title: resolveSearchTitle(manga, opts?.language),
+      url: `${BASE_URL}/title/${manga.id}${langParam}`,
       coverUrl: resolveSearchCover(manga),
       author: resolveSearchAuthor(manga),
+      type: resolveSearchWorkType(manga.attributes?.originalLanguage),
+      genres: resolveSearchGenres(manga),
     }))
   }
 
@@ -107,9 +116,10 @@ export class MangaDexStrategy implements IProviderStrategy {
       )
     }
 
+    const language = extractLanguage(canonicalUrl)
     const manga = await this.fetchMangaById(mangaId)
-    const chapters = await this.fetchAllPtChapters(mangaId)
-    return mapMangaToInspectResponse(manga, chapters, canonicalUrl)
+    const chapters = await this.fetchAllChapters(mangaId, language)
+    return mapMangaToInspectResponse(manga, chapters, canonicalUrl, language)
   }
 
   async getChapterImages(chapterUrl: string): Promise<string[]> {
@@ -177,16 +187,32 @@ export class MangaDexStrategy implements IProviderStrategy {
     }
   }
 
-  private async fetchAllPtChapters(mangaId: string): Promise<MangaDexChapterData[]> {
+  private async fetchAllChapters(mangaId: string, language: string): Promise<MangaDexChapterData[]> {
     const chapters: MangaDexChapterData[] = []
     let offset = 0
+    let langQuery: string
+
+    const lang = language.toLowerCase().trim()
+    if (lang === 'pt-br' || lang === 'pt') {
+      langQuery = 'translatedLanguage[]=pt-br&translatedLanguage[]=pt'
+    } else if (lang === 'es') {
+      langQuery = 'translatedLanguage[]=es&translatedLanguage[]=es-la'
+    } else if (lang === 'zh') {
+      langQuery = 'translatedLanguage[]=zh&translatedLanguage[]=zh-hk&translatedLanguage[]=zh-ro'
+    } else if (lang === 'all') {
+      langQuery = ''
+    } else {
+      langQuery = `translatedLanguage[]=${encodeURIComponent(lang)}`
+    }
+
+    const langSuffix = langQuery ? `&${langQuery}` : ''
 
     for (;;) {
       let data: MangaDexChapterData[]
       try {
         const res = await this.rateLimiter.schedule(() =>
           http.get<MangaDexChapterListResponse>(
-            `${API_BASE}/manga/${mangaId}/feed?translatedLanguage[]=pt-br&translatedLanguage[]=pt&limit=${CHAPTERS_PAGE_SIZE}&offset=${offset}&order[chapter]=asc&includes[]=scanlation_group`,
+            `${API_BASE}/manga/${mangaId}/feed?limit=${CHAPTERS_PAGE_SIZE}&offset=${offset}&order[chapter]=asc&includes[]=scanlation_group${langSuffix}`,
           ),
         )
         data = res.data?.data ?? []
@@ -216,9 +242,61 @@ export class MangaDexStrategy implements IProviderStrategy {
   }
 }
 
-function resolveSearchTitle(manga: MangaDexMangaData): string {
+function buildLanguageParams(language?: string): string {
+  if (!language || language === 'all') return ''
+  const lang = language.toLowerCase().trim()
+  if (lang === 'pt-br' || lang === 'pt') {
+    return '&availableTranslatedLanguage[]=pt-br&availableTranslatedLanguage[]=pt'
+  }
+  if (lang === 'es') {
+    return '&availableTranslatedLanguage[]=es&availableTranslatedLanguage[]=es-la'
+  }
+  if (lang === 'zh') {
+    return '&availableTranslatedLanguage[]=zh&availableTranslatedLanguage[]=zh-hk&availableTranslatedLanguage[]=zh-ro'
+  }
+  return `&availableTranslatedLanguage[]=${encodeURIComponent(lang)}`
+}
+
+function resolveSearchTitle(manga: MangaDexMangaData, requestedLanguage?: string): string {
   const title = manga.attributes?.title ?? {}
-  return title['pt-br'] ?? title.pt ?? title.en ?? Object.values(title)[0] ?? 'Título desconhecido'
+  const altTitles = manga.attributes?.altTitles ?? []
+  const lang = requestedLanguage?.toLowerCase().trim()
+
+  const findAlt = (targetLang: string) => {
+    for (const alt of altTitles) {
+      if (alt[targetLang]) return alt[targetLang]
+    }
+    return undefined
+  }
+
+  if (lang && lang !== 'all') {
+    if (lang === 'pt-br' || lang === 'pt') {
+      const match = title['pt-br'] ?? title.pt ?? findAlt('pt-br') ?? findAlt('pt')
+      if (match) return match
+    } else {
+      const match = title[lang] ?? findAlt(lang)
+      if (match) return match
+      return (
+        title.en ??
+        findAlt('en') ??
+        title['ja-ro'] ??
+        Object.values(title)[0] ??
+        'Título desconhecido'
+      )
+    }
+  }
+
+  return (
+    title['pt-br'] ??
+    title.pt ??
+    findAlt('pt-br') ??
+    findAlt('pt') ??
+    title.en ??
+    findAlt('en') ??
+    title['ja-ro'] ??
+    Object.values(title)[0] ??
+    'Título desconhecido'
+  )
 }
 
 function resolveSearchCover(manga: MangaDexMangaData): string | null {
@@ -231,4 +309,20 @@ function resolveSearchCover(manga: MangaDexMangaData): string | null {
 function resolveSearchAuthor(manga: MangaDexMangaData): string | null {
   const authorRel = manga.relationships?.find((r) => r.type === 'author')
   return authorRel?.attributes?.name ?? null
+}
+
+/** Deriva o tipo de obra a partir do idioma original (MangaDex não expõe campo direto). */
+function resolveSearchWorkType(originalLanguage: string | null | undefined): string | null {
+  const lang = originalLanguage?.toLowerCase()
+  if (lang === 'ja') return 'manga'
+  if (lang === 'ko') return 'manhwa'
+  if (lang?.startsWith('zh')) return 'manhua'
+  return null
+}
+
+function resolveSearchGenres(manga: MangaDexMangaData): string[] | null {
+  const genres = (manga.attributes?.tags ?? [])
+    .map((t) => t.attributes?.name?.en || Object.values(t.attributes?.name || {})[0])
+    .filter((g): g is string => Boolean(g))
+  return genres.length > 0 ? genres : null
 }

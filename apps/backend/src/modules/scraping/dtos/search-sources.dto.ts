@@ -21,6 +21,7 @@ export const searchSourcesQuerySchema = z.object({
     ),
   limit: z.coerce.number().int().min(1).max(20).default(10),
   offset: z.coerce.number().int().min(0).max(100).default(0),
+  language: z.string().trim().toLowerCase().max(20).optional(),
 })
 
 export type SearchSourcesQuery = z.infer<typeof searchSourcesQuerySchema>
@@ -31,6 +32,8 @@ export const providerSearchResultSchema = z.object({
   url: z.string(),
   coverUrl: z.string().nullable().optional(),
   author: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  genres: z.array(z.string()).nullable().optional(),
 })
 
 export const searchSourcesResponseSchema = z.object({

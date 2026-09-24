@@ -10,6 +10,7 @@ export interface ProviderSearchOptions {
   limit?: number
   offset?: number
   signal?: AbortSignal
+  language?: string
 }
 
 export interface ProviderSearchResult {
@@ -18,4 +19,6 @@ export interface ProviderSearchResult {
   url: string
   coverUrl?: string | null
   author?: string | null
+  type?: string | null
+  genres?: string[] | null
 }

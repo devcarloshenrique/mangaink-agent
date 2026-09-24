@@ -25,6 +25,11 @@ describe('searchSourcesQuerySchema', () => {
     expect(parsed.providers).toEqual(['xxx'])
   })
 
+  it('aceita language opcional normalizado em minúsculas', () => {
+    const parsed = searchSourcesQuerySchema.parse({ q: 'one piece', language: 'PT-BR ' })
+    expect(parsed.language).toBe('pt-br')
+  })
+
   it('rejeita mais que 20 slugs', () => {
     const csv = [...KNOWN, ...Array.from({ length: 17 }, (_, i) => KNOWN[i % KNOWN.length])].join(',')
     expect(() => searchSourcesQuerySchema.parse({ q: 'naruto', providers: csv })).toThrow()

@@ -138,6 +138,8 @@ export class MangasBrasukaStrategy implements IProviderStrategy {
         url: workUrl,
         coverUrl: item.coverUrl ?? null,
         author: item.author ?? null,
+        type: type,
+        genres: null,
       })
       if (results.length >= limit) break
     }

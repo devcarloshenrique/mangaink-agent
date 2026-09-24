@@ -98,6 +98,8 @@ export interface ProviderSearchResult {
   url: string;
   coverUrl?: string | null;
   author?: string | null;
+  type?: string | null;
+  genres?: string[] | null;
 }
 
 export interface SearchSourcesResponse {
