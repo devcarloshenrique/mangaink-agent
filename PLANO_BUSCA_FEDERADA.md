@@ -2,19 +2,32 @@
 
 ## 1. Visão Geral e Objetivos
 
-Este documento especifica a evolução arquitetural do sistema de busca do MangaInk de uma consulta síncrona agregada para uma **arquitetura federada progressiva com persistência relacional no PostgreSQL e transporte contínuo via Server-Sent Events (Estratégia C — Streaming SSE com Fila Prioritária sem Barreira)**:
+Este documento especifica a evolução arquitetural do sistema de busca do MangaInk de uma consulta síncrona agregada para uma **arquitetura federada progressiva com persistência relacional no PostgreSQL e transporte contínuo via Server-Sent Events (Estratégia C — Streaming SSE com Fila Prioritária sem Barreira)**, contemplando todas as correções arquiteturais de paginação real, controle de concorrência, rate limiting externo e estabilidade visual:
 
 1. **Favoritos no Banco de Dados:** Provedores favoritos persistidos por usuário na tabela `user_favorite_providers` do PostgreSQL via Prisma.
-2. **Autenticação Obrigatória Global (JWT):** Todas as rotas de busca e provedores (`GET /search/stream`, `GET /search`, `GET /providers`, `GET /providers/favorites`, `POST /providers/:slug/favorite`) passam a exigir `verifyJwt`. Usuários não autenticados são redirecionados para a tela de login (`/login`) via guards `beforeLoad` do TanStack Router.
-3. **Transporte Único via Streaming SSE (Solução do Rate Limit):** A busca federada progressiva utiliza **uma única conexão HTTP persistente** via Server-Sent Events (`GET /api/conversions/source/search/stream`). Elimina o disparo de dezenas de conexões REST simultâneas, preservando a cota de rate limit de 20 buscas/minuto por usuário com zero overhead de handshakes TLS.
-4. **Disparo de Busca Sob Demanda:** O input de busca não altera a Home nem dispara requisições enquanto o usuário digita (remove debounce de digitação). O disparo ocorre estritamente via tecla **Enter** ou clique no **botão de lupa** (`>= 2` caracteres). Pressionar `Escape` ou clicar no `X` limpa e retorna ao dashboard normal.
-5. **Priorização por Favoritos sem Bloqueio (Render on-Arrival):** O backend consulta os favoritos do usuário no PostgreSQL e ordena a fila (favoritos no topo, depois alfabética). O fan-out opera com concorrência controlada (`SEARCH_CONCURRENCY = 3`). Provedores rápidos (ex.: 200ms) emitem eventos `provider-result` imediatamente pelo canal SSE, sem esperar provedores lentos (4–7s) que também estejam nos favoritos.
-6. **Ocultação Silenciosa de Trilhos Vazios e Erros de Scraping:** Fontes que retornarem 0 resultados (`results: []`) ou que falharem no scraping emitem evento `provider-skip` e são **automaticamente ocultadas**, sem trilho de erro visual na interface. Falhas são registradas apenas em log/telemetria. Erros críticos (401 de sessão ou rede global) continuam tratados com redirecionamento para login ou toast.
-7. **Meta de 7 Provedores Visíveis com Auto-Preenchimento:** O stream avança consumindo a fila prioritária até totalizar **7 provedores com obras visíveis** (`BATCH_VISIBLE = 7`). Se a fila de provedores cadastrados se esgotar antes (ex.: 4 provedores no estado atual), o motor assume estado `exhausted = true` com encerramento gracioso (sem loop infinito).
-8. **Prefetch em Segundo Plano (+7 Fontes):** Assim que 7 provedores com resultados são renderizados, o motor continua em background acumulando até mais **7 provedores com resultados** (`BATCH_PREFETCH = 7`) em cache de memória TanStack Query (`staleTime: 5min`, `gcTime: 10min`).
-9. **Rolagem Automática (Infinite Scroll com Sentinela):** Ao atingir o fim da página, as fontes pré-carregadas entram na tela instantaneamente (0ms de espera) e o motor retoma o prefetch do lote seguinte. Quando `exhausted = true`, a sentinela não rearma.
-10. **Desktop Tauri v2:** Alinhamento estrito com o shell desktop Tauri v2 (dispensa dependências legadas de Electron/Playwright).
-11. **Zero Dependências Novas:** Utiliza `createSSEStream` (fetch streaming com `TextDecoder`), `IntersectionObserver` e `AbortController` nativos do browser + TanStack Query `^5.83.0` já presente no projeto.
+2. **Autenticação Obrigatória Global (JWT + Cookie HttpOnly):** Todas as rotas de busca e provedores (`GET /search/stream`, `GET /search`, `GET /providers`, `GET /providers/favorites`, `POST /providers/:slug/favorite`) exigem `verifyJwt`. Usuários não autenticados são redirecionados para a tela de login (`/login`) via guards `beforeLoad` do TanStack Router. O transporte HTTP/SSE utiliza obrigatoriamente `credentials: 'include'` para transmitir o cookie HttpOnly da sessão (`mangaink_token` — VULN-10 / MEC-86) e `Authorization: Bearer <token>` como fallback de memória para o Desktop.
+3. **Transporte Único via Streaming SSE:** A busca federada progressiva utiliza **uma única conexão HTTP persistente** via Server-Sent Events (`GET /api/conversions/source/search/stream`), eliminando tempestades de conexões simultâneas no navegador.
+4. **Rate Limiting Focado na Proteção de IP nos Provedores:** O rate limit da rota HTTP no Fastify (`SEARCH_RATE_LIMIT_MAX`) é afrouxado para um teto generoso de proteção contra loops de cliente (ex.: 240 req/min), enquanto a proteção estrita de IP contra bloqueio de Cloudflare/Cloudhost reside onde deve estar: nos limitadores **Bottleneck por provedor** (`rateLimitMaxConcurrent`, `rateLimitMinTime`), alimentados pelas configurações do banco de dados (`Provider`).
+5. **Paginação Real Homogênea com Cache de Fatiamento no Backend (Estratégia de Abastecimento):**
+   * **Provedores com Paginação Nativa (ex.: MangaDex):** Repassa `offset` e `limit` diretamente para a API externa.
+   * **Provedores sem Paginação Nativa (ex.: MangaLivre, MangasBrasuka):**
+     * Na **primeira busca (`offset = 0` / streaming inicial)**, o backend solicita o lote completo disponível da fonte externa (ex.: até 50–100 obras, sem forçar limite baixo de 7), armazena a lista completa em um cache em memória compartilhado (TTL 3–5 min, chave `search_full:{slug}:{query}:{lang}`).
+     * O backend fatia as primeiras `limit` obras (ex.: 7 ou 10) para o evento `provider-result` ou resposta REST com `total = results.length` e `hasMore = total > limit`.
+     * Nas **consultas subsequentes (`offset > 0`, `loadProviderPage`)**, o backend atende a requisição direto da memória (`slice(offset, offset + limit)`) em **< 5ms**, **sem refazer scraping e sem floodar os sites externos**.
+   * Ambas as abordagens retornam o contrato uniforme `{ results: [...], total: number, hasMore: boolean }`.
+6. **Compartilhamento Singleton de Cache entre SSE e REST:** O `SearchSourcesStreamUseCase` e o `SearchSourcesUseCase` compartilham a **mesma instância de cache em memória singleton**. Dessa forma, o lote completo aquecido durante o streaming SSE fica imediatamente disponível quando o usuário rolar a tela ou clicar em "Ver mais" (rota REST).
+7. **Cancelamento Ativo e Prevenção de Scrapers Órfãos:** O stream SSE no Fastify escuta `req.raw.on('close')` e aciona um `AbortController`. O `AbortSignal` é repassado ao `SearchSourcesStreamUseCase`, ao `Bottleneck` e às requisições `axios` dos provedores. Conexões abortadas pelo usuário interrompem o scraping imediatamente e evitam exceções `ERR_STREAM_WRITE_AFTER_END` / `EPIPE`.
+8. **Disparo de Busca Sob Demanda:** O input de busca não altera a Home nem dispara requisições enquanto o usuário digita (remove debounce de digitação). O disparo ocorre estritamente via tecla **Enter** ou clique no **botão de lupa** (`>= 2` caracteres). Pressionar `Escape` ou clicar no `X` limpa e retorna ao dashboard normal.
+9. **Priorização por Favoritos sem Bloqueio e Ordem Estável da Sessão:**
+   * O backend consulta os favoritos do usuário no PostgreSQL e ordena a fila (favoritos no topo, depois alfabética). Provedores rápidos (ex.: 200ms) emitem eventos `provider-result` imediatamente pelo canal SSE, ocupando slots estáveis na UI sem Layout Shift (CLS).
+   * **Congelamento da Sessão Ativa:** Se o usuário favoritar ou desfavoritar um provedor a partir do trilho de busca, o estado é persistido no banco e a estrela na UI acende/apaga na hora, mas a ordem dos trilhos naquela sessão de busca permanece **congelada** (não pula de posição sob o cursor do mouse). A nova prioridade de ordenação passa a valer na **próxima** busca disparada.
+10. **Filtragem Inteligente por Idioma (Case-Insensitive):** Ao filtrar por um idioma específico (ex.: `language = 'en'` ou `'pt-br'`), provedores com tags estritamente de outro idioma (ex.: `mangalivre`, `imperiodabritannia` com tag `pt-BR`) são ignorados antes do fan-out via comparação case-insensitive (`tag.toLowerCase() === language.toLowerCase()`), evitando chamadas inúteis e poluição de resultados.
+11. **Ocultação Suave de Trilhos Vazios e Erros de Scraping:** Fontes que retornarem 0 resultados (`results: []`) ou que falharem no scraping emitem evento `provider-skip` e são desmontadas suavemente na UI, sem trilho de erro visual. Falhas são registradas apenas em log/telemetria.
+12. **Teto de Lotes com Encerramento Gracioso (`BATCH_VISIBLE = 7` como Upper Bound):**
+   * O lote inicial busca até completar **7 provedores com obras visíveis** (`BATCH_VISIBLE = 7`), ou a totalidade dos provedores ativos disponíveis (`totalActiveProviders`), o que for menor (`Math.min(7, totalActiveProviders)`).
+   * O stream processa os provedores disponíveis e finaliza graciosamente com `exhausted = true`, sem ficar bloqueado aguardando provedores inexistentes.
+   * A arquitetura de prefetch em segundo plano (`BATCH_PREFETCH = 7`) fica pronta para quando novos provedores forem adicionados ao sistema.
+13. **Desktop 100% Tauri v2:** Alinhamento estrito com o proxy Axum de `apps/desktop/src-tauri/src/http_server.rs` (streaming de bytes via `upstream_res.bytes_stream()`), sem qualquer dependência ou referência legada a Electron.
 
 ---
 
@@ -57,50 +70,77 @@ pnpm --filter @mangaink/backend exec prisma migrate dev --name add_user_favorite
 ### 3.1 Repositório (`user-favorite-provider.repository.ts`)
 * **Interface `UserFavoriteProviderRepository`:**
   * `listByUserId(userId: string): Promise<string[]>` — lista os slugs favoritados pelo usuário.
-  * `toggle(userId: string, providerSlug: string): Promise<{ isFavorite: boolean }>` — adiciona ou remove atomicamente o registro.
+  * `toggle(userId: string, providerSlug: string, isFavorite?: boolean): Promise<{ isFavorite: boolean }>` — adiciona/remove atomicamente ou define o estado explícito caso `isFavorite` seja fornecido.
 * **Implementação Prisma `PrismaUserFavoriteProviderRepository`:**
-  * Implementa queries seguras com transação ou `findUnique` + `create`/`delete`.
+  * Utiliza operações atômicas ou transações seguras no Prisma Client.
 
-### 3.2 Casos de Uso
-* `ListFavoriteProvidersUseCase`: consulta e retorna `{ favorites: string[] }` para o usuário autenticado.
-* `ToggleFavoriteProviderUseCase`:
-  * Valida se `providerSlug` é um provedor existente e suportado (validação no DB com fallback seed).
-  * Alterna o estado no banco de dados e retorna `{ slug: string, isFavorite: boolean }`.
-* **`SearchSourcesStreamUseCase` (Novo — Streaming Federado SSE):**
-  * Executa a busca federada com emissão contínua de eventos SSE para o cliente HTTP.
-  * Recebe: `userId: string`, `query: string`, `language?: string`, `providers?: string[]`, `limitPerProvider?: number`.
-  * Consulta os favoritos do usuário autenticado no PostgreSQL via `UserFavoriteProviderRepository`.
-  * Determina os provedores elegíveis a partir do `ProviderResolver`, aplicando os filtros de status e language/providers.
-  * Monta a fila prioritária única: favoritos elegíveis no topo, seguidos pelos demais elegíveis em ordem alfabética.
-  * Executa o fan-out com concorrência 3 (`SEARCH_CONCURRENCY = 3`), invocando `strategy.search` individualmente com timeout de 6s.
-  * Emite eventos em tempo real conforme cada provider resolve:
-    * `provider-result`: `{ providerSlug, title, engine, results: [...] }` (quando há $\ge 1$ obra).
-    * `provider-skip`: `{ providerSlug, reason: 'empty' | 'error' }` (quando há 0 obras ou ocorre falha de scraping/timeout).
-    * `done`: `{ totalFound: number, exhausted: boolean }` (ao concluir todos os providers da fila).
-  * Recebe `signal: AbortSignal` para cancelar o scraping externo imediatamente se o socket do cliente for fechado.
-* **Otimização no `SearchSourcesUseCase` (REST — Problemas 8 e 9):**
-  * **Otimização de Query (Ponto 8):** Eliminar a execução de `repository.findAll()` a cada requisição individual. Quando `providers` contiver apenas 1 slug (ex.: paginação horizontal de um trilho), utilizar `repository.findBySlug(slug)` ou cache em memória com TTL curto (1–2 min) do status dos provedores.
-  * **Expansão do Cache em Memória (Ponto 9):** Aumentar `SEARCH_CACHE_MAX_ENTRIES` de 200 para **2.000 entradas** no `SearchSourcesUseCase`, suportando o churn de chaves individuais sem evacuação prematura.
+### 3.2 Casos de Uso e Cache Compartilhado
 
-### 3.3 Rotas HTTP (`scraping.routes.ts`) — Protegidas por JWT
-* **Ordem de Registro:** `GET /providers/favorites` DEVE ser registrado ANTES de qualquer rota de parâmetro `/:slug`.
-* **Nova Rota de Streaming SSE (Solução do Rate Limit — Ponto 1):**
-  * **`GET /api/conversions/source/search/stream`**
-    * Middleware: `onRequest: [verifyJwt]`.
-    * Rate Limit: Mantém `SEARCH_RATE_LIMIT_MAX = 20` e `SEARCH_RATE_LIMIT_WINDOW = '1 minute'` (perfeito, pois 1 busca = 1 conexão persistente; não há estouro de 429).
-    * Headers SSE: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no` via `reply.hijack()`.
-    * Lifecycle & Abort: Escuta `request.raw.on('close')`. Se o cliente fechar a aba ou submeter nova busca, dispara `abortController.abort()` interrompendo qualquer scraping em voo no servidor.
-* **Endpoints de Favoritos:**
-  * **`GET /api/conversions/source/providers/favorites`**
-    * Middleware: `onRequest: [verifyJwt]` (qualquer usuário autenticado).
-    * Retorna: `{ favorites: string[] }`
-  * **`POST /api/conversions/source/providers/:slug/favorite`**
-    * Middleware: `onRequest: [verifyJwt]` (qualquer usuário autenticado; diferente do `PATCH /providers/:slug` que exige `ADMIN`).
-    * Retorna: `{ slug: string, isFavorite: boolean }`
-* **Fechamento de Rotas Públicas com JWT (Breaking Change Intencional):**
-  * `GET /api/conversions/source/search` e `GET /api/conversions/source/providers` passam a ter `onRequest: [verifyJwt]`.
-  * Requisições não autenticadas retornam `401 Unauthorized` e são interceptadas pelo frontend via `beforeLoad` do TanStack Router para redirecionamento imediato a `/login`.
-  * A rota REST `GET /api/conversions/source/search` é mantida para atender à paginação horizontal interna de 10 em 10 itens dos trilhos (`loadProviderPage`).
+#### Cache de Busca Compartilhado (`SearchCacheStore`)
+* Singleton em memória compartilhado entre os use-cases de streaming e REST.
+* Gerencia:
+  * `search_full:{slug}:{query}:{lang}` (TTL 3–5 min, LRU com max 2.000 entradas): armazena a lista bruta de obras para fatiamento de paginação.
+  * `search:{query}:{providers}:{limit}:{offset}:{lang}` (TTL 60s): armazena respostas completas prontas para requisições idênticas.
+
+#### `ListFavoriteProvidersUseCase`
+* Retorna `{ favorites: string[] }` para o usuário autenticado a partir do PostgreSQL.
+
+#### `ToggleFavoriteProviderUseCase`
+* Valida a existência do `providerSlug` no banco de dados (`ProviderRepository`) com fallback para os seeds estáticos (`known-providers.ts`).
+* Suporta operação idempotente: se receber `{ isFavorite: boolean }`, garante aquele estado; se não receber, inverte o estado atual. Retorna `{ slug: string, isFavorite: boolean }`.
+
+#### `SearchSourcesStreamUseCase` (Novo — Streaming Federado SSE)
+* Orquestra o streaming contínuo da busca federada:
+  * Recebe: `userId: string`, `query: string`, `language?: string`, `providers?: string[]`, `limitPerProvider?: number`, `signal?: AbortSignal`.
+  * Consulta os favoritos do usuário no PostgreSQL para priorizar a ordem de execução da fila.
+  * Filtra os provedores elegíveis usando `ProviderResolver`:
+    * Aplica o filtro de status (`active`, `slow`, etc.).
+    * **Filtro de Idioma Inteligente:** descarta provedores cujas tags de idioma não correspondam ao idioma requisitado (comparação case-insensitive `tag.toLowerCase() === language.toLowerCase()`).
+  * **Reaproveitamento de Cache:** se a query já tiver resultados em cache, emite os eventos `provider-result` cacheados instantaneamente (0ms).
+  * **Abastecimento do Cache de Paginação:**
+    * Para provedores sem paginação nativa (ex.: MangaLivre, MangasBrasuka), busca o lote completo (ex.: até 50–100 obras) da fonte externa, grava no cache compartilhado `search_full`, fatia as primeiras `limit` obras e emite `provider-result` com `total = results.length` e `hasMore = total > limit`.
+  * Monta a fila com concorrência controlada (`SEARCH_CONCURRENCY = 3`), executando cada provedor com timeout de 6s via `AbortSignal.any([signal, AbortSignal.timeout(6000)])`.
+  * Emite frames SSE:
+    * `event: provider-result` -> `{ providerSlug, title, engine, results: [...], total: number, hasMore: boolean, durationMs: number }`
+    * `event: provider-skip` -> `{ providerSlug, reason: 'empty' | 'error', durationMs: number }`
+    * `event: done` -> `{ totalFound: number, exhausted: boolean, durationMs: number }`
+  * Cancela requisições imediatamente caso o `signal` seja abortado pelo fechamento do socket do cliente.
+
+#### `SearchSourcesUseCase` (REST — Paginação e Fatiamento Instantâneo)
+* **Paginação Real Homogênea:**
+  * Para provedores com paginação nativa: passa `offset` e `limit` adiante.
+  * Para provedores sem paginação nativa: consulta o `SearchCacheStore` (`search_full`). Se presente, fatia o array em memória (`slice(offset, offset + limit)`) em **< 5ms**. Caso o cache expire ou não exista, faz a busca externa em lote completo, armazena no cache e fatia.
+* **Otimizações:**
+  * Uso de `findBySlug` ou cache do repositório para evitar `findAll()` ao paginar um único provedor (`loadProviderPage`).
+
+### 3.3 Rotas HTTP (`scraping.routes.ts`) — Todas com `verifyJwt`
+
+* **Ordem de Registro no Radix Tree:**
+  1. `GET /api/conversions/source/providers/favorites` (registrado ANTES de qualquer rota `/:slug`).
+  2. `POST /api/conversions/source/providers/:slug/favorite` (body opcional `{ isFavorite?: boolean }`).
+  3. `GET /api/conversions/source/search/stream` (novo endpoint SSE).
+  4. `GET /api/conversions/source/search` (REST unário para paginação horizontal).
+  5. `GET /api/conversions/source/providers` (protegido por JWT).
+  6. `PATCH /api/conversions/source/providers/:slug` (protegido por JWT + permissão de admin).
+
+* **Configuração da Rota SSE (`/search/stream`) e Blindagem de Socket:**
+  * `onRequest: [verifyJwt]`.
+  * Headers: `Content-Type: text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-transform`, `Connection: keep-alive`, `X-Accel-Buffering: no` via `reply.hijack()`.
+  * `reply.raw.socket?.setNoDelay(true)`.
+  * Lifecycle & Abort:
+    ```ts
+    const abortController = new AbortController()
+    req.raw.on('close', () => {
+      abortController.abort()
+    })
+    ```
+  * Proteção de escrita e captura de erros pós-hijack:
+    * Envolver o loop de streaming em bloco `try...catch`.
+    * Verificar `!reply.raw.writableEnded && !reply.raw.destroyed` antes de qualquer `reply.raw.write()`.
+    * No `catch`, emitir `event: error` com `{ message }` e finalizar com `reply.raw.end()`.
+
+* **Configuração de Rate Limiting na Rota REST (`/search`):**
+  * `SEARCH_RATE_LIMIT_MAX = 240` por minuto (evita falsos positivos em uso normal de navegação/paginação; a proteção contra banimento externo reside no Bottleneck).
 
 ---
 
@@ -108,110 +148,64 @@ pnpm --filter @mangaink/backend exec prisma migrate dev --name add_user_favorite
 
 ### 4.1 Cliente de API (`apps/frontend/src/lib/api.ts`)
 * `scrapingApi.getFavoriteProviders(): Promise<{ favorites: string[] }>`
-* `scrapingApi.toggleFavoriteProvider(slug: string): Promise<{ slug: string; isFavorite: boolean }>`
-* **`scrapingApi.searchStream(query, options, handlers): { close: () => void }` (Novo — Streaming SSE):**
-  * Conecta a `GET /api/conversions/source/search/stream?q=...&language=...&providers=...` utilizando o utilitário nativo `createSSEStream` de `apps/frontend/src/lib/sse.ts`.
-  * Envia credenciais/cookie httpOnly e token em memória no header `Authorization: Bearer <token>`.
-  * Escuta os eventos:
-    * `provider-result` -> `handlers.onProviderResult(data)`
-    * `provider-skip` -> `handlers.onProviderSkip(data.providerSlug)`
-    * `done` -> `handlers.onDone(summary)`
-    * Erro de conexão/status -> `handlers.onError(error)`
-  * Retorna `{ close: () => void }` para fechamento instantâneo do stream.
-* `scrapingApi.search(query, options, signal?): Promise<SearchSourcesResponse>` mantido para paginação horizontal REST de trilho individual (`onLoadMore`).
+* `scrapingApi.toggleFavoriteProvider(slug: string, isFavorite?: boolean): Promise<{ slug: string; isFavorite: boolean }>`
+* `scrapingApi.searchStream(query, options, handlers): { close: () => void }`:
+  * Conecta a `GET /api/conversions/source/search/stream?q=...&language=...&providers=...` utilizando o utilitário nativo de streaming `createSSEStream` em `apps/frontend/src/lib/sse.ts`.
+  * Envia `credentials: 'include'` para tráfego do cookie HttpOnly da sessão.
+  * Envia `Authorization: Bearer <token>` em memória se disponível.
+  * Dispara callbacks tipados: `onProviderResult`, `onProviderSkip`, `onDone`, `onError`.
+  * Retorna `{ close: () => void }` com `AbortController` nativo.
+* `scrapingApi.search(...)` mantido para paginação de trilhos (`loadProviderPage`).
 
 ### 4.2 Hook `useFavoriteProviders` (`apps/frontend/src/hooks/useFavoriteProviders.ts`)
-* Integração com TanStack Query sob a chave `["providers", "favorites"]`.
-* **Atualizações Otimistas (Optimistic Updates):** Ao clicar no botão de favoritar, a UI reflete a mudança em 0ms; se a requisição falhar, reverte com notificação toast de erro.
-* Expõe:
-  * `favoriteSlugs: string[]`
-  * `isFavorite(slug: string): boolean`
-  * `toggleFavorite(slug: string): void`
-  * `isLoading: boolean`
+* Gerenciado via TanStack Query sob a chave `["providers", "favorites"]`.
+* Optimistic updates instantâneos na UI ao favoritar/desfavoritar, com rollback automático em caso de erro.
+* Fornece: `favoriteSlugs: string[]`, `isFavorite(slug: string): boolean`, `toggleFavorite(slug: string, isFavorite?: boolean): void`, `isLoading: boolean`.
 
-### 4.3 Interface em `/fontes` (`apps/frontend/src/routes/fontes.tsx`)
-* Botão de estrela pop-art em cada card de provedor (`ComicPanel`):
-  * Ícone `<Star />` preenchido de amarelo quando favorito (`fill-comic-yellow text-comic-yellow`); contorno com hover quando desfavoritado.
-* Seletor de ordenação:
-  * Nova opção no dropdown de ordenação: `"Favoritos primeiro"`.
+### 4.3 Interface em `/fontes` e no Cabeçalho do Trilho
+* **Página `/fontes` (`apps/frontend/src/routes/fontes.tsx`):**
+  * Botão estrela pop-art (`ComicPanel`) em cada card de provedor com animação comic pop.
+  * Nova opção no menu de ordenação: `"Favoritos primeiro"`.
+* **Trilho de Busca (`ProviderSearchRail.tsx`):**
+  * Botão estrela pop-art no cabeçalho do trilho ao lado do nome do provedor, permitindo favoritar/desfavoritar diretamente da tela de busca.
 
 ---
 
 ## 5. Frontend: Barra de Busca Sob Demanda
 
 ### 5.1 Estado Desacoplado no `HomeSearchBar.tsx`
-* Gerenciamento de estado de digitação local (`draftQuery`).
-* O input não notifica a rota nem altera o estado `isSearching` enquanto o usuário digita.
-* Remoção completa do debounce automático de 300ms do caminho de disparo de busca.
+* Estado local `draftQuery` desacoplado da rota e do dashboard.
+* Sem disparos de busca ou debounce automático durante a digitação.
+* Atalho global `Ctrl+K` / `⌘K` e tecla `/` para focar imediatamente no input de busca.
+* Botão de lupa envolvido em `<button type="submit">`.
+* Disparo estrito por submissão de formulário (**Enter** ou **clique na Lupa**) com validação de `length >= 2`.
+* Pressionar `Escape` ou clicar no `X` limpa o input e fecha a visualização de busca, retornando a Home para o dashboard normal.
 
-### 5.2 Disparo por Enter e Botão de Lupa
-* O ícone de lupa na extremidade esquerda é envolvido por um `<button type="submit">` acessível.
-* Formulário com `<form onSubmit={...}>` intercepta o envio ao pressionar Enter ou clicar na lupa.
-* Apenas termos com $\ge 2$ caracteres disparam a busca (`onSearch(committedQuery)`).
-* Pressionar `Escape` ou clicar no botão `X` limpa o input e fecha a visualização de busca, retornando a Home para o dashboard normal.
-
-### 5.3 Reatividade de Filtros na Busca Ativa (Ajuste 3)
-* A restrição de acionamento estrito por Enter/Lupa aplica-se exclusivamente à **digitação de texto** no input (`draftQuery`).
-* Se a busca já estiver ativa na tela (`committedQuery.length >= 2`), qualquer alteração de filtros no `LanguageSelectorPopover` (idioma) ou no `SearchFilterDrawer` (motores/provedores ativados):
-  * Cancela o stream SSE em andamento imediatamente.
-  * Dispara nova busca automática em streaming para o mesmo `committedQuery` com a nova lista de `effectiveProviders`, sem exigir que o usuário pressione Enter novamente.
+### 5.2 Reatividade de Filtros na Busca Ativa
+* Caso uma busca já esteja ativa (`committedQuery.length >= 2`), alterações no `LanguageSelectorPopover` ou no `SearchFilterDrawer` cancelam o stream atual e disparam nova busca streaming imediatamente com os novos parâmetros, sem exigir novo Enter.
 
 ---
 
 ## 6. Frontend: Motor de Busca Progressiva & Lotes (`useFederatedSearch`)
 
-### 6.1 Fila Prioritária Unificada com Filtros Ativos (Ponto 7)
-1. **Interseção com Filtros da Home:** A fila de busca não consulta provedores favoritados às cegas. Primeiro, obtém-se a lista de provedores elegíveis (`effectiveProviders`) via `resolveEffectiveProviders(filters, providers)`, respeitando os filtros ativos de idioma, engines e provedores ativados no `SearchFilterDrawer`.
-2. **Ordenação Prioritária:** A fila unificada posiciona **os provedores de `effectiveProviders` favoritados no banco no topo**, seguidos pelos demais provedores de `effectiveProviders` ordenados alfabeticamente.
-3. Não há barreira de sincronização ou "fase 1" bloqueante para favoritos: a lista prioritária é percorrida de forma contínua pelo motor.
+### 6.1 Fila Prioritária com Slots Estáveis e Ordem Congelada
+1. **Ordem Congelada por Sessão:** A ordem dos trilhos é determinada no momento em que a busca é submetida (favoritos ativos no topo, seguidos pelos demais em ordem alfabética) e **permanece congelada** durante a exibição dos resultados. Se o usuário favoritar um provedor durante a leitura, a estrela acende imediatamente, mas o trilho não pula de posição na tela.
+2. **Slots Estáveis:**
+   * Cada provedor da fatia ativa ocupa um slot com `ProviderRailSkeleton` pulsante.
+   * Quando o evento `provider-result` é recebido, o skeleton daquele provedor se transforma *in-place* no carrossel de obras com transição suave, sem mover os trilhos vizinhos.
+   * Quando o evento `provider-skip` é recebido, o skeleton é colapsado suavemente sem saltos bruscos.
+3. **Empty State Global:** Se todos os provedores da busca retornarem `provider-skip`, exibe o componente temático `ComicEmptyState` com orientação amigável para o usuário.
 
-### 6.2 Execução Contínua via Streaming SSE com Slots Estáveis (Estratégia C — Pontos 1, 3, 4, 6 e Ajuste 4)
-* **Conexão Única Persistente (Solução do Rate Limit):** O motor abre 1 única conexão SSE via `scrapingApi.searchStream(query, { language, providers: targetSlice }, handlers)`:
-  `GET /api/conversions/source/search/stream?q=...&language=...&providers=...`
-* **Controle de Sessão contra Race Conditions (Ponto 6):** Uma referência `searchSessionIdRef = useRef(0)` é incrementada a cada nova busca comitada (`onSearch`). Se o usuário submeter uma nova busca ou alterar filtros, o stream SSE anterior é fechado imediatamente via `activeStreamRef.current?.close()`, e qualquer evento residual é ignorado.
-* **Slots Estáveis contra Layout Shift / CLS (Ponto 3):**
-  * A UI inicializa **slots estáveis baseados na ordem pré-calculada da fila prioritária** (favoritos no topo, depois alfabética de ativos).
-  * Cada provedor em processamento mantém seu `ProviderRailSkeleton` na sua posição fixa de slot.
-  * Ao receber o evento `provider-result`, o provedor substitui seu próprio skeleton *in-place* mantendo a estabilidade visual (zero salto de tela).
-  * Ao receber o evento `provider-skip`, o skeleton daquele provedor é desmontado suavemente, cedendo espaço para os provedores seguintes da fila.
-  * O componente `HomeSearchResults` renderiza os trilhos na ordem exata da fila prioritária (eliminando a reordenação alfabética forçada via `localeCompare` do componente legado).
-* **Paginação Horizontal do Trilho Preservada (Ponto 4):**
-  * O hook `useFederatedSearch` exporta `loadProviderPage(slug, offset, limit, signal)` consumindo `scrapingApi.search(query, { providers: slug, limit, offset, language }, signal)`. Isso preserva o botão "Carregar mais" horizontal de 10 em 10 itens dentro de cada trilho.
-* **Bridge SSE (Push) para TanStack Query (Ajuste 4):**
-  * O hook `useFederatedSearch` gerencia o estado da lista em renderização e popula o cache do React Query via `queryClient.setQueryData(["scraping", "search", query, providerSlug, language], data)` a cada evento `provider-result`.
-  * **Otimização de 0ms em Buscas Repetidas:** Antes de disparar uma conexão de rede SSE para uma fatia de provedores, o hook consulta o cache em memória com `queryClient.getQueryData(...)`. Provedores com dados quentes (`staleTime < 5min`) renderizam imediatamente na tela em 0ms; o stream SSE só é aberto para os provedores ausentes ou expirados.
+### 6.2 Paginação Horizontal Homogênea no Trilho
+* O trilho consome `loadProviderPage(slug, offset, limit, signal)`:
+  * Chama `scrapingApi.search(query, { providers: slug, limit: 7, offset, language })`.
+  * Se o provedor não suportar paginação nativa, o backend atende em < 5ms a partir do cache de fatiamento `search_full`.
+  * O botão "Ver mais" / rolagem horizontal continua funcional e responsivo para todos os provedores.
 
-### 6.3 Ocultação Seletiva de Trilhos Vazios, Erros de Scraping e Empty State Global (Ponto 2 e Ajuste 2)
-* **Descarte Silencioso Estrito:** Apenas resultados sem obras (`results: []`) e falhas de scraping do provedor (`errors: [{ providerSlug, message }]` ou status 502) são descartados silenciosamente da visualização, com o skeleton correspondente sendo desmontado suavemente. Falhas de scraping são registradas via `console.debug`.
-* **Tratamento de Erros Críticos (Não Ocultados):**
-  * **Erros de Autenticação (`401 Unauthorized`):** Não são silenciados; disparam o interceptor de sessão e redirecionam imediatamente o usuário para `/login`.
-  * **Erros Globais de Rede:** Falha total de conexão com o backend exibe toast de conectividade ("Sem conexão com o servidor").
-* **Preenchimento até 7 Obras Visíveis:** O motor avança preenchendo os slots da fila prioritária até totalizar **7 fontes com obras visíveis** (`BATCH_VISIBLE = 7`).
-* **Tratamento de Fila Esgotada (`exhausted = true`):** Quando a lista de provedores ativos terminar antes de alcançar 7 (caso atual: 4 provedores em desenvolvimento), o motor encerra a iteração graciosamente com o que houver, marcando `exhausted = true` (evita loops infinitos de busca).
-* **Empty State Global (Ajuste 2):** Se ao final do processamento (`isDone` ou `exhausted`) nenhum provedor da fila retornar obras (`visibleRailsCount === 0`), a tela não fica vazia. O componente `HomeSearchResults` renderiza o estado temático de busca sem resultados:
-  * `<ComicEmptyState emoji="🔍" title="Nenhum resultado encontrado" text="Não encontramos obras para '{committedQuery}'. Tente outros termos ou ajuste os filtros." />`
-
-### 6.4 Prefetch em Background e Fatiamento de Lotes SSE (Ajuste 1)
-* O frontend orquestra a fila prioritária `effectiveProviders` em fatias (batches) de provedores:
-  * **Lote Inicial (Visíveis + Prefetch):** O stream SSE é aberto solicitando os primeiros provedores da fila: `GET /search/stream?q=...&providers=slug1,slug2...slug14`.
-  * Os primeiros 7 provedores com obras preenchem a tela (`visibleRails`); os 7 seguintes com obras são acumulados no buffer de prefetch (`prefetchedRails`) e no cache do React Query.
-  * Ao completar 7 visíveis + 7 pré-carregados (ou esgotar a fatia solicitada), o stream fecha a conexão HTTP, liberando os recursos do servidor.
-
-### 6.5 Rolagem Automática (Infinite Scroll) e Próxima Fatia SSE (Ajuste 1 e 5)
-* Elemento sentinela com `IntersectionObserver` no rodapé da página de busca.
-* **Guardas Estritas contra Disparo em Cascata (Ponto 5):** Em telas grandes (1080p/1440p) ou com poucos provedores, a sentinela só consome o lote pré-carregado se:
-  1. `!isLoadingInitial` (o lote inicial de exibição concluiu o preenchimento);
-  2. `!isPrefetching` (não está executando prefetch ativamente);
-  3. `!exhausted` (ainda há provedores a consultar);
-  4. `prefetchedCount > 0` (há provedores pré-carregados prontos no cache);
-  5. `hasUserScrolled` (houve interação real de rolagem pelo usuário, evitando disparo instantâneo no mount).
-* **Consumo e Reabertura do Próximo Lote (Ajuste 1):**
-  * Ao rolar até o final e passar nas guardas:
-    1. Os 7 provedores já pré-carregados entram na tela instantaneamente (0ms de espera).
-    2. O motor calcula a próxima fatia da fila de provedores pendentes (ex.: `effectiveProviders.slice(14, 28)`).
-    3. Abre um novo stream SSE passando a nova fatia: `GET /search/stream?q=...&providers=slug15,slug16...slug28`.
-    4. Esse novo stream acumula o próximo lote de prefetch em segundo plano.
-* Se a fila `effectiveProviders` não contiver mais provedores pendentes, marca `exhausted = true` e a sentinela não rearma.
+### 6.3 Lotes de Exibição e Infinite Scroll com Prefetch
+* **Lote Inicial:** Stream SSE busca até completar **7 provedores com obras visíveis** (`BATCH_VISIBLE = 7`), ou a totalidade dos provedores ativos disponíveis (`totalActiveProviders = Math.min(7, totalActive)`).
+* **Encerramento Gracioso:** Como a plataforma conta atualmente com 4 provedores, o stream processa todos eles e marca `exhausted = true` sem aguardar lotes adicionais inexistentes.
+* **Prefetch em Segundo Plano:** Conforme novos provedores forem adicionados, o motor acumulará lotes adicionais em memória/cache do TanStack Query para exibição progressiva via sentinela `IntersectionObserver`.
 
 ---
 
@@ -219,24 +213,27 @@ pnpm --filter @mangaink/backend exec prisma migrate dev --name add_user_favorite
 
 | Arquivo | Camada | Ação | Descrição |
 | :--- | :--- | :--- | :--- |
-| `apps/backend/prisma/schema.prisma` | Banco | Modificação | Adicionar model `UserFavoriteProvider` e relação em `User` |
+| `apps/backend/prisma/schema.prisma` | Banco | Modificação | Adicionar model `UserFavoriteProvider` e relation em `User` |
 | `apps/backend/src/modules/scraping/repositories/user-favorite-provider.repository.ts` | Backend | Criação | Interface e implementação Prisma de favoritos |
+| `apps/backend/src/modules/scraping/services/search-cache.service.ts` | Backend | Criação | Cache singleton compartilhado em memória (`search_full` e `search`) com TTL e LRU |
 | `apps/backend/src/modules/scraping/use-cases/list-favorite-providers.use-case.ts` | Backend | Criação | Caso de uso de listagem de favoritos |
-| `apps/backend/src/modules/scraping/use-cases/toggle-favorite-provider.use-case.ts` | Backend | Criação | Caso de uso de alternar favorito (valida slug no DB com fallback seed) |
-| `apps/backend/src/modules/scraping/use-cases/search-sources-stream.use-case.ts` | Backend | Criação | Caso de uso de busca federada progressiva com emissão SSE (`provider-result`, `provider-skip`, `done`) e abort |
-| `apps/backend/src/modules/scraping/use-cases/search-sources.use-case.ts` | Backend | Modificação | Otimizar consulta única com `findBySlug`/cache (Ponto 8) e expandir `SEARCH_CACHE_MAX_ENTRIES` para 2.000 (Ponto 9) para a rota REST de paginação |
+| `apps/backend/src/modules/scraping/use-cases/toggle-favorite-provider.use-case.ts` | Backend | Criação | Caso de uso de alternar favorito (com suporte a `{ isFavorite }`) |
+| `apps/backend/src/modules/scraping/use-cases/search-sources-stream.use-case.ts` | Backend | Criação | Caso de uso de busca streaming SSE com cancelamento ativo, filtro de idioma case-insensitive, abastecimento de `search_full` e favoritos no topo |
+| `apps/backend/src/modules/scraping/use-cases/search-sources.use-case.ts` | Backend | Modificação | Integrar cache de fatiamento (`search_full`) singleton para provedores sem paginação nativa e otimizar `findBySlug` |
 | `apps/backend/src/modules/scraping/controllers/favorite-providers.controller.ts` | Backend | Criação | Controller para endpoints de favoritos |
-| `apps/backend/src/modules/scraping/controllers/search-sources-stream.controller.ts` | Backend | Criação | Controller SSE para `GET /api/conversions/source/search/stream` com `reply.hijack()` e listener de `close` |
-| `apps/backend/src/modules/scraping/scraping.routes.ts` | Backend | Modificação | Registrar rota SSE `/search/stream`, rotas de favoritos e aplicar proteção `verifyJwt` em todas as rotas de busca e providers |
-| `apps/frontend/src/lib/api.ts` | Frontend | Modificação | Métodos `getFavoriteProviders`, `toggleFavoriteProvider` e `searchStream` (usando `createSSEStream`) |
+| `apps/backend/src/modules/scraping/controllers/search-sources-stream.controller.ts` | Backend | Criação | Controller SSE para `GET /api/conversions/source/search/stream` com `reply.hijack()`, listener de `close` e captura de exceções |
+| `apps/backend/src/modules/scraping/scraping.routes.ts` | Backend | Modificação | Registrar rota SSE `/search/stream`, rotas de favoritos, relaxar rate limit da busca para 240/min e aplicar `verifyJwt` |
+| `apps/frontend/src/lib/sse.ts` | Frontend | Verificação | Confirmar suporte existente de `credentials: 'include'` e `AbortController` em `createSSEStream` |
+| `apps/frontend/src/lib/api.ts` | Frontend | Modificação | Métodos `getFavoriteProviders`, `toggleFavoriteProvider` e `searchStream` |
 | `apps/frontend/src/hooks/useFavoriteProviders.ts` | Frontend | Criação | Hook TanStack Query com optimistic updates e rollback |
 | `apps/frontend/src/routes/fontes.tsx` | Frontend | Modificação | Botão estrela nos cards + ordenação "Favoritos primeiro" |
-| `apps/frontend/src/components/dashboard/HomeSearchBar.tsx` | Frontend | Modificação | Input com `draftQuery`, botão de lupa submit e remoção do debounce de busca |
-| `apps/frontend/src/components/dashboard/ProviderRailSkeleton.tsx` | Frontend | Criação | Skeleton pop-art de trilho de provedor em carregamento |
-| `apps/frontend/src/hooks/useFederatedSearch.ts` | Frontend | Criação | Motor progressivo SSE (Estratégia C): consumo do stream, slots estáveis, `searchSessionId`, descarte seletivo de vazios/erros, paginação horizontal `loadProviderPage` REST e prefetch 7+7 |
-| `apps/frontend/src/components/dashboard/HomeSearchResults.tsx` | Frontend | Modificação | Renderização baseada em slots estáveis respeitando a fila prioritária e sentinela `IntersectionObserver` com guardas de rolagem |
-| `apps/frontend/src/routes/index.tsx` | Frontend | Modificação | Integração da busca sob demanda e motor progressivo |
-| `CLAUDE.md` | Documentação | Modificação | Atualizar documentação do desktop para Tauri v2 e rotas com JWT |
+| `apps/frontend/src/components/dashboard/HomeSearchBar.tsx` | Frontend | Modificação | Input com `draftQuery`, atalhos `Ctrl+K`/`/`, submit por Enter/Lupa e remoção do debounce automático |
+| `apps/frontend/src/components/dashboard/ProviderRailSkeleton.tsx` | Frontend | Criação | Skeleton pop-art de trilho de provedor com transição in-place |
+| `apps/frontend/src/components/dashboard/ProviderSearchRail.tsx` | Frontend | Modificação | Adicionar botão de estrela de favorito pop-art no cabeçalho do trilho |
+| `apps/frontend/src/hooks/useFederatedSearch.ts` | Frontend | Criação | Motor progressivo SSE com slots estáveis, ordem de sessão congelada, paginação homogênea (`loadProviderPage`) e encerramento gracioso |
+| `apps/frontend/src/components/dashboard/HomeSearchResults.tsx` | Frontend | Modificação | Renderização baseada em slots estáveis na ordem prioritária e sentinela `IntersectionObserver` |
+| `apps/frontend/src/routes/index.tsx` | Frontend | Modificação | Integração da busca sob demanda e motor progressivo na Home |
+| `CLAUDE.md` | Documentação | Modificação | Atualizar documentação do desktop para Tauri v2 e detalhes de autenticação |
 
 ---
 
@@ -245,21 +242,13 @@ pnpm --filter @mangaink/backend exec prisma migrate dev --name add_user_favorite
 1. **Migração do Banco de Dados:**
    * Rodar migration no PostgreSQL e validar constraints de chave única composta (`userId + providerSlug`) e deleção em cascata (`onDelete: Cascade`).
 2. **Testes Unitários no Backend (Vitest):**
-   * Repositório de favoritos: inserção, remoção (toggle idempotente) e listagem por usuário.
-   * Use cases de favoritos: validação de slug existente, toggle, listagem e garantia de isolamento entre usuários.
-   * `search-sources-stream.use-case.test.ts`: verificar emissão correta de frames SSE (`provider-result` com obras, `provider-skip` para vazios ou erros de scraping, `done` final), ordenação com favoritos no topo e cancelamento imediato ao acionar o `AbortSignal`.
-   * Proteção JWT: verificar retorno `401 Unauthorized` para `GET /search/stream`, `GET /search`, `GET /providers` e favoritos sem Bearer token válido.
+   * Repositório e use cases de favoritos: adição, remoção, idempotência e isolamento entre usuários.
+   * `search-sources-stream.use-case.test.ts`: verificar emissão de frames SSE (`provider-result`, `provider-skip`, `done`), ordenação com favoritos no topo, cancelamento via `AbortSignal` e abastecimento de `search_full`.
+   * `search-sources.use-case.test.ts`: validar cache de fatiamento (`offset > 0` fatia da memória sem refazer requisição externa).
+   * Proteção JWT: verificar `401 Unauthorized` para acessos não autenticados.
 3. **Testes Unitários no Frontend (Vitest):**
-   * `HomeSearchBar.test.tsx`: validar que digitar altera apenas `draftQuery` local (não emite busca) e que pressionar Enter ou clicar na lupa aciona `onSearch` com $\ge 2$ caracteres; Esc/X limpa e fecha; alteração de idioma/filtros com busca ativa dispara re-busca automática.
-   * `useFavoriteProviders.test.ts`: testar listagem, toggle e optimistic updates com rollback em caso de falha.
-   * `useFederatedSearch.test.ts`: testar streaming progressivo com slots estáveis via stream SSE mockado, preenchimento de trilhos *on-arrival*, descarte suave de `provider-skip`, exibição do `ComicEmptyState` quando todos os provedores forem vazios, fatiamento de lotes de prefetch (`slice`), cancelamento via `searchSessionIdRef`, preservação de `loadProviderPage` REST e terminação com `exhausted=true`.
-4. **Validação Smoke no App Desktop Tauri (sem Electron/Playwright):**
-   * Executar `pnpm desktop:dev` e validar o fluxo completo no shell Tauri v2:
-     * Acessar `/login` e autenticar como admin.
-     * Ir para `/fontes` e favoritar um provedor (ex.: `MangaDex`).
-     * Voltar para `/` e digitar termo sem disparo automático.
-     * Pressionar Enter e validar:
-       * Provedores favoritos aparecem no topo assim que respondem via SSE (render on-arrival).
-       * Skeletons estáveis aparecem para os provedores pendentes sem Layout Shift.
-       * Provedores vazios ou com erro não renderizam trilhos.
-       * Rolar a página até o fim e conferir o consumo do lote pré-carregado.
+   * `HomeSearchBar.test.tsx`: validar que digitar não emite busca; Enter e Lupa disparam busca com $\ge 2$ caracteres; Esc/X limpa; filtros ativos re-disparam busca automaticamente.
+   * `useFavoriteProviders.test.ts`: testar listagem, toggle e optimistic updates com rollback.
+   * `useFederatedSearch.test.ts`: testar streaming progressivo com slots estáveis sem layout shift, ordem de sessão congelada, paginação horizontal homogênea e encerramento gracioso quando os provedores se esgotam.
+4. **Validação no Shell Desktop Tauri v2:**
+   * Executar `pnpm desktop:dev` e validar o fluxo completo no shell Tauri v2 (streaming de bytes contínuo via proxy Axum, autenticação e navegação sem erros).

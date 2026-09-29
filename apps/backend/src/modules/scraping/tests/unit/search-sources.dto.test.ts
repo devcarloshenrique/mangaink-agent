@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { searchSourcesQuerySchema } from '../../dtos/search-sources.dto'
+import { coverProxyQuerySchema, searchSourcesQuerySchema } from '../../dtos/search-sources.dto'
 
-const KNOWN = ['mangalivre', 'imperiodabritannia', 'mangasbrasuka', 'mangadex']
+const KNOWN = ['mangalivre', 'imperiodabritannia', 'mangadex']
 
 describe('searchSourcesQuerySchema', () => {
   it('aceita query válida com defaults', () => {
     const parsed = searchSourcesQuerySchema.parse({ q: 'one piece' })
-    expect(parsed).toMatchObject({ q: 'one piece', limit: 10, offset: 0 })
+    expect(parsed).toMatchObject({ q: 'one piece', limit: 10, offset: 0, timeoutMs: 12000 })
+  })
+
+  it('aceita timeoutMs e maxProviders customizados', () => {
+    const parsed = searchSourcesQuerySchema.parse({ q: 'one piece', timeoutMs: '15000', maxProviders: '15' })
+    expect(parsed.timeoutMs).toBe(15000)
+    expect(parsed.maxProviders).toBe(15)
   })
 
   it('aceita offset válido e respeita limite máximo de 100', () => {
@@ -30,8 +36,21 @@ describe('searchSourcesQuerySchema', () => {
     expect(parsed.language).toBe('pt-br')
   })
 
-  it('rejeita mais que 20 slugs', () => {
-    const csv = [...KNOWN, ...Array.from({ length: 17 }, (_, i) => KNOWN[i % KNOWN.length])].join(',')
+  it('rejeita mais que 50 slugs', () => {
+    const csv = Array.from({ length: 51 }, (_, i) => KNOWN[i % KNOWN.length]).join(',')
     expect(() => searchSourcesQuerySchema.parse({ q: 'naruto', providers: csv })).toThrow()
+  })
+
+  it('valida coverProxyQuerySchema corretamente', () => {
+    expect(() => coverProxyQuerySchema.parse({ url: 'not-a-url', provider: 'mangakakalot' })).toThrow()
+    expect(() => coverProxyQuerySchema.parse({ url: 'https://example.com/cover.jpg', provider: '' })).toThrow()
+    const valid = coverProxyQuerySchema.parse({
+      url: 'https://img-r1.2xstorage.com/thumb/naruto.webp',
+      provider: 'mangakakalot',
+    })
+    expect(valid).toEqual({
+      url: 'https://img-r1.2xstorage.com/thumb/naruto.webp',
+      provider: 'mangakakalot',
+    })
   })
 })

@@ -109,7 +109,7 @@ describe('SearchSourcesUseCase', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('rejeita slug explícito desconhecido com UnknownProviderError (statusCode 400)', async () => {
+  it('rejeita slug explícito desconhecido com UnknownProviderError (statusCode 400) se todos forem desconhecidos', async () => {
     const ok = new MockScrapingProvider()
     Object.defineProperty(ok, 'slug', { value: 'p0' })
     const useCase = new SearchSourcesUseCase(createProviderRepo(['active']), () => [ok])
@@ -119,6 +119,18 @@ describe('SearchSourcesUseCase', () => {
     await expect(
       useCase.execute({ query: 'naruto', providers: ['xxx'] }),
     ).rejects.toMatchObject({ statusCode: 400 })
+  })
+
+  it('tolera e filtra slug desconhecido se houver pelo menos um provider válido', async () => {
+    const ok = new MockScrapingProvider()
+    Object.defineProperty(ok, 'slug', { value: 'p0' })
+    ok.setSearchResult([
+      { providerSlug: 'p0', title: 'Naruto', url: 'https://p0/manga/naruto/' },
+    ])
+    const useCase = new SearchSourcesUseCase(createProviderRepo(['active']), () => [ok])
+    const res = await useCase.execute({ query: 'naruto', providers: ['p0', 'obsoleto'] })
+    expect(res.searchedProviders).toEqual(['p0'])
+    expect(res.results).toHaveLength(1)
   })
 
   it('provider explícito offline não entra no fan-out', async () => {
@@ -191,5 +203,47 @@ describe('SearchSourcesUseCase', () => {
     await useCase.execute({ query: 'One Piece', offsetPerProvider: 10 })
     await useCase.execute({ query: 'One Piece', offsetPerProvider: 10 })
     expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('faz wrap de coverUrl com cover-proxy para providers com proteção contra hotlink', async () => {
+    const kakalot = new MockScrapingProvider()
+    Object.defineProperty(kakalot, 'slug', { value: 'mangakakalot' })
+    kakalot.setSearchResult([
+      {
+        providerSlug: 'mangakakalot',
+        title: 'Naruto',
+        url: 'https://mangakakalot.gg/manga/naruto',
+        coverUrl: 'https://img-r1.2xstorage.com/thumb/naruto.webp',
+      },
+    ])
+
+    const normal = new MockScrapingProvider()
+    Object.defineProperty(normal, 'slug', { value: 'imperiodabritannia' })
+    normal.setSearchResult([
+      {
+        providerSlug: 'imperiodabritannia',
+        title: 'Naruto',
+        url: 'https://imperiodabritannia.net/manga/naruto',
+        coverUrl: 'https://cdn.example.com/cover.webp',
+      },
+    ])
+
+    const useCase = new SearchSourcesUseCase(
+      createProviderRepo(['active']),
+      () => [kakalot, normal],
+    )
+
+    const res = await useCase.execute({
+      query: 'Naruto',
+      providers: ['mangakakalot', 'imperiodabritannia'],
+    })
+
+    const kakalotItem = res.results.find((r) => r.providerSlug === 'mangakakalot')
+    const normalItem = res.results.find((r) => r.providerSlug === 'imperiodabritannia')
+
+    expect(kakalotItem?.coverUrl).toBe(
+      '/api/conversions/source/cover-proxy?url=https%3A%2F%2Fimg-r1.2xstorage.com%2Fthumb%2Fnaruto.webp&provider=mangakakalot',
+    )
+    expect(normalItem?.coverUrl).toBe('https://cdn.example.com/cover.webp')
   })
 })

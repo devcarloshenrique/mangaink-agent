@@ -72,30 +72,29 @@ describe('ProviderResolver', () => {
       expect(provider.slug).toBe('imperiodabritannia')
     })
 
-    it('deve resolver provider para URL do Mangas Brasukas', () => {
-      const provider = resolver.resolve(
-        'https://mangasbrasuka.com.br/manga/mushoku-tensei-jobless-reincarnation/',
-      )
-      expect(provider.slug).toBe('mangasbrasuka')
-      expect(provider.name).toBe('Mangas Brasukas')
-      expect(provider.engine).toBe('api')
-    })
-
-    it('deve resolver provider para URL do Mangas Brasukas sem barra final', () => {
-      const provider = resolver.resolve('https://mangasbrasuka.com.br/manhwa/meu-manga')
-      expect(provider.slug).toBe('mangasbrasuka')
+    it('deve resolver provider para URL do Flame Comics', () => {
+      const provider = resolver.resolve('https://flamecomics.xyz/series/2')
+      expect(provider.slug).toBe('flamecomics')
+      expect(provider.name).toBe('Flame Comics')
+      expect(provider.engine).toBe('cheerio')
     })
   })
 
   describe('listAll', () => {
     it('deve listar todos os providers disponíveis', () => {
       const providers = resolver.listAll()
-      expect(providers).toHaveLength(4)
+      expect(providers).toHaveLength(10)
       const slugs = providers.map((p) => p.slug)
       expect(slugs).toContain('mangalivre')
       expect(slugs).toContain('imperiodabritannia')
-      expect(slugs).toContain('mangasbrasuka')
       expect(slugs).toContain('mangadex')
+      expect(slugs).toContain('taiyo')
+      expect(slugs).toContain('mangapill')
+      expect(slugs).toContain('mangaread')
+      expect(slugs).toContain('flamecomics')
+      expect(slugs).toContain('asurascans')
+      expect(slugs).toContain('mangakakalot')
+      expect(slugs).toContain('mangafire')
     })
 
     it('deve retornar providers com informações completas', () => {
@@ -124,13 +123,19 @@ describe('ProviderResolver', () => {
       resolver.loadFromProviders([
         { slug: 'mangalivre', maxConcurrent: 6, minTime: 50 },
         { slug: 'imperiodabritannia', maxConcurrent: 6, minTime: 50 },
-        { slug: 'mangasbrasuka', maxConcurrent: 6, minTime: 50 },
         { slug: 'mangadex', maxConcurrent: 6, minTime: 50 },
+        { slug: 'taiyo', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangapill', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangaread', maxConcurrent: 6, minTime: 50 },
+        { slug: 'flamecomics', maxConcurrent: 6, minTime: 50 },
+        { slug: 'asurascans', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangakakalot', maxConcurrent: 6, minTime: 50 },
+        { slug: 'mangafire', maxConcurrent: 6, minTime: 50 },
       ])
 
       const after = resolver.listAll().map((p) => p.rateLimiter)
       expect(after).toEqual(before)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(4)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(10)
     })
 
     it('reconstrói limiter quando a config muda', () => {
@@ -140,7 +145,7 @@ describe('ProviderResolver', () => {
 
       const after = resolver.listAll().find((p) => p.slug === 'mangalivre')!.rateLimiter
       expect(after).not.toBe(before)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(5)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(11)
     })
 
     it('preserva limiters dos demais providers quando só um muda', () => {
@@ -154,7 +159,7 @@ describe('ProviderResolver', () => {
         .listAll()
         .find((p) => p.slug === 'imperiodabritannia')!.rateLimiter
       expect(afterBritannia).toBe(beforeBritannia)
-      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(5)
+      expect(mockCreateRateLimiter).toHaveBeenCalledTimes(11)
     })
 
     it('mantém todos os providers após refresh', () => {
@@ -163,8 +168,14 @@ describe('ProviderResolver', () => {
       expect(resolver.listAll().map((p) => p.slug)).toEqual([
         'mangalivre',
         'imperiodabritannia',
-        'mangasbrasuka',
         'mangadex',
+        'taiyo',
+        'mangapill',
+        'mangaread',
+        'flamecomics',
+        'asurascans',
+        'mangakakalot',
+        'mangafire',
       ])
     })
   })
@@ -182,8 +193,14 @@ describe('ProviderResolver', () => {
       expect(resolverInstance.listAll().map((p) => p.slug)).toEqual([
         'mangalivre',
         'imperiodabritannia',
-        'mangasbrasuka',
         'mangadex',
+        'taiyo',
+        'mangapill',
+        'mangaread',
+        'flamecomics',
+        'asurascans',
+        'mangakakalot',
+        'mangafire',
       ])
     })
 

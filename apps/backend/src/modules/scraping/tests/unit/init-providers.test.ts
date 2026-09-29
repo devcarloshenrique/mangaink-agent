@@ -116,7 +116,7 @@ describe('initProviders', () => {
 
     expect(registry.get('mangalivre')).toEqual({ maxConcurrent: 10, minTime: 0 })
     expect(registry.get('imperiodabritannia')).toEqual({ maxConcurrent: 2, minTime: 500 })
-    expect(registry.get('mangasbrasuka')).toEqual({ maxConcurrent: 3, minTime: 200 })
+    expect(registry.get('mangadex')).toEqual({ maxConcurrent: 5, minTime: 200 })
     expect(registry.get('mangalivre')).not.toEqual({ maxConcurrent: 6, minTime: 50 })
   })
 

@@ -123,14 +123,14 @@ const mockProviderRepo = vi.hoisted(() => {
       }),
     )
     store.set(
-      'mangasbrasuka',
+      'mangadex',
       makeSeed({
-        slug: 'mangasbrasuka',
-        name: 'Mangas Brasukas',
+        slug: 'mangadex',
+        name: 'MangaDex',
         engine: 'api',
-        tags: ['mangá', 'manhwa', 'manhua', 'pt-BR'],
+        tags: ['mangá', 'en', 'pt-BR', 'api'],
         status: 'active',
-        rateLimitMaxConcurrent: 3,
+        rateLimitMaxConcurrent: 5,
         rateLimitMinTime: 200,
       }),
     )
@@ -653,6 +653,80 @@ describe('Scraping E2E', () => {
       const body = response.json()
       expect(body.query).toBe('bleach')
       expect(body.errors.some((e: any) => e.providerSlug === 'mangalivre')).toBe(true)
+    })
+  })
+
+  describe('GET /api/conversions/source/cover-proxy', () => {
+    const validPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
+
+    it('deve retornar 400 quando parâmetros obrigatórios estiverem ausentes ou inválidos', async () => {
+      const res1 = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/cover-proxy',
+      })
+      expect(res1.statusCode).toBe(400)
+
+      const res2 = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/cover-proxy?url=ftp://bad.com/img.jpg&provider=mangakakalot',
+      })
+      expect(res2.statusCode).toBe(400)
+    })
+
+    it('deve retornar 404 quando o provider não for encontrado', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/cover-proxy?url=https://example.com/img.jpg&provider=desconhecido',
+      })
+      expect(res.statusCode).toBe(404)
+    })
+
+    it('deve retornar 403 quando o domínio não estiver na whitelist do provider (SSRF protection)', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/conversions/source/cover-proxy?url=https://malicious-site.com/evil.jpg&provider=mangakakalot',
+      })
+      expect(res.statusCode).toBe(403)
+      expect(res.json().error).toContain('Domínio não permitido')
+    })
+
+    it('deve retornar 200 com buffer e headers adequados quando download bem-sucedido', async () => {
+      const kakalot = getProviderResolver().getBySlug('mangakakalot')
+      expect(kakalot).toBeDefined()
+      vi.spyOn(kakalot!, 'downloadImage').mockResolvedValue({
+        buffer: validPng,
+        contentType: 'image/png',
+      })
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/conversions/source/cover-proxy?url=${encodeURIComponent('https://img-r1.2xstorage.com/thumb/naruto.webp')}&provider=mangakakalot`,
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.headers['content-type']).toBe('image/png')
+      expect(res.headers['cache-control']).toContain('public')
+      expect(res.rawPayload.length).toBe(validPng.length)
+    })
+
+    it('deve retornar 422 quando o buffer retornado não for uma imagem válida', async () => {
+      const kakalot = getProviderResolver().getBySlug('mangakakalot')
+      expect(kakalot).toBeDefined()
+      vi.spyOn(kakalot!, 'downloadImage').mockResolvedValue({
+        buffer: Buffer.from('<html>Not an image</html>'),
+        contentType: 'text/html',
+      })
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/conversions/source/cover-proxy?url=${encodeURIComponent('https://img-r1.2xstorage.com/thumb/naruto.webp')}&provider=mangakakalot`,
+      })
+
+      expect(res.statusCode).toBe(422)
+      expect(res.json().error).toContain('não é uma imagem válida')
     })
   })
 })

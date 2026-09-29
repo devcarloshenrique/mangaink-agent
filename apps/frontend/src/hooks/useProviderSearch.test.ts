@@ -192,7 +192,7 @@ describe("useProviderSearch", () => {
   it("passa providerSlugs para a API de busca server-side", async () => {
     vi.useFakeTimers();
 
-    const { result } = renderHook(() => useProviderSearch(["mangadex", "mangasbrasuka"]), {
+    const { result } = renderHook(() => useProviderSearch(["mangadex", "taiyo"]), {
       wrapper: createWrapper(),
     });
 
@@ -210,7 +210,7 @@ describe("useProviderSearch", () => {
 
     expect(scrapingApi.search).toHaveBeenCalledWith(
       "naruto",
-      { providers: "mangadex,mangasbrasuka" },
+      { providers: "mangadex,taiyo" },
       expect.any(AbortSignal),
     );
   });
