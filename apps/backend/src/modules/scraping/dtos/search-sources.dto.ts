@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
-export const MAX_EXPLICIT_PROVIDERS = 20
+export const MAX_EXPLICIT_PROVIDERS = 50
+
+export const coverProxyQuerySchema = z.object({
+  url: z.string().url('URL inválida'),
+  provider: z.string().min(1, 'Provider obrigatório'),
+})
+
+export type CoverProxyQuery = z.infer<typeof coverProxyQuerySchema>
 
 export const searchSourcesQuerySchema = z.object({
   q: z.string().trim().min(2, 'Informe ao menos 2 caracteres').max(100),
@@ -22,6 +29,8 @@ export const searchSourcesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
   offset: z.coerce.number().int().min(0).max(100).default(0),
   language: z.string().trim().toLowerCase().max(20).optional(),
+  timeoutMs: z.coerce.number().int().min(1000).max(30000).default(12000),
+  maxProviders: z.coerce.number().int().min(1).max(30).optional(),
 })
 
 export type SearchSourcesQuery = z.infer<typeof searchSourcesQuerySchema>

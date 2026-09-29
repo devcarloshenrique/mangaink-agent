@@ -6,7 +6,7 @@ import { createInspectSourceController } from './controllers/inspect-source.cont
 import { getSource } from './controllers/preview-source.controller'
 import { createSourceEventsController } from './controllers/source-events.controller'
 import { listProviders, updateProvider } from './controllers/providers.controller'
-import { searchSources } from './controllers/search-sources.controller'
+import { coverProxy, searchSources } from './controllers/search-sources.controller'
 import { inspectSourceBodySchema, inspectSourceQuerySchema } from './dtos/inspect-source.dto'
 import { sourceParamsSchema } from './dtos/preview-source.dto'
 import {
@@ -16,6 +16,7 @@ import {
   updateProviderBodySchema,
 } from './dtos/provider.dto'
 import {
+  coverProxyQuerySchema,
   searchSourcesQuerySchema,
   searchSourcesResponseSchema,
 } from './dtos/search-sources.dto'
@@ -202,6 +203,29 @@ export const scrapingRoutes: FastifyPluginAsyncZod<ScrapingRoutesOptions> = asyn
       },
     },
     searchSources,
+  )
+
+  // GET /api/conversions/source/cover-proxy
+  app.get(
+    '/api/conversions/source/cover-proxy',
+    {
+      schema: {
+        tags: ['Scraping'],
+        summary: 'Proxy de capa com controle de referer e SSRF',
+        description:
+          'Faz proxy de imagens de capa que exigem referer específico ou bloqueiam hotlinking. ' +
+          'Valida domínio contra allowedDomains do provider e valida magic bytes da imagem.',
+        querystring: coverProxyQuerySchema,
+        response: {
+          400: z.object({ error: z.string() }),
+          403: z.object({ error: z.string() }),
+          404: z.object({ error: z.string() }),
+          422: z.object({ error: z.string() }),
+          502: z.object({ error: z.string() }),
+        },
+      },
+    },
+    coverProxy,
   )
 
   // GET /api/conversions/source/providers

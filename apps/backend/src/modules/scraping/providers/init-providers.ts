@@ -20,8 +20,11 @@ export async function initProviders(): Promise<void> {
   const repository = getProviderRepository()
   const resolver = getProviderResolver()
 
-  // 1. Upsert dos providers ausentes/desatualizados no banco.
+  // 1. Upsert dos providers ausentes/desatualizados no banco e remoção de obsoletos.
   await repository.upsertFromSeed(KNOWN_PROVIDERS)
+  if ('deleteNotInSeed' in repository && typeof (repository as any).deleteNotInSeed === 'function') {
+    await (repository as any).deleteNotInSeed(KNOWN_PROVIDERS)
+  }
 
   // 2. Configs de rate limit persistidas no banco (fonte de verdade após o seed).
   const providers = await repository.findAll()

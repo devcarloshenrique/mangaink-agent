@@ -15,10 +15,16 @@ export const DEFAULT_MAX_PROVIDERS = 10
 // Re-exportado por compatibilidade — a fonte da verdade vive no DTO.
 export { MAX_EXPLICIT_PROVIDERS }
 export const GLOBAL_MAX_CONCURRENT = 6
-export const DEFAULT_TIMEOUT_MS = 6000
+export const DEFAULT_TIMEOUT_MS = 12000
 export const SEARCH_CACHE_TTL_MS = 5 * 60_000
 export const SEARCH_CACHE_MAX_ENTRIES = 200
 const DEFAULT_LIMIT_PER_PROVIDER = 10
+
+export const HOTLINK_PROTECTED_PROVIDERS = new Set(['mangakakalot', 'mangapill'])
+
+export function buildCoverProxyUrl(rawCoverUrl: string, providerSlug: string): string {
+  return `/api/conversions/source/cover-proxy?url=${encodeURIComponent(rawCoverUrl)}&provider=${encodeURIComponent(providerSlug)}`
+}
 
 const SEARCHABLE_STATUSES = new Set(['active', 'slow', 'beta'])
 
@@ -129,14 +135,19 @@ export class SearchSourcesUseCase {
     let targets: IProviderStrategy[]
     let truncated = false
     if (args.providers && args.providers.length > 0) {
-      const unknown = args.providers.filter((slug) => !bySlug.has(slug))
-      if (unknown.length > 0) throw new UnknownProviderError(unknown)
       const records = await this.repository.findAll()
       const statusBySlug = new Map(records.map((r) => [r.slug, r.status ?? 'active']))
       targets = args.providers
         .map((slug) => bySlug.get(slug))
         .filter((s): s is IProviderStrategy => s !== undefined)
         .filter((s) => SEARCHABLE_STATUSES.has(statusBySlug.get(s.slug) ?? 'active'))
+
+      if (targets.length === 0) {
+        const unknown = args.providers.filter((slug) => !bySlug.has(slug))
+        if (unknown.length === args.providers.length) {
+          throw new UnknownProviderError(unknown)
+        }
+      }
     } else {
       const records = await this.repository.findAll()
       const eligible = records
@@ -164,8 +175,11 @@ export class SearchSourcesUseCase {
     if (!useCache) return run
 
     const shared = run.then((result) => {
-      pruneCache()
-      cache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_TTL_MS, payload: cloneResult(result) })
+      // Não cacheia resultados com falha de provedores para evitar envenenar o cache por 5 minutos
+      if (result.errors.length === 0) {
+        pruneCache()
+        cache.set(cacheKey, { expiresAt: Date.now() + SEARCH_CACHE_TTL_MS, payload: cloneResult(result) })
+      }
       inFlight.delete(cacheKey)
       return result
     })
@@ -208,7 +222,18 @@ export class SearchSourcesUseCase {
         for (const r of outcome.value) {
           if (seen.has(r.url)) continue
           seen.add(r.url)
-          results.push(r)
+
+          const providerSlug = r.providerSlug || slug
+          let coverUrl = r.coverUrl
+          if (coverUrl && HOTLINK_PROTECTED_PROVIDERS.has(providerSlug) && !coverUrl.startsWith('/api/')) {
+            coverUrl = buildCoverProxyUrl(coverUrl, providerSlug)
+          }
+
+          results.push({
+            ...r,
+            providerSlug,
+            coverUrl,
+          })
         }
       } else {
         const reason = outcome.reason

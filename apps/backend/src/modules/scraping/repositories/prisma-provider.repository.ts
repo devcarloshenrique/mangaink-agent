@@ -78,6 +78,15 @@ export class PrismaProviderRepository implements ProviderRepository {
     )
   }
 
+  async deleteNotInSeed(seeds: ProviderSeed[]): Promise<void> {
+    const knownSlugs = seeds.map((s) => s.slug)
+    await getPrisma().provider.deleteMany({
+      where: {
+        slug: { notIn: knownSlugs },
+      },
+    })
+  }
+
   async update(slug: string, data: ProviderUpdate): Promise<ProviderRecord | null> {
     const existing = await getPrisma().provider.findUnique({
       where: { slug },

@@ -1,8 +1,14 @@
 import type { IProviderStrategy } from '../interfaces/provider-strategy.interface'
 import { MangaLivreStrategy } from './mangalivre/mangalivre.provider'
 import { ImperioDaBritanniaStrategy } from './imperiodabritannia/imperiodabritannia.provider'
-import { MangasBrasukaStrategy } from './mangasbrasuka/mangasbrasuka.provider'
 import { MangaDexStrategy } from './mangadex/mangadex.provider'
+import { TaiyoStrategy } from './taiyo/taiyo.provider'
+import { MangapillStrategy } from './mangapill/mangapill.provider'
+import { MangaReadStrategy } from './mangaread/mangaread.provider'
+import { FlameComicsStrategy } from './flamecomics/flamecomics.provider'
+import { AsuraScansStrategy } from './asurascans/asurascans.provider'
+import { MangaKakalotStrategy } from './mangakakalot/mangakakalot.provider'
+import { MangaFireStrategy } from './mangafire/mangafire.provider'
 import { ProviderNotFoundError, InvalidUrlError } from '../errors/scraping.errors'
 import { RateLimitRegistry, type ProviderRateLimitConfig } from '../rate-limit/rate-limit-registry'
 import { createRateLimiter } from '../rate-limit/rate-limiter'
@@ -14,8 +20,14 @@ type StrategyFactory = (limiter: RateLimiter) => IProviderStrategy
 const PROVIDER_FACTORIES: ReadonlyArray<{ slug: string; create: StrategyFactory }> = [
   { slug: 'mangalivre', create: (limiter) => new MangaLivreStrategy(limiter) },
   { slug: 'imperiodabritannia', create: (limiter) => new ImperioDaBritanniaStrategy(limiter) },
-  { slug: 'mangasbrasuka', create: (limiter) => new MangasBrasukaStrategy(limiter) },
   { slug: 'mangadex', create: (limiter) => new MangaDexStrategy(limiter) },
+  { slug: 'taiyo', create: (limiter) => new TaiyoStrategy(limiter) },
+  { slug: 'mangapill', create: (limiter) => new MangapillStrategy(limiter) },
+  { slug: 'mangaread', create: (limiter) => new MangaReadStrategy(limiter) },
+  { slug: 'flamecomics', create: (limiter) => new FlameComicsStrategy(limiter) },
+  { slug: 'asurascans', create: (limiter) => new AsuraScansStrategy(limiter) },
+  { slug: 'mangakakalot', create: (limiter) => new MangaKakalotStrategy(limiter) },
+  { slug: 'mangafire', create: (limiter) => new MangaFireStrategy(limiter) },
 ]
 
 /**
@@ -86,6 +98,11 @@ export class ProviderResolver {
   /** Lista todos os providers disponíveis. */
   listAll(): IProviderStrategy[] {
     return this.providers
+  }
+
+  /** Retorna um provider pelo seu slug. */
+  getBySlug(slug: string): IProviderStrategy | undefined {
+    return this.providers.find((p) => p.slug === slug)
   }
 
   private getOrCreateLimiter(slug: string, config: RateLimiterConfig): RateLimiter {
