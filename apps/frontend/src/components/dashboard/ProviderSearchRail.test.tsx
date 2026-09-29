@@ -109,4 +109,40 @@ describe("ProviderSearchRail", () => {
 
     expect(onAdd).toHaveBeenCalledWith("https://example.com/manga/1");
   });
+
+  it("renderiza a imagem de capa com referrerPolicy no-referrer", () => {
+    render(<ProviderSearchRail {...defaultProps} />);
+
+    const img = screen.getByAltText("Capa de Manga 1");
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute("referrerPolicy", "no-referrer");
+  });
+
+  it("faz fallback para cover-proxy quando onError é acionado na imagem direta", () => {
+    render(
+      <ProviderSearchRail
+        {...defaultProps}
+        results={[
+          {
+            providerSlug: "mangakakalot",
+            title: "Naruto",
+            url: "https://example.com/manga/naruto",
+            coverUrl: "https://img-r1.2xstorage.com/thumb/naruto.webp",
+          },
+        ]}
+      />,
+    );
+
+    const img = screen.getByAltText("Capa de Naruto") as HTMLImageElement;
+    expect(img.src).toBe("https://img-r1.2xstorage.com/thumb/naruto.webp");
+
+    fireEvent.error(img);
+
+    expect(img.src).toContain("/api/conversions/source/cover-proxy");
+    expect(img.src).toContain("mangakakalot");
+
+    // Se falhar novamente no proxy, exibe 'Sem capa'
+    fireEvent.error(img);
+    expect(screen.getByText("Sem capa")).toBeInTheDocument();
+  });
 });

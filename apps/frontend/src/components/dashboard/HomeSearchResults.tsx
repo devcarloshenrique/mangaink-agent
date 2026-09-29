@@ -160,7 +160,9 @@ export function HomeSearchResults({
       <section aria-label="Resultados da busca" className="w-full">
         <div className="flex items-center gap-2 py-2 text-sm">
           <AlertTriangle className="h-5 w-5 text-comic-red" />
-          <span className="font-medium">Falha na busca. </span>
+          <span className="font-medium">
+            Falha na busca{error.message ? `: ${error.message}` : ""}.{" "}
+          </span>
           <Button
             size="sm"
             variant="outline"

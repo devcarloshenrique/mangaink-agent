@@ -32,6 +32,7 @@ import {
   ProviderEngine,
   ALL_ENGINES,
 } from "./search-filter.types";
+import { providerMatchesLanguage, providerMatchesWorkTypes } from "@/lib/search-filters";
 
 interface SearchFilterDrawerProps {
   filters: SearchFilters;
@@ -118,26 +119,49 @@ export function SearchFilterDrawer({
     },
   ];
 
-  // Provedores filtrados pela busca interna do drawer e engines selecionadas
-  const filteredProviders = useMemo(() => {
-    let list = allProviders;
-
-    if (filters.engines && filters.engines.length > 0) {
-      list = list.filter((p) => {
+  // Provedores que correspondem aos critérios globais de filtro (idioma, tipos de obra e engines)
+  const matchingProviders = useMemo(() => {
+    return allProviders.filter((p) => {
+      if (filters.engines && filters.engines.length > 0) {
         const eng = (p.engine || "cheerio") as ProviderEngine;
-        return filters.engines.includes(eng);
-      });
-    }
+        if (!filters.engines.includes(eng)) return false;
+      }
 
-    if (!providerQuery.trim()) return list;
+      if (!providerMatchesLanguage(p, filters.language)) {
+        return false;
+      }
+
+      if (!providerMatchesWorkTypes(p, filters.workTypes)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [allProviders, filters.engines, filters.language, filters.workTypes]);
+
+  // Provedores filtrados adicionalmente pela busca interna do drawer
+  const filteredProviders = useMemo(() => {
+    if (!providerQuery.trim()) return matchingProviders;
     const q = providerQuery.toLowerCase();
-    return list.filter(
+    return matchingProviders.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.slug.toLowerCase().includes(q) ||
         p.tags?.some((t) => t.toLowerCase().includes(q)),
     );
-  }, [allProviders, providerQuery, filters.engines]);
+  }, [matchingProviders, providerQuery]);
+
+  const activeMatchingCount = useMemo(() => {
+    return matchingProviders.filter((p) => filters.providers.includes(p.slug)).length;
+  }, [matchingProviders, filters.providers]);
+
+  const allMatchingSelected =
+    matchingProviders.length > 0 &&
+    matchingProviders.every((p) => filters.providers.includes(p.slug));
+
+  const noneMatchingSelected =
+    matchingProviders.length === 0 ||
+    matchingProviders.every((p) => !filters.providers.includes(p.slug));
 
   const toggleWorkType = (type: WorkType) => {
     const exists = filters.workTypes.includes(type);
@@ -163,14 +187,18 @@ export function SearchFilterDrawer({
   };
 
   const selectAllProviders = () => {
+    const visibleSlugs = matchingProviders.map((p) => p.slug);
+    const updated = Array.from(new Set([...filters.providers, ...visibleSlugs]));
     onChange({
       ...filters,
-      providers: allProviders.map((p) => p.slug),
+      providers: updated,
     });
   };
 
   const clearProviders = () => {
-    onChange({ ...filters, providers: [] });
+    const visibleSlugs = new Set(matchingProviders.map((p) => p.slug));
+    const updated = filters.providers.filter((slug) => !visibleSlugs.has(slug));
+    onChange({ ...filters, providers: updated });
   };
 
   const handleClearAll = () => {
@@ -339,11 +367,11 @@ export function SearchFilterDrawer({
               className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer select-none"
               aria-expanded={sectionsOpen.providers}
             >
-              <span>Provedores ({allProviders.length} fontes)</span>
+              <span>Provedores ({matchingProviders.length} fontes)</span>
               <div className="flex items-center gap-1.5">
-                {filters.providers.length > 0 && (
+                {matchingProviders.length > 0 && (
                   <span className="text-[11px] font-bold text-comic-blue lowercase">
-                    {filters.providers.length}/{allProviders.length}
+                    {activeMatchingCount}/{matchingProviders.length}
                   </span>
                 )}
                 <ChevronDown
@@ -386,7 +414,7 @@ export function SearchFilterDrawer({
                     onClick={selectAllProviders}
                     className={cn(
                       "rounded-md border-2 border-ink px-3 py-1.5 text-xs font-bold transition-all shadow-comic-sm cursor-pointer",
-                      filters.providers.length === allProviders.length
+                      allMatchingSelected
                         ? "bg-comic-blue text-white translate-y-0.5 shadow-none"
                         : "bg-card text-foreground hover:bg-muted",
                     )}
@@ -398,7 +426,7 @@ export function SearchFilterDrawer({
                     onClick={clearProviders}
                     className={cn(
                       "text-xs font-bold cursor-pointer shrink-0",
-                      filters.providers.length === 0
+                      noneMatchingSelected
                         ? "text-comic-red"
                         : "text-muted-foreground hover:text-comic-red hover:underline",
                     )}
@@ -416,7 +444,11 @@ export function SearchFilterDrawer({
                 >
                   {filteredProviders.length === 0 ? (
                     <p className="py-6 text-center text-xs text-muted-foreground">
-                      Nenhum provedor encontrado para &ldquo;{providerQuery}&rdquo;.
+                      {providerQuery ? (
+                        <>Nenhum provedor encontrado para &ldquo;{providerQuery}&rdquo;.</>
+                      ) : (
+                        <>Nenhum provedor corresponde aos filtros selecionados.</>
+                      )}
                     </p>
                   ) : (
                     filteredProviders.map((p) => {

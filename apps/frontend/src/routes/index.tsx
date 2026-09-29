@@ -22,8 +22,10 @@ import { useProviderSearch } from "@/hooks/useProviderSearch";
 import { useProviders } from "@/hooks/useProviders";
 import {
   applySearchFilters,
+  getStoredKnownProviders,
   hasStoredFilters,
   loadSearchFilters,
+  reconcileProviders,
   resolveEffectiveProviders,
   saveSearchFilters,
 } from "@/lib/search-filters";
@@ -69,28 +71,34 @@ function Dashboard() {
   const [filters, setFilters] = useState<SearchFilters>(() => loadSearchFilters());
 
   // Marca todos os provedores reais na 1ª visita; com filtros persistidos,
-  // intersecta os slugs salvos com os reais (se vazio, inicializa com todos)
+  // reconcilia novos provedores mantendo desativações explícitas do usuário
   const hasInitializedProvidersRef = useRef(false);
   useEffect(() => {
     if (!hasInitializedProvidersRef.current && providers.length > 0) {
       hasInitializedProvidersRef.current = true;
       const realSlugs = providers.map((p) => p.slug);
       setFilters((prev) => {
-        const validPersisted = prev.providers.filter((s) => realSlugs.includes(s));
-        return {
+        const storedKnown = getStoredKnownProviders();
+        const updatedProviders = reconcileProviders(prev.providers, realSlugs, storedKnown);
+        const updated = {
           ...prev,
-          providers: validPersisted.length > 0 ? validPersisted : realSlugs,
+          providers: updatedProviders,
         };
+        saveSearchFilters(updated, realSlugs);
+        return updated;
       });
     }
   }, [providers]);
 
   // Persistência dos filtros em localStorage (somente após inicializar os provedores reais)
   useEffect(() => {
-    if (hasInitializedProvidersRef.current) {
-      saveSearchFilters(filters);
+    if (hasInitializedProvidersRef.current && providers.length > 0) {
+      saveSearchFilters(
+        filters,
+        providers.map((p) => p.slug),
+      );
     }
-  }, [filters]);
+  }, [filters, providers]);
   const effectiveSlugs = useMemo(
     () => resolveEffectiveProviders(filters, providers),
     [filters, providers],

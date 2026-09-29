@@ -4,15 +4,27 @@ import { SearchFilterDrawer } from "./SearchFilterDrawer";
 import { ALL_WORK_TYPES, DEFAULT_FILTERS, SearchFilters } from "./search-filter.types";
 
 const TEST_PROVIDERS = [
-  { slug: "mangalivre", name: "MangaLivre", engine: "cheerio", tags: ["pt-br"], status: "active" },
+  {
+    slug: "mangalivre",
+    name: "MangaLivre",
+    engine: "cheerio",
+    tags: ["mangá", "pt-br"],
+    status: "active",
+  },
   {
     slug: "imperiodabritannia",
     name: "Império da Britannia",
     engine: "api",
-    tags: ["pt-br"],
+    tags: ["manhwa", "pt-br"],
     status: "active",
   },
-  { slug: "webtoonxyz", name: "Webtoon XYZ", engine: "cheerio", tags: ["en"], status: "active" },
+  {
+    slug: "webtoonxyz",
+    name: "Webtoon XYZ",
+    engine: "cheerio",
+    tags: ["webtoon", "en"],
+    status: "active",
+  },
 ];
 
 describe("SearchFilterDrawer", () => {
@@ -210,5 +222,79 @@ describe("SearchFilterDrawer", () => {
         providers: expect.arrayContaining(["mangalivre", "imperiodabritannia"]),
       }),
     );
+  });
+
+  it("oculta provedores que não correspondem ao idioma selecionado", () => {
+    // Com idioma pt-br, provedores em inglês (Webtoon XYZ) devem desaparecer do filtro
+    render(
+      <SearchFilterDrawer
+        filters={{ ...DEFAULT_FILTERS, language: "pt-br" }}
+        onChange={vi.fn()}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={0}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
+
+    expect(screen.getByText("MangaLivre")).toBeInTheDocument();
+    expect(screen.getByText("Império da Britannia")).toBeInTheDocument();
+    expect(screen.queryByText("Webtoon XYZ")).not.toBeInTheDocument();
+  });
+
+  it("oculta provedores em outros idiomas quando selecionado idioma estrangeiro", () => {
+    // Com idioma en, provedores exclusivamente pt-br devem desaparecer do filtro
+    render(
+      <SearchFilterDrawer
+        filters={{ ...DEFAULT_FILTERS, language: "en" }}
+        onChange={vi.fn()}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
+
+    expect(screen.getByText("Webtoon XYZ")).toBeInTheDocument();
+    expect(screen.queryByText("MangaLivre")).not.toBeInTheDocument();
+    expect(screen.queryByText("Império da Britannia")).not.toBeInTheDocument();
+  });
+
+  it("oculta provedores quando o usuário desmarca flags de tipos de obra", () => {
+    // Usuário desmarcou Mangá e Webtoon, restando apenas Manhwa
+    render(
+      <SearchFilterDrawer
+        filters={{ ...DEFAULT_FILTERS, workTypes: ["manhwa"] }}
+        onChange={vi.fn()}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
+
+    // Império da Britannia suporta manhwa
+    expect(screen.getByText("Império da Britannia")).toBeInTheDocument();
+    // MangaLivre (mangá) e Webtoon XYZ (webtoon) devem desaparecer
+    expect(screen.queryByText("MangaLivre")).not.toBeInTheDocument();
+    expect(screen.queryByText("Webtoon XYZ")).not.toBeInTheDocument();
+  });
+
+  it("exibe mensagem quando nenhum provedor corresponde aos filtros de tipo de obra", () => {
+    // Nenhum dos TEST_PROVIDERS suporta comic
+    render(
+      <SearchFilterDrawer
+        filters={{ ...DEFAULT_FILTERS, workTypes: ["comic"] }}
+        onChange={vi.fn()}
+        availableProviders={TEST_PROVIDERS}
+        activeFilterCount={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Filtro" }));
+
+    expect(
+      screen.getByText("Nenhum provedor corresponde aos filtros selecionados."),
+    ).toBeInTheDocument();
   });
 });

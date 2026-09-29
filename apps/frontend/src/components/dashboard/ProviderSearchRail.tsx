@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EngineBadge } from "@/components/providers/EngineBadge";
@@ -327,6 +327,26 @@ function ResultCard({
 }: ResultCardProps) {
   const isAdding = addingUrl === r.url;
   const isFailed = failedUrl === r.url || (inspectFailed && addingUrl === r.url);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [triedProxy, setTriedProxy] = useState(false);
+
+  const coverSrc = useMemo(() => {
+    if (loadFailed || !r.coverUrl) return null;
+    if (triedProxy && !r.coverUrl.startsWith("/api/")) {
+      const slug = r.providerSlug || "";
+      return `/api/conversions/source/cover-proxy?url=${encodeURIComponent(r.coverUrl)}&provider=${encodeURIComponent(slug)}`;
+    }
+    return r.coverUrl;
+  }, [loadFailed, triedProxy, r.coverUrl, r.providerSlug]);
+
+  const handleImageError = () => {
+    if (!triedProxy && r.coverUrl && !r.coverUrl.startsWith("/api/") && r.providerSlug) {
+      setTriedProxy(true);
+    } else {
+      setLoadFailed(true);
+    }
+  };
+
   return (
     <div className="w-full space-y-2">
       <button
@@ -336,11 +356,13 @@ function ResultCard({
         aria-label={`Adicionar ${r.title}`}
         className="group relative block aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-md border-[3px] border-ink bg-ink shadow-comic-sm transition-all hover:-translate-y-1 hover:shadow-comic focus-visible:outline-offset-2 disabled:cursor-wait"
       >
-        {r.coverUrl ? (
+        {coverSrc ? (
           <img
-            src={r.coverUrl}
+            src={coverSrc}
             alt={`Capa de ${r.title}`}
             loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={handleImageError}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
