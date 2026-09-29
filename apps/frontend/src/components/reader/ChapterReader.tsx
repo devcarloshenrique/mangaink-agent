@@ -44,12 +44,13 @@ export function ChapterReader({
     !cached,
   );
 
+  const knownTotal = cachedTotalPages ?? estimatedTotalPages;
   const effectiveTotal = cached
-    ? (cachedTotalPages ?? estimatedTotalPages ?? 0)
-    : sseTotal > 0
-      ? sseTotal
-      : estimatedTotalPages != null
-        ? estimatedTotalPages
+    ? (knownTotal ?? 0)
+    : knownTotal !== undefined
+      ? knownTotal
+      : sseTotal > 0
+        ? sseTotal
         : 1;
 
   const pageUrls = useChapterPages(sourceId, chapterId, effectiveTotal);

@@ -93,9 +93,18 @@ export class ServeChapterImageUseCase {
       }
     }
 
-    // 3. Cache miss + no manifest + chapter.url exists â€” fallback
+    // 3. Cache miss + no manifest + chapter.url exists — fallback
     if (chapter.url) {
       const imageUrls = await provider!.getChapterImages(chapter.url)
+      if (imageUrls.length > 0 && typeof service.writeManifest === 'function') {
+        // Salva manifesto para que as próximas chamadas de imagem não refaçam scraping
+        await service
+          .writeManifest({
+            totalImages: imageUrls.length,
+            urls: imageUrls,
+          })
+          .catch(() => {})
+      }
       if (index > imageUrls.length) {
         throw new InvalidPageIndexError(index, imageUrls.length)
       }

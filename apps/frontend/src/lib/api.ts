@@ -461,6 +461,16 @@ export const chaptersApi = {
     return `/api/sources/${sourceId}/chapters/${chapterId}/download/events`;
   },
 
+  /** GET /api/sources/:sourceId/chapters/:chapterId/pages — obtém metadados de páginas */
+  async getPages(
+    sourceId: string,
+    chapterId: string,
+  ): Promise<{ sourceId: string; chapterId: string; totalPages: number; pageUrls: string[] }> {
+    return request(
+      `/api/sources/${encodeURIComponent(sourceId)}/chapters/${encodeURIComponent(chapterId)}/pages`,
+    );
+  },
+
   /** URL da página (imagem) — endpoint público, sem auth */
   pageUrl(sourceId: string, chapterId: string, index: number): string {
     return `/api/sources/${sourceId}/chapters/${chapterId}/images/${index}`;

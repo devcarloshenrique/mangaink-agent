@@ -41,6 +41,22 @@ function ChapterReaderPage() {
       ? source!.chapters[chapterIndex + 1].id
       : null;
 
+  // Busca imediatamente totalPages exato via API (manifesto existente ou resolução sob demanda)
+  useEffect(() => {
+    if (!sourceId || !chapterId) return;
+
+    chaptersApi
+      .getPages(sourceId, chapterId)
+      .then((result) => {
+        if (result.totalPages > 0) {
+          setCachedTotalPages(result.totalPages);
+        }
+      })
+      .catch((err) => {
+        console.warn("Não foi possível obter páginas do capítulo via getPages:", err);
+      });
+  }, [sourceId, chapterId]);
+
   // Cache hit: busca totalImages exato do manifest.json
   useEffect(() => {
     if (!chapter || !isDownloaded) return;
@@ -100,7 +116,7 @@ function ChapterReaderPage() {
         chapterId={chapterId}
         cached={isDownloaded}
         cachedTotalPages={cachedTotalPages ?? undefined}
-        estimatedTotalPages={chapter?.pages ?? undefined}
+        estimatedTotalPages={chapter?.pagesCount ?? chapter?.pages ?? undefined}
         onRetry={handleRetry}
         mangaTitle={source?.metadata?.title}
         chapterTitle={chapter?.title ?? `Capítulo ${chapterId}`}

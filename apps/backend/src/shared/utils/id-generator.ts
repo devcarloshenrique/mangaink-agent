@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
  * Ex: 'https://mangalivre.to/manga/hunter-x-hunter/' â†’ 'hunter-x-hunter'
  */
 function getMangaSlug(canonicalUrl: string): string {
-  const match = new URL(canonicalUrl).pathname.match(/\/manga\/([^/]+)/)
+  const match = new URL(canonicalUrl).pathname.match(/\/(?:manga|title|series|comic)\/([^/]+)/)
   return match?.[1] ?? 'unknown'
 }
 

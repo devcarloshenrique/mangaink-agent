@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { RuntimeAdapters } from '../../shared/infra/factory'
 import { createChapterDownload } from './controllers/create-chapter-download.controller'
 import { getChapterDownload } from './controllers/get-chapter-download.controller'
+import { getChapterPages } from './controllers/get-chapter-pages.controller'
 import { createChapterDownloadEventsController } from './controllers/chapter-download-events.controller'
 import { serveChapterImage } from './controllers/serve-chapter-image.controller'
 import { createDeleteChapterCacheController } from './controllers/delete-chapter-cache.controller'
@@ -38,6 +39,13 @@ const downloadStatusResponseSchema = z.object({
   downloadedImages: z.number(),
   jobId: z.string().nullable(),
   error: z.string().nullable().optional(),
+})
+
+const chapterPagesResponseSchema = z.object({
+  sourceId: z.string(),
+  chapterId: z.string(),
+  totalPages: z.number(),
+  pageUrls: z.array(z.string()),
 })
 
 export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async (app, opts) => {
@@ -84,6 +92,26 @@ export const chapterRoutes: FastifyPluginAsyncZod<ChapterRoutesOptions> = async 
       },
     },
     getChapterDownload,
+  )
+
+  // GET /api/sources/:sourceId/chapters/:chapterId/pages (público)
+  app.get(
+    '/api/sources/:sourceId/chapters/:chapterId/pages',
+    {
+      schema: {
+        tags: ['Chapters'],
+        summary: 'Obtém metadados de páginas do capítulo',
+        description:
+          'Retorna o total de páginas e as URLs de imagem para o leitor. ' +
+          'Se o manifesto ainda não existe, resolve as URLs do capítulo via provider e salva o manifesto sob demanda.',
+        params: chapterParamsSchema,
+        response: {
+          200: chapterPagesResponseSchema,
+          404: z.object({ error: z.string() }),
+        },
+      },
+    },
+    getChapterPages,
   )
 
   // GET /api/sources/:sourceId/chapters/:chapterId/download/events (SSE)

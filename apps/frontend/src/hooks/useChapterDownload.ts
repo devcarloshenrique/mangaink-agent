@@ -73,12 +73,12 @@ export function useChapterDownload(
             setStatus("ready");
             return;
           }
+          if (result.totalImages != null && result.totalImages > 0) {
+            setTotalImages(result.totalImages);
+            totalRef.current = result.totalImages;
+          }
           if (result.status === "downloading" || result.status === "queued") {
             setStatus(result.status);
-            if (result.totalImages != null) {
-              setTotalImages(result.totalImages);
-              totalRef.current = result.totalImages;
-            }
             if (result.downloadedImages > 0) {
               setDownloadedImages(result.downloadedImages);
               downloadedRef.current = result.downloadedImages;
@@ -155,9 +155,16 @@ export function useChapterDownload(
           if (!mountedRef.current) return;
           const d = data as Record<string, unknown>;
 
-          if (event === "progress") {
-            const total = (d.total as number) ?? 0;
-            const downloaded = (d.downloaded as number) ?? 0;
+          const isProgress =
+            event === "progress" ||
+            event === "chapter.download.progress" ||
+            event === "chapter.download.started";
+          const isCompleted = event === "completed" || event === "chapter.download.completed";
+          const isFailed = event === "failed" || event === "chapter.download.failed";
+
+          if (isProgress) {
+            const total = (d.totalImages as number) ?? (d.total as number) ?? 0;
+            const downloaded = (d.downloadedImages as number) ?? (d.downloaded as number) ?? 0;
             if (total > 0) {
               setTotalImages(total);
               totalRef.current = total;
@@ -165,9 +172,12 @@ export function useChapterDownload(
             setDownloadedImages(downloaded);
             downloadedRef.current = downloaded;
             setStatus("downloading");
-          } else if (event === "completed") {
-            const total = (d.totalImages as number) ?? totalRef.current;
-            const downloaded = total > 0 ? total : downloadedRef.current;
+          } else if (isCompleted) {
+            const total = (d.totalImages as number) ?? (d.total as number) ?? totalRef.current;
+            const downloaded =
+              (d.downloadedImages as number) ??
+              (d.downloaded as number) ??
+              (total > 0 ? total : downloadedRef.current);
             if (total > 0) {
               setTotalImages(total);
               totalRef.current = total;
@@ -176,7 +186,7 @@ export function useChapterDownload(
             downloadedRef.current = downloaded;
             setStatus("ready");
             sseRef.current?.close();
-          } else if (event === "failed") {
+          } else if (isFailed) {
             sseRef.current?.close();
             startPoll("failed");
           }

@@ -13,6 +13,7 @@ export interface Chapter {
   title: string;
   url: string;
   pages: number | null;
+  pagesCount?: number | null;
   volume: number | null;
   isDownloaded: boolean;
   isRead: boolean;
