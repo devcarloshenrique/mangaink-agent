@@ -26,7 +26,7 @@ import { libraryRoutes } from '../modules/library/library.routes'
 import { ConversionError } from '../modules/conversion/errors/conversion.errors'
 import { UserAlreadyExistsError, InvalidCredentialsError, EmailAlreadyInUseError, UsernameAlreadyInUseError } from '../modules/auth/errors/auth.errors'
 import { ChapterNotFoundError, PageNotFoundError, InvalidPageIndexError, ChapterDownloadFailedError, PageNotReadyError } from '../modules/scraping/errors/chapter-download.errors'
-import { SourceNotFoundError, ProviderNotFoundError, ProviderBySlugNotFoundError } from '../modules/scraping/errors/scraping.errors'
+import { SourceNotFoundError, ProviderNotFoundError, ProviderBySlugNotFoundError, PaywallBlockedError } from '../modules/scraping/errors/scraping.errors'
 import { startInspectSourceWorker } from '../modules/scraping/workers/inspect-source.worker'
 import { startConversionJobWorker } from '../modules/conversion/workers/conversion-job.worker'
 import { startDownloadOnlyWorker } from '../modules/conversion/workers/download-only.worker'
@@ -201,6 +201,7 @@ export async function createServer() {
     if (error instanceof PageNotFoundError) return reply.code(404).send({ error: error.message })
     if (error instanceof InvalidPageIndexError) return reply.code(400).send({ error: error.message })
     if (error instanceof ChapterDownloadFailedError) return reply.code(500).send({ error: error.message })
+    if (error instanceof PaywallBlockedError) return reply.code(403).send({ error: error.message, code: 'PAYWALL_BLOCKED' })
 
     if (error.name === 'ScrapingNetworkError' || error.name === 'ScrapingParseError' || error.name === 'ScrapingError') {
       return reply.code(502).send({ error: error.message })

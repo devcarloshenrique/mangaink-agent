@@ -52,3 +52,10 @@ export class ScrapingParseError extends ScrapingError {
     this.name = 'ScrapingParseError'
   }
 }
+
+export class PaywallBlockedError extends ScrapingError {
+  constructor(message: string) {
+    super(message, 'PAYWALL_BLOCKED')
+    this.name = 'PaywallBlockedError'
+  }
+}

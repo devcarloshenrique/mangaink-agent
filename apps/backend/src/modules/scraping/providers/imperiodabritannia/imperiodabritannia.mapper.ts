@@ -1,4 +1,5 @@
 import { createSourceId, createChapterId, createCoverId } from '../../../../shared/utils/id-generator'
+import { PaywallBlockedError } from '../../errors/scraping.errors'
 import type { SourceInspectResponse, Chapter, Cover, MangaMetadata, SourceInfo } from '../../types/source.types'
 import type { ProviderInfo } from '../../types/provider.types'
 import type { BritanniaObra, BritanniaCapituloDetalhado } from './imperiodabritannia.types'
@@ -169,8 +170,8 @@ export function mapCapituloToImageUrls(capitulo: BritanniaCapituloDetalhado): st
     const priceMsg = capitulo.preco_moedas
       ? ` Custa ${capitulo.preco_moedas} moedas.`
       : ' Requer assinatura VIP.'
-    throw new Error(
-      `Capítulo ${normalizeChapterNumber(capitulo.numero)} está bloqueado por paywall.${priceMsg}`,
+    throw new PaywallBlockedError(
+      `Capítulo ${normalizeChapterNumber(capitulo.numero)} está bloqueado por paywall no site de origem.${priceMsg}`,
     )
   }
 
