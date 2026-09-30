@@ -78,8 +78,10 @@ export class MangapillStrategy implements IProviderStrategy {
 
   async inspect(canonicalUrl: string): Promise<SourceInspectResponse> {
     try {
+      // Mangapill retorna 404 se a URL tiver barra no final
+      const requestUrl = canonicalUrl.endsWith('/') ? canonicalUrl.slice(0, -1) : canonicalUrl
       const response = await this.rateLimiter.schedule(() =>
-        http.get<string>(canonicalUrl),
+        http.get<string>(requestUrl),
       )
 
       const $ = cheerio.load(response.data)

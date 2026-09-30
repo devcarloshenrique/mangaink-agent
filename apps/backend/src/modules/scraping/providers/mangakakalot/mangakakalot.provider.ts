@@ -172,43 +172,64 @@ export class MangaKakalotStrategy implements IProviderStrategy {
         // Se slug estiver disponível, tenta recuperar via search + chapters API
         if (slug) {
           try {
-            const searchResults = await this.search(slug, { signal: opts?.signal })
+            const queryTerm = slug.replace(/-/g, ' ')
+            const searchResults = await this.search(queryTerm, { signal: opts?.signal })
             const matched = searchResults.find(
-              (r) => r.url.includes(`/manga/${slug}`) || r.title.toLowerCase().includes(slug.toLowerCase())
-            ) || searchResults[0]
+              (r) =>
+                r.url.includes(`/manga/${slug}`) ||
+                r.title.toLowerCase().includes(queryTerm.toLowerCase()),
+            )
+
+            let coverImageUrl = `https://img-r1.2xstorage.com/thumb/${slug}.webp`
+            let title = slug
+              .split('-')
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ')
+            let author = null
 
             if (matched) {
-              mangaResult = {
-                sourceId: createSourceId(this.slug, url),
-                status: 'ready',
-                provider: this.getInfo(),
-                source: {
-                  url,
-                  language: 'en',
-                },
-                metadata: {
-                  title: matched.title,
-                  author: matched.author ?? null,
-                  description: null,
-                  status: 'unknown',
-                  genres: [],
-                },
-                chapters: [],
-                covers: matched.coverUrl
-                  ? [
-                      {
-                        id: createCoverId(1),
-                        type: 'original',
-                        label: 'Capa Principal',
-                        imageUrl: matched.coverUrl,
-                      },
-                    ]
-                  : [],
-                statistics: {
-                  chapters: 0,
-                  covers: matched.coverUrl ? 1 : 0,
-                },
+              title = matched.title
+              author = matched.author ?? null
+              if (matched.coverUrl) {
+                if (matched.coverUrl.includes('url=')) {
+                  try {
+                    const parsedUrl = new URL(matched.coverUrl, 'http://localhost')
+                    coverImageUrl = parsedUrl.searchParams.get('url') || coverImageUrl
+                  } catch {}
+                } else {
+                  coverImageUrl = matched.coverUrl
+                }
               }
+            }
+
+            mangaResult = {
+              sourceId: createSourceId(this.slug, url),
+              status: 'ready',
+              provider: this.getInfo(),
+              source: {
+                url,
+                language: 'en',
+              },
+              metadata: {
+                title,
+                author,
+                description: null,
+                status: 'unknown',
+                genres: [],
+              },
+              chapters: [],
+              covers: [
+                {
+                  id: createCoverId(1),
+                  type: 'original',
+                  label: 'Capa Principal',
+                  imageUrl: coverImageUrl,
+                },
+              ],
+              statistics: {
+                chapters: 0,
+                covers: 1,
+              },
             }
           } catch {
             // Continua para lançar o erro original caso não consiga
@@ -217,6 +238,32 @@ export class MangaKakalotStrategy implements IProviderStrategy {
 
         if (!mangaResult) {
           throw new ScrapingNetworkError(url, err)
+        }
+      }
+
+      // Garante que a capa principal exista via busca caso o scraping da página omita
+      if ((!mangaResult.covers || mangaResult.covers.length === 0) && slug) {
+        try {
+          const searchResults = await this.search(slug, { signal: opts?.signal })
+          const matched =
+            searchResults.find(
+              (r) =>
+                r.url.includes(`/manga/${slug}`) ||
+                r.title.toLowerCase().includes(slug.toLowerCase()),
+            ) || searchResults[0]
+          if (matched?.coverUrl) {
+            mangaResult.covers = [
+              {
+                id: createCoverId(1),
+                type: 'original',
+                label: 'Capa Principal',
+                imageUrl: matched.coverUrl,
+              },
+            ]
+            mangaResult.statistics.covers = 1
+          }
+        } catch {
+          // ignora falha no fallback de capa
         }
       }
 
@@ -319,21 +366,38 @@ export class MangaKakalotStrategy implements IProviderStrategy {
 
   async downloadImage(imageUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
     return this.rateLimiter.schedule(async () => {
-      try {
-        const res = await this.client.get<ArrayBuffer>(imageUrl, {
-          responseType: 'arraybuffer',
-          headers: {
-            Referer: `${this.baseUrl}/`,
-          },
-        })
-        const contentType = (res.headers['content-type'] as string) || 'image/jpeg'
-        return {
-          buffer: Buffer.from(res.data),
-          contentType,
-        }
-      } catch (err: any) {
-        throw new ScrapingNetworkError(imageUrl, err)
+      const candidateUrls = [imageUrl]
+      if (imageUrl.includes('.2xstorage.com/thumb/')) {
+        const thumbName = imageUrl.split('/thumb/')[1]
+        candidateUrls.push(
+          `https://imgs-2.2xstorage.com/thumb/${thumbName}`,
+          `https://img-r1.2xstorage.com/thumb/${thumbName}`,
+          `https://img-r2.2xstorage.com/thumb/${thumbName}`,
+        )
       }
+
+      for (let i = 0; i < candidateUrls.length; i++) {
+        const u = candidateUrls[i]
+        try {
+          const res = await this.client.get<ArrayBuffer>(u, {
+            responseType: 'arraybuffer',
+            headers: {
+              Referer: `${this.baseUrl}/`,
+            },
+          })
+          const contentType = (res.headers['content-type'] as string) || 'image/jpeg'
+          return {
+            buffer: Buffer.from(res.data),
+            contentType,
+          }
+        } catch (err: any) {
+          if (i === candidateUrls.length - 1) {
+            throw new ScrapingNetworkError(imageUrl, err)
+          }
+        }
+      }
+
+      throw new ScrapingNetworkError(imageUrl, new Error('Could not download image'))
     })
   }
 }

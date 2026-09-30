@@ -118,7 +118,15 @@ export class MangaDexStrategy implements IProviderStrategy {
 
     const language = extractLanguage(canonicalUrl)
     const manga = await this.fetchMangaById(mangaId)
-    const chapters = await this.fetchAllChapters(mangaId, language)
+    let chapters = await this.fetchAllChapters(mangaId, language)
+    if (chapters.length === 0 && language !== 'all') {
+      const fallbackEn = await this.fetchAllChapters(mangaId, 'en')
+      if (fallbackEn.length > 0) {
+        chapters = fallbackEn
+      } else {
+        chapters = await this.fetchAllChapters(mangaId, 'all')
+      }
+    }
     return mapMangaToInspectResponse(manga, chapters, canonicalUrl, language)
   }
 
