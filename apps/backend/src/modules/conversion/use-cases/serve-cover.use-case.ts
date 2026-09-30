@@ -42,12 +42,25 @@ export class ServeCoverUseCase {
 
     // Usa o cover.id real para o nome do arquivo (não o alias 'original')
     const actualCoverId = isOriginalAlias ? cover.id : coverId
+
+    let downloadUrl = cover.imageUrl
+    if (downloadUrl.includes('url=')) {
+      try {
+        const parsed = new URL(downloadUrl, 'http://localhost')
+        downloadUrl = parsed.searchParams.get('url') || downloadUrl
+      } catch {}
+    }
+
     let urlExt = '.jpg'
     try {
-      urlExt = extname(new URL(cover.imageUrl).pathname).toLowerCase() || '.jpg'
+      const parsed = downloadUrl.startsWith('/')
+        ? new URL(downloadUrl, 'http://localhost')
+        : new URL(downloadUrl)
+      urlExt = extname(parsed.pathname).toLowerCase() || '.jpg'
     } catch {
       throw new ConversionNotFoundError(`URL de capa inválida para source "${sourceId}"`)
     }
+
     const cachedPath = join(
       env.STORAGE_PATH,
       'sources',
@@ -65,7 +78,7 @@ export class ServeCoverUseCase {
       throw new ConversionNotFoundError(`Provider não disponível para source "${sourceId}"`)
     }
 
-    const { buffer } = await provider.downloadImage(cover.imageUrl)
+    const { buffer } = await provider.downloadImage(downloadUrl)
     // VULN-1/MEC-74: valida magic bytes da capa antes de persistir/servir.
     assertValidImage(buffer)
     await mkdirp(join(env.STORAGE_PATH, 'sources', sourceId, 'covers'))

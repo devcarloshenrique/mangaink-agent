@@ -39,8 +39,9 @@ function MangaCoverImage({ item, className }: { item: LibraryItemDTO; className?
   const preferredUrl = preferredCover
     ? conversionsApi.coverUrl(item.sourceId, preferredCover)
     : null;
-  const fallbackUrl = conversionsApi.coverUrl(item.sourceId, { kind: "original" });
-  const url = preferredUrl || item.coverUrl || fallbackUrl;
+  const backendUrl = conversionsApi.coverUrl(item.sourceId, { kind: "original" });
+  // Prioriza a capa preferida ou a rota interna do backend (evita bloqueio de referer/CORS em CDNs externos)
+  const url = preferredUrl || backendUrl || item.coverUrl;
 
   if (!url || error) {
     return (
@@ -56,7 +57,10 @@ function MangaCoverImage({ item, className }: { item: LibraryItemDTO; className?
       alt={item.title}
       className={cn("h-full w-full object-cover", className)}
       loading="lazy"
-      onError={() => setError(true)}
+      onError={() => {
+        // Se a rota falhar, marca erro para exibir placeholder
+        setError(true);
+      }}
     />
   );
 }
